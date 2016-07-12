@@ -58,7 +58,7 @@
 #include "utils.h"
 #include "radio.h"
 #include "tih.h"
-#include "ams-enc.h"
+#include "ams-enc.h" // JY commented
 #include "settings.h"
 #include "dfmem.h"
 #include "telem.h"
@@ -72,6 +72,9 @@
 #include "uart_driver.h"
 #include "ppool.h"
 #include "carray.h"
+
+// JY edits
+#include "sync_servo.h"
 
 
 volatile MacPacket uart_tx_packet;
@@ -113,6 +116,10 @@ int main() {
     adcSetup();
     pidSetup();
 
+    // JY edits
+    servoSetup(); // JY edits for servo
+    servoStart(); // JY edits for servo
+
     // Power down unused modules
     PMD3bits.AD2MD = 1;
     PMD1bits.C1MD = 1;
@@ -121,7 +128,7 @@ int main() {
     PMD2 = 0xffff; // input/output compare
     PMD1bits.T2MD = 1;
     PMD1bits.T3MD = 1;
-    PMD1bits.T4MD = 1;
+    //PMD1bits.T4MD = 1; // JY edits
     PMD1bits.T5MD = 1;
     PMD3bits.T6MD = 1;
     PMD3bits.T7MD = 1;

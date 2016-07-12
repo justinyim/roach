@@ -29,6 +29,8 @@
 #include <stdlib.h> // for malloc
 #include "init.h"  // for Timer1
 
+#include "sync_servo.h" // JY edits
+
 
 #define MC_CHANNEL_PWM1     1
 #define MC_CHANNEL_PWM2     2
@@ -68,6 +70,8 @@ int measLast1[NUM_PIDS];
 int measLast2[NUM_PIDS];
 int bemf[NUM_PIDS];
 
+// Additional HACKS (hacks)
+long angInt = 0; // JY edits
 
 // -------------------------------------------
 // called from main()
@@ -138,6 +142,7 @@ void initPIDVelProfile() {
         pidObjs[j].p_input = 0; // initialize first set point 
         pidObjs[j].v_input = (int) (((long) pidVel[j].vel[0] * K_EMF) >> 8); //initialize first velocity, scaled
     }
+    angInt = 0; // JY edits
 }
 
 
@@ -156,6 +161,7 @@ void setPIDVelProfile(int pid_num, int *interval, int *delta, int *vel, int once
     if (activePID[pid_num]->onceFlag == 0) {
         nextPID[pid_num] = tempPID;
     }
+    angInt = 0; // JY edits
 }
 
 
@@ -180,6 +186,8 @@ void initPIDObjPos(pidPos *pid, int Kp, int Ki, int Kd, int Kaw, int ff) {
 
     pid->p_state_flip = 0; //default to no flip
     pid->output_channel = 0;
+
+    angInt = 0; // JY edits
 }
 
 
@@ -379,11 +387,13 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
                 }
             }
         }
-        if (pidObjs[0].mode == PID_MODE_CONTROLED) {
+        if (0) {//(pidObjs[0].mode == PID_MODE_CONTROLED) { //JY edits
             pidSetControl();
         } else if (pidObjs[0].mode == PID_MODE_PWMPASS) {
             tiHSetDC(pidObjs[0].output_channel, pidObjs[0].pwmDes);
             tiHSetDC(pidObjs[1].output_channel, pidObjs[1].pwmDes);
+        } else if (pidObjs[0].mode == PID_MODE_CONTROLED) { // JY edits
+            pidSetSteer(0);
         }
 
     }
@@ -435,7 +445,7 @@ void checkSwapBuff(int j) {
 
 // select either back emf or backwd diff for vel est
 
-#define VEL_BEMF 0
+#define VEL_BEMF 1 // JY edits 0
 
 /* update state variables including motor position and velocity */
 
@@ -547,6 +557,8 @@ void pidGetState() {
     measLast1[0] = measurements[0];
     measLast2[1] = measLast1[1];
     measLast1[1] = measurements[1];
+    if (LEFT_LEGS_PWM_FLIP) { bemf[LEFT_LEGS_PID_NUM] *= -1; } // JY edits
+    if (RIGHT_LEGS_PWM_FLIP) { bemf[RIGHT_LEGS_PID_NUM] *= -1; } // JY edits
     pidObjs[0].v_state = bemf[0];
     pidObjs[1].v_state = bemf[1]; //  might also estimate from deriv of pos data
     //if((measurements[0] > 0) || (measurements[1] > 0)) {
@@ -569,6 +581,69 @@ void pidSetControl() {
         //Update values
         UpdatePID(&(pidObjs[j]));
     } // end of for(j)
+
+    if (pidObjs[0].onoff && pidObjs[1].onoff) // both motors on to run
+    {
+        if(pidObjs[0].pwm_flip){
+            tiHSetDC(pidObjs[0].output_channel, -pidObjs[0].output);
+        }
+        else{
+            tiHSetDC(pidObjs[0].output_channel, pidObjs[0].output);
+        }
+        
+        if(pidObjs[1].pwm_flip){
+            tiHSetDC(pidObjs[1].output_channel, -pidObjs[1].output);
+        }
+        else{
+            tiHSetDC(pidObjs[1].output_channel, pidObjs[1].output);
+        }
+    }
+    else // turn off motors if PID loop is off
+    {
+        tiHSetDC(pidObjs[0].output_channel, 0);
+        tiHSetDC(pidObjs[1].output_channel, 0);
+    }
+}
+
+
+
+void pidSetSteer(int unused) {
+    // JY edits
+    int j = 0;
+
+    for (j = 0; j < NUM_PIDS; j++) { //pidobjs[0] : right side
+        // p_input has scaled velocity interpolation to make smoother
+        // p_state is [16].[16]
+        pidObjs[j].p_error = pidObjs[j].p_input + pidObjs[j].interpolate - pidObjs[j].p_state;
+        pidObjs[j].v_error = pidObjs[j].v_input - pidObjs[j].v_state; // v_input should be revs/sec
+        //Update values
+        UpdatePID(&(pidObjs[j]));
+    } // end of for(j)
+
+    int gdata[3];
+    mpuGetGyro(gdata);
+    int gyroZ = gdata[2];
+
+    int SteerD = 1; // D gain
+    int SteerDInv = 2;  // D gain power of 2 scaling down
+    int SteerP = 1;
+    int SteerPInv = 10; // integration power of 2 reduction
+
+    angInt += (long)gyroZ;
+
+    int steerAdd = SteerD*(gyroZ>>SteerDInv) + SteerP*(angInt>>SteerPInv);
+    pidObjs[LEFT_LEGS_PID_NUM].output += steerAdd;
+    pidObjs[RIGHT_LEGS_PID_NUM].output -= steerAdd;
+    // slow the inside leg more than the outside leg is sped up
+    if (steerAdd > 0) { pidObjs[RIGHT_LEGS_PID_NUM].output -= steerAdd; }
+    if (steerAdd < 0) { pidObjs[LEFT_LEGS_PID_NUM].output += steerAdd; }
+
+
+    // HACK: testing the servo
+    servoSet(0.5);
+
+    //_RE6 = 1; // JY edits testing
+
 
     if (pidObjs[0].onoff && pidObjs[1].onoff) // both motors on to run
     {

@@ -25,7 +25,7 @@ def main():
     xb = setupSerial(shared.BS_COMPORT, shared.BS_BAUDRATE)
     
     R1 = Velociroach('\x20\x52', xb)
-    R1.SAVE_DATA = True
+    R1.SAVE_DATA = False#True
                             
     #R1.RESET = False       #current roach code does not support software reset
     
@@ -51,9 +51,10 @@ def main():
     #  [ Kp , Ki , Kd , Kaw , Kff     ,  Kp , Ki , Kd , Kaw , Kff ]
     #    ----------LEFT----------        ---------_RIGHT----------
     #motorgains = [1800,0,100,0,0, 1800,0,100,0,0]
-    motorgains = [200,200,0,0,0 , 200,200,0,0,0]
-
-    simpleAltTripod = GaitConfig(motorgains, rightFreq=1, leftFreq=1) # Parameters can be passed into object upon construction, as done here.
+    #motorgains = [200,200,0,0,0 , 200,200,0,0,0]
+    motorgains = [0,0,200,0,00, 0,0,200,0,00] # JY edits
+    
+    simpleAltTripod = GaitConfig(motorgains, rightFreq=0.1, leftFreq=0.1) # Parameters can be passed into object upon construction, as done here.
     simpleAltTripod.phase = PHASE_180_DEG                             # Or set individually, as here
     simpleAltTripod.deltasLeft = [0.25, 0.25, 0.25]
     simpleAltTripod.deltasRight = [0.25, 0.25, 0.25]
@@ -63,7 +64,7 @@ def main():
     R1.setGait(simpleAltTripod)
 
     # example , 0.1s lead in + 2s run + 0.1s lead out
-    EXPERIMENT_RUN_TIME_MS     = 2000 #ms
+    EXPERIMENT_RUN_TIME_MS     = 8000 #ms
     EXPERIMENT_LEADIN_TIME_MS  = 100  #ms
     EXPERIMENT_LEADOUT_TIME_MS = 100  #ms
     

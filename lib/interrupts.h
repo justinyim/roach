@@ -11,6 +11,7 @@ void __attribute__((interrupt, no_auto_psv)) _INT0Interrupt(void);
 void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void);
 void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void);
 void __attribute__((interrupt, no_auto_psv)) _T6Interrupt(void);
+void __attribute__((interrupt, no_auto_psv)) _T4Interrupt(void); // JY edits
 
 void setupTimer6(unsigned int fs);
 

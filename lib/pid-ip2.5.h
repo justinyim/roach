@@ -33,7 +33,8 @@
 #define PID_ON      1
 
 #define PID_MODE_CONTROLED  0
-#define PID_MODE_PWMPASS    1
+#define PID_MODE_PWMPASS    1 // JY edits 1
+#define PID_MODE_STEER      2 // JY edits (added)
 
 // pid type for leg control
 typedef struct
@@ -90,13 +91,13 @@ typedef struct
 #define LEFT_LEGS_ENC_NUM       0       //amsEnc module index is 0-3
 #endif
 #ifndef LEFT_LEGS_ENC_FLIP
-#define LEFT_LEGS_ENC_FLIP      0       //"forward" normal for left
+#define LEFT_LEGS_ENC_FLIP      1       //"forward" normal for left
 #endif
 #ifndef LEFT_LEGS_PWM_FLIP
 #define LEFT_LEGS_PWM_FLIP      1
 #endif
 #ifndef LEFT_LEGS_TIH_CHAN
-#define LEFT_LEGS_TIH_CHAN      2       //tiH module index is 1-4
+#define LEFT_LEGS_TIH_CHAN      1       //tiH module index is 1-4
 #endif
 //Right legs
 #ifndef RIGHT_LEGS_PID_NUM
@@ -106,13 +107,13 @@ typedef struct
 #define RIGHT_LEGS_ENC_NUM      1       //amsEnc module index is 0-3
 #endif
 #ifndef RIGHT_LEGS_FLIP
-#define RIGHT_LEGS_FLIP         1       //"forward" reversed for right
+#define RIGHT_LEGS_FLIP         0       //"forward" reversed for right
 #endif
 #ifndef RIGHT_LEGS_PWM_FLIP
 #define RIGHT_LEGS_PWM_FLIP     0
 #endif
 #ifndef RIGHT_LEGS_TIH_CHAN
-#define RIGHT_LEGS_TIH_CHAN     1       //tiH module index is 1-4
+#define RIGHT_LEGS_TIH_CHAN     2       //tiH module index is 1-4
 #endif
 
 
@@ -130,6 +131,7 @@ void pidGetState(); // update state vector from bemf and Hall angle
 void pidGetSetpoint(int j);
 void checkSwapBuff(int j);
 void pidSetControl();
+void pidSetSteer(int rate); // JY edits
 void EmergencyStop(void);
 unsigned char* pidGetTelemetry(void);
 void pidOn(int pid_num);

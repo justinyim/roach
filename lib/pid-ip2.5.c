@@ -606,7 +606,8 @@ void pidSetControl() {
 }
 
 
-
+float ang1 = 0; // JY edits testing
+int angdir = 1; 
 void pidSetSteer(int unused) {
     // JY edits
     int j = 0;
@@ -639,10 +640,20 @@ void pidSetSteer(int unused) {
     if (steerAdd < 0) { pidObjs[LEFT_LEGS_PID_NUM].output += steerAdd; }
 
 
-    // HACK: testing the servo
-    servoSet(0.5);
+    // HACK: testing the servoa
+    ang1 += angdir*0.001;
+    if (ang1 > 1) {
+        angdir = -1;
+    } else if (ang1 < 0) {
+        angdir = 1;
+    }
+
+    servoSet(ang1);
 
     //_RE6 = 1; // JY edits testing
+    
+    //SetDCMCPWM(3,0x7FF,0); // JY edits testing
+    //SetDCMCPWM(4,0x6FF,0); // JY edits testing
 
 
     if (pidObjs[0].onoff && pidObjs[1].onoff) // both motors on to run
@@ -666,6 +677,12 @@ void pidSetSteer(int unused) {
         tiHSetDC(pidObjs[0].output_channel, 0);
         tiHSetDC(pidObjs[1].output_channel, 0);
     }
+    // JY edits testing
+    SetDCMCPWM(3, 0x00FF, 0);
+    SetDCMCPWM(4, 0x00FF, 0);
+    unsigned int PWMCON1val = PWMCON1;
+    PWMCON1val |= 0b1111;
+    PWMCON1 = PWMCON1val;
 }
 
 void UpdatePID(pidPos *pid) {

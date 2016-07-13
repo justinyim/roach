@@ -25,11 +25,11 @@
 #include "ppool.h"
 #include "dfmem.h"
 #include "telem.h"
+#include "sync_servo.h" // JY edits
 
 #include <stdlib.h> // for malloc
 #include "init.h"  // for Timer1
 
-#include "sync_servo.h" // JY edits
 
 
 #define MC_CHANNEL_PWM1     1
@@ -397,7 +397,7 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
         }
 
     }
-    LED_3 = 0;
+    LED_3 = 0; // JY edits note: brighter yellow LED -> more processing load
     _T1IF = 0;
 }
 
@@ -621,6 +621,7 @@ void pidSetSteer(int unused) {
         UpdatePID(&(pidObjs[j]));
     } // end of for(j)
 
+    // Steering
     int gdata[3];
     mpuGetGyro(gdata);
     int gyroZ = gdata[2];
@@ -639,23 +640,22 @@ void pidSetSteer(int unused) {
     if (steerAdd > 0) { pidObjs[RIGHT_LEGS_PID_NUM].output -= steerAdd; }
     if (steerAdd < 0) { pidObjs[LEFT_LEGS_PID_NUM].output += steerAdd; }
 
-
-    // HACK: testing the servoa
-    ang1 += angdir*0.001;
-    if (ang1 > 1) {
-        angdir = -1;
-    } else if (ang1 < 0) {
-        angdir = 1;
+    // JY edits Testing the servo
+    /*
+    if (pidObjs[0].onoff || pidObjs[1].onoff) {
+        ang1 += angdir*0.001;
+        if (ang1 > 1) {
+            angdir = -1;
+        } else if (ang1 < -1) {
+            angdir = 1;
+        }
+        servoSet(ang1);
     }
-
-    servoSet(ang1);
-
-    //_RE6 = 1; // JY edits testing
+    */
+    if (!pidObjs[0].onoff && !pidObjs[1].onoff) {
+        servoStop();
+    }
     
-    //SetDCMCPWM(3,0x7FF,0); // JY edits testing
-    //SetDCMCPWM(4,0x6FF,0); // JY edits testing
-
-
     if (pidObjs[0].onoff && pidObjs[1].onoff) // both motors on to run
     {
         if(pidObjs[0].pwm_flip){
@@ -677,12 +677,16 @@ void pidSetSteer(int unused) {
         tiHSetDC(pidObjs[0].output_channel, 0);
         tiHSetDC(pidObjs[1].output_channel, 0);
     }
-    // JY edits testing
+
+    /*
+    // JY edits testing PWM module
     SetDCMCPWM(3, 0x00FF, 0);
     SetDCMCPWM(4, 0x00FF, 0);
     unsigned int PWMCON1val = PWMCON1;
     PWMCON1val |= 0b1111;
     PWMCON1 = PWMCON1val;
+    */
+    //_RE6 = 1; // JY edits testing set GPIO pin
 }
 
 void UpdatePID(pidPos *pid) {

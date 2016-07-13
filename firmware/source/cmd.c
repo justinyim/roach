@@ -19,6 +19,7 @@
 #include "ams-enc.h"
 #include "carray.h"
 #include "telem.h"
+#include "sync_servo.h" // JY edits
 
 #include <stdio.h>
 #include <string.h>
@@ -54,6 +55,7 @@ static unsigned char cmdPIDStopMotors(unsigned char type, unsigned char status, 
 static unsigned char cmdSetVelProfile(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdZeroPos(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdSetPhase(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
+static unsigned char cmdSetServo(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 
 //Experiment/Flash Commands
 static unsigned char cmdStartTimedRun(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
@@ -88,6 +90,7 @@ void cmdSetup(void) {
     cmd_func[CMD_SET_PHASE] = &cmdSetPhase;   
     cmd_func[CMD_START_TIMED_RUN] = &cmdStartTimedRun;
     cmd_func[CMD_PID_STOP_MOTORS] = &cmdPIDStopMotors;
+    cmd_func[CMD_SET_SERVO] = &cmdSetServo; // JY edits
 
 }
 
@@ -273,6 +276,7 @@ unsigned char cmdSetVelProfile(unsigned char type, unsigned char status, unsigne
         //Clipping of deltas to range [-8192, 8191] ?
 
         // Calculation of intervals is fixed to equally spaced intervals.
+    
         interval1[i] = argsPtr->periodLeft/NUM_VELS;
         interval2[i] = argsPtr->periodRight/NUM_VELS;
 
@@ -347,6 +351,14 @@ void cmdError() {
         LED_3 ^= 1;
         delay_ms(200);
     }
+}
+
+unsigned char cmdSetServo(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr) {
+    //Unpack unsigned char* frame into structured values
+    PKT_UNPACK(_args_cmdSetServo, argsPtr, frame);
+    servoSet(argsPtr->angle);
+
+    return 1;
 }
 
 static unsigned char cmdNop(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr) {

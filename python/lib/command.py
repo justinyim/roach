@@ -51,10 +51,10 @@ BASE_ECHO = 0x3f
 
 # CMD values of 0x80(128) - 0xEF(239) are available for user applications.
 SET_THRUST_OPEN_LOOP    =   0x80
-PID_START_MOTORS	    =   0x81
+PID_START_MOTORS        =   0x81
 SET_PID_GAINS           =   0x82
 GET_PID_TELEMETRY       =   0x83
-GET_AMS_POS		        =   0x84
+GET_AMS_POS             =   0x84
 GET_IMU_LOOP_ZGYRO      =   0x85
 SET_MOVE_QUEUE          =   0x86
 SET_STEERING_GAINS      =   0x87
@@ -69,6 +69,7 @@ ZERO_POS                =   0x90
 START_TIMED_RUN         =   0x91
 PID_STOP_MOTORS         =   0x92
 SET_PHASE               =   0x93
-SET_MOTOR_MODE      =   0x94
+SET_MOTOR_MODE          =   0x94
+SET_SERVO               =   0x95 # JY edits
 
 # CMD values of 0xF0(240) - 0xFF(255) are reserved for future use

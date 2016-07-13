@@ -25,6 +25,7 @@
 #define CMD_PID_STOP_MOTORS         0x92         
 #define CMD_SET_PHASE               0x93         
 #define CMD_SET_MOTOR_MODE          0x94
+#define CMD_SET_SERVO               0x95 // JY edits adding servo angle command
 // Redefine
 
 void cmdSetup(void);
@@ -89,5 +90,9 @@ typedef struct{
     int32_t offset;
 } _args_cmdSetPhase;
 
+//cmdSetServo // JY edits
+typedef struct{
+    float angle;
+} _args_cmdSetServo;
 
 #endif // __CMD_H

@@ -156,6 +156,11 @@ class Velociroach:
             self.tx( 0, command.SET_MOTOR_MODE, pack('10h',*gains))
             tries = tries + 1
             time.sleep(0.1)
+
+    # JY edits
+    def setServo(self, angle = 0):
+        self.tx(0, command.SET_SERVO, pack('f', angle))
+        time.sleep(0.05)
     
     ######TODO : sort out this function and flashReadback below
     def downloadTelemetry(self, timeout = 5, retry = True):

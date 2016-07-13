@@ -1,10 +1,7 @@
 #!/usr/bin/env python
 """
-authors: apullin
-
-This script will run an experiment with one or several Velociroach robots.
-
-The main function will send all the setup parameters to the robots, execute defined manoeuvres, and record telemetry.
+authors: Justin Yim
+testing
 
 """
 from lib import command
@@ -88,17 +85,21 @@ def main():
         if r.SAVE_DATA:
             r.startTelemetrySave()
     
-    # Sleep for a lead-in time before any motion commands
-    time.sleep(EXPERIMENT_LEADIN_TIME_MS / 1000.0)
-    
     ######## Motion is initiated here! ########
     R1.startTimedRun( EXPERIMENT_RUN_TIME_MS ) #Faked for now, since pullin doesn't have a working VR+AMS to test with
-    time.sleep(EXPERIMENT_RUN_TIME_MS / 1000.0)  #argument to time.sleep is in SECONDS
     ######## End of motion commands   ########
-    
-    # Sleep for a lead-out time after any motion
-    time.sleep(EXPERIMENT_LEADOUT_TIME_MS / 1000.0) 
-    
+   
+    time.sleep(0.5)
+    R1.setServo(0.5)
+    time.sleep(0.5)
+    R1.setServo(-0.5)
+    time.sleep(0.5)
+    R1.setServo(1)
+    time.sleep(0.5)
+    R1.setServo(-1)
+    time.sleep(0.5)
+    R1.setServo(0)
+
     for r in shared.ROBOTS:
         if r.SAVE_DATA:
             raw_input("Press Enter to start telemetry read-back ...")

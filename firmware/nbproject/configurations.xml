@@ -27,6 +27,7 @@
         <itemPath>../../imageproc-lib/i2c_driver.h</itemPath>
         <itemPath>../../imageproc-lib/init_default.h</itemPath>
         <itemPath>../../imageproc-lib/telem.h</itemPath>
+        <itemPath>../../imageproc-lib/sync_servo.h</itemPath>
       </logicalFolder>
       <logicalFolder name="lib" displayName="lib" projectFiles="true">
         <itemPath>../lib/cmd_const.h</itemPath>
@@ -37,15 +38,11 @@
         <itemPath>../lib/pid-ip2.5.h</itemPath>
         <itemPath>../lib/tests.h</itemPath>
         <itemPath>../lib/vr_telem.h</itemPath>
-        <itemPath>../lib/tail_ctrl.h</itemPath>
-        <itemPath>../lib/as5047.h</itemPath>
-        <itemPath>../lib/experiment.h</itemPath>
       </logicalFolder>
       <logicalFolder name="f1" displayName="settings" projectFiles="true">
         <itemPath>../../imageproc-settings/settings.h</itemPath>
       </logicalFolder>
       <itemPath>source/cmd.h</itemPath>
-      <itemPath>../../imageproc-lib/protocol.h</itemPath>
     </logicalFolder>
     <logicalFolder name="LinkerScript"
                    displayName="Linker Files"
@@ -77,6 +74,7 @@
         <itemPath>../../imageproc-lib/version.c</itemPath>
         <itemPath>../../imageproc-lib/telem.c</itemPath>
         <itemPath>../../imageproc-lib/traps.c</itemPath>
+        <itemPath>../../imageproc-lib/sync_servo.c</itemPath>
       </logicalFolder>
       <logicalFolder name="lib" displayName="lib" projectFiles="true">
         <itemPath>../lib/init.c</itemPath>
@@ -84,10 +82,6 @@
         <itemPath>../lib/pid-ip2.5.c</itemPath>
         <itemPath>../lib/tests.c</itemPath>
         <itemPath>../lib/vr_telem.c</itemPath>
-        <itemPath>../lib/tail_ctrl.c</itemPath>
-        <itemPath>../lib/as5047.c</itemPath>
-        <itemPath>../lib/experiment.c</itemPath>
-        <itemPath>../lib/lut.h</itemPath>
       </logicalFolder>
       <itemPath>source/cmd.c</itemPath>
       <itemPath>source/main.c</itemPath>
@@ -103,7 +97,6 @@
     <Elem>../lib</Elem>
     <Elem>../../imageproc-lib</Elem>
     <Elem>../../imageproc-settings</Elem>
-    <Elem>../../mbed_BLDC_driver_KL25Z</Elem>
   </sourceRootList>
   <projectmakefile>Makefile</projectmakefile>
   <confs>

@@ -72,6 +72,7 @@ int bemf[NUM_PIDS];
 
 // Additional HACKS (hacks)
 long angInt = 0; // JY edits
+unsigned long starttime = 0; // JY edits
 
 // -------------------------------------------
 // called from main()
@@ -143,6 +144,7 @@ void initPIDVelProfile() {
         pidObjs[j].v_input = (int) (((long) pidVel[j].vel[0] * K_EMF) >> 8); //initialize first velocity, scaled
     }
     angInt = 0; // JY edits
+    starttime = 0; // JY edits
 }
 
 
@@ -162,6 +164,7 @@ void setPIDVelProfile(int pid_num, int *interval, int *delta, int *vel, int once
         nextPID[pid_num] = tempPID;
     }
     angInt = 0; // JY edits
+    starttime = 0; // JY edits
 }
 
 
@@ -188,6 +191,7 @@ void initPIDObjPos(pidPos *pid, int Kp, int Ki, int Kd, int Kaw, int ff) {
     pid->output_channel = 0;
 
     angInt = 0; // JY edits
+    starttime = 0; // JY edits
 }
 
 
@@ -606,12 +610,14 @@ void pidSetControl() {
 }
 
 
-float ang1 = 0; // JY edits testing
+//float ang1 = 0; // JY edits testing
 int angdir = 1; 
 void pidSetSteer(int unused) {
     // JY edits
+    /*
     int j = 0;
 
+    // Original PID Update
     for (j = 0; j < NUM_PIDS; j++) { //pidobjs[0] : right side
         // p_input has scaled velocity interpolation to make smoother
         // p_state is [16].[16]
@@ -620,27 +626,56 @@ void pidSetSteer(int unused) {
         //Update values
         UpdatePID(&(pidObjs[j]));
     } // end of for(j)
+    */
 
-    // Steering
+    // Steering ---------------------
     int gdata[3];
     mpuGetGyro(gdata);
     int gyroZ = gdata[2];
 
     int SteerD = 1; // D gain
-    int SteerDInv = 2;  // D gain power of 2 scaling down
+    int SteerDInv = 5;  // D gain power of 2 scaling down
     int SteerP = 1;
-    int SteerPInv = 10; // integration power of 2 reduction
+    int SteerPInv = 12; // integration power of 2 reduction
 
     angInt += (long)gyroZ;
 
-    int steerAdd = SteerD*(gyroZ>>SteerDInv) + SteerP*(angInt>>SteerPInv);
+    if (starttime == 0) {
+        starttime = sclockGetTime();
+    }
+    if (!pidObjs[0].onoff || !pidObjs[1].onoff) {
+        starttime = 0;
+    }
+
+    // Testing heading commands
+    long angDes;
+    int v_scale = pidObjs[0].v_input; // This is a bit of a hack
+    if (((((sclockGetTime()-starttime)>>16)*v_scale)>>13)%2) {
+        angDes = 0;
+    } else {
+        angDes = 500;
+    }
+
+    int steerAdd = SteerD*(gyroZ>>SteerDInv) + SteerP*((angInt>>SteerPInv) - angDes);
+    pidObjs[LEFT_LEGS_PID_NUM].v_error = pidObjs[LEFT_LEGS_PID_NUM].v_input
+        + steerAdd * (steerAdd>0? 1:2) 
+        - pidObjs[LEFT_LEGS_PID_NUM].v_state;
+    UpdatePID(&(pidObjs[LEFT_LEGS_PID_NUM]));
+    pidObjs[RIGHT_LEGS_PID_NUM].v_error = pidObjs[RIGHT_LEGS_PID_NUM].v_input
+        - steerAdd * (steerAdd>0? 2:1)
+        - pidObjs[RIGHT_LEGS_PID_NUM].v_state;
+    UpdatePID(&(pidObjs[RIGHT_LEGS_PID_NUM]));
+    /*
+    // Adding steering directly to output bypassing PID
     pidObjs[LEFT_LEGS_PID_NUM].output += steerAdd;
     pidObjs[RIGHT_LEGS_PID_NUM].output -= steerAdd;
     // slow the inside leg more than the outside leg is sped up
     if (steerAdd > 0) { pidObjs[RIGHT_LEGS_PID_NUM].output -= steerAdd; }
     if (steerAdd < 0) { pidObjs[LEFT_LEGS_PID_NUM].output += steerAdd; }
+    */
 
-    // JY edits Testing the servo
+
+    // JY edits Testing the servo ----
     /*
     if (pidObjs[0].onoff || pidObjs[1].onoff) {
         ang1 += angdir*0.001;
@@ -687,6 +722,9 @@ void pidSetSteer(int unused) {
     PWMCON1 = PWMCON1val;
     */
     //_RE6 = 1; // JY edits testing set GPIO pin
+    //
+    //SetDCMCPWM(1, 0x0FFF, 0);
+    //SetDCMCPWM(2, 0x0FFF, 0);
 }
 
 void UpdatePID(pidPos *pid) {

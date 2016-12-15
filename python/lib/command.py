@@ -70,6 +70,8 @@ START_TIMED_RUN         =   0x91
 PID_STOP_MOTORS         =   0x92
 SET_PHASE               =   0x93
 SET_MOTOR_MODE          =   0x94
-SET_SERVO               =   0x95 # JY edits
+SET_SERVO               =   0x95 # JY edits set servo angle
+INIT_CALIB              =   0x96 # JY edits initial calibration
+SALTO_VICON1            =   0x97 # JY edits Salto Vicon jumps
 
 # CMD values of 0xF0(240) - 0xFF(255) are reserved for future use

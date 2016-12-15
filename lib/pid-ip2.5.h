@@ -91,7 +91,7 @@ typedef struct
 #define LEFT_LEGS_ENC_NUM       0       //amsEnc module index is 0-3
 #endif
 #ifndef LEFT_LEGS_ENC_FLIP
-#define LEFT_LEGS_ENC_FLIP      1       //"forward" normal for left
+#define LEFT_LEGS_ENC_FLIP      0//1       //"forward" normal for left
 #endif
 #ifndef LEFT_LEGS_PWM_FLIP
 #define LEFT_LEGS_PWM_FLIP      1
@@ -107,7 +107,7 @@ typedef struct
 #define RIGHT_LEGS_ENC_NUM      1       //amsEnc module index is 0-3
 #endif
 #ifndef RIGHT_LEGS_FLIP
-#define RIGHT_LEGS_FLIP         0       //"forward" reversed for right
+#define RIGHT_LEGS_FLIP         1//0       //"forward" reversed for right
 #endif
 #ifndef RIGHT_LEGS_PWM_FLIP
 #define RIGHT_LEGS_PWM_FLIP     0

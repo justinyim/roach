@@ -55,13 +55,15 @@ static unsigned char cmdPIDStopMotors(unsigned char type, unsigned char status, 
 static unsigned char cmdSetVelProfile(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdZeroPos(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdSetPhase(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
-static unsigned char cmdSetServo(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
+static unsigned char cmdSetServo(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr); // JY edits set servo angle
+static unsigned char cmdSaltoVicon1(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr); // JY edits Salto Vicon jumps
 
 //Experiment/Flash Commands
 static unsigned char cmdStartTimedRun(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdStartTelemetry(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdEraseSectors(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdFlashReadback(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
+static unsigned char cmdCalibInit(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr); // JY edits initial calibration
 /*-----------------------------------------------------------------------------
  *          Public functions
 -----------------------------------------------------------------------------*/
@@ -91,6 +93,8 @@ void cmdSetup(void) {
     cmd_func[CMD_START_TIMED_RUN] = &cmdStartTimedRun;
     cmd_func[CMD_PID_STOP_MOTORS] = &cmdPIDStopMotors;
     cmd_func[CMD_SET_SERVO] = &cmdSetServo; // JY edits
+    cmd_func[CMD_CALIB_INIT] = &cmdCalibInit; // JY edits
+    cmd_func[CMD_SALTO_VICON1] = &cmdSaltoVicon1; // JY edits
 
 }
 
@@ -353,13 +357,38 @@ void cmdError() {
     }
 }
 
+// JY edits
 unsigned char cmdSetServo(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr) {
-    //Unpack unsigned char* frame into structured values
     PKT_UNPACK(_args_cmdSetServo, argsPtr, frame);
     servoSet(argsPtr->angle);
 
     return 1;
 }
+
+// JY edits
+unsigned char cmdCalibInit(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr) {
+    // Initial calibration, to be run just before the experiment starts
+
+    // Nothing implemented yet
+
+    return 1;
+}
+
+unsigned char cmdSaltoVicon1(unsigned char type, unsigned char status, unsigned char length, unsigned char * frame, unsigned int src_addr) {
+    // Unpacked unsigned char* frame into structured values
+    PKT_UNPACK(_args_cmdSaltoVicon1, argsPtr, frame);
+    
+    int rolo, pito, yawo, thbo, thlo, Ilo;
+    rolo = argsPtr->rol;
+    pito = argsPtr->pit;
+    yawo = argsPtr->yaw;
+    thbo = argsPtr->thb;
+    thlo = argsPtr->thl;
+    Ilo = argsPtr->Il;
+
+    return 1;
+}
+
 
 static unsigned char cmdNop(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr) {
     return 1;

@@ -22,7 +22,7 @@ def main():
     xb = setupSerial(shared.BS_COMPORT, shared.BS_BAUDRATE)
     
     R1 = Velociroach('\x20\x52', xb)
-    R1.SAVE_DATA = False#True
+    R1.SAVE_DATA = False
                             
     #R1.RESET = False       #current roach code does not support software reset
     
@@ -49,9 +49,11 @@ def main():
     #    ----------LEFT----------        ---------_RIGHT----------
     #motorgains = [1800,0,100,0,0, 1800,0,100,0,0]
     #motorgains = [200,200,0,0,0 , 200,200,0,0,0]
-    motorgains = [0,0,200,0,00, 0,0,200,0,00] # JY edits
+    motorgains = [0,0,200,0,100, 0,0,200,0,100] # JY edits
     
-    simpleAltTripod = GaitConfig(motorgains, rightFreq=1, leftFreq=1) # Parameters can be passed into object upon construction, as done here.
+    freq = 4
+    simpleAltTripod = GaitConfig(motorgains, rightFreq=freq, leftFreq=freq) # Parameters can be passed into object upon construction, as done here.
+    # Puffer operates at frequencies from 3 to 9
     simpleAltTripod.phase = PHASE_180_DEG                             # Or set individually, as here
     simpleAltTripod.deltasLeft = [0.25, 0.25, 0.25]
     simpleAltTripod.deltasRight = [0.25, 0.25, 0.25]
@@ -61,7 +63,7 @@ def main():
     R1.setGait(simpleAltTripod)
 
     # example , 0.1s lead in + 2s run + 0.1s lead out
-    EXPERIMENT_RUN_TIME_MS     = 8000 #ms
+    EXPERIMENT_RUN_TIME_MS     = 8000*4/freq #ms
     EXPERIMENT_LEADIN_TIME_MS  = 100  #ms
     EXPERIMENT_LEADOUT_TIME_MS = 100  #ms
     
@@ -89,16 +91,22 @@ def main():
     R1.startTimedRun( EXPERIMENT_RUN_TIME_MS ) #Faked for now, since pullin doesn't have a working VR+AMS to test with
     ######## End of motion commands   ########
    
-    time.sleep(0.5)
-    R1.setServo(0.5)
-    time.sleep(0.5)
-    R1.setServo(-0.5)
-    time.sleep(0.5)
-    R1.setServo(1)
-    time.sleep(0.5)
-    R1.setServo(-1)
-    time.sleep(0.5)
-    R1.setServo(0)
+    #R1.setServo(-0.3) # minimum physical
+    #R1.setServo(-0.95) # maximum physical
+    #R1.setServo(-0.45) # minimum sprawl
+    R1.setServo(-0.6)
+
+    """
+    time.sleep(1)
+    R1.setServo(-0.45)
+    time.sleep(1)
+    R1.setServo(-0.95)
+    time.sleep(1)
+    R1.setServo(-0.6)
+    time.sleep(1)
+    R1.setServo(-0.8)
+    """
+
 
     for r in shared.ROBOTS:
         if r.SAVE_DATA:

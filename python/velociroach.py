@@ -160,7 +160,12 @@ class Velociroach:
     # JY edits
     def setServo(self, angle = 0):
         self.tx(0, command.SET_SERVO, pack('f', angle))
-        time.sleep(0.05)
+        #time.sleep(0.05)
+
+    # JY edits
+    def saltoVicon1(self, ctrl_pack):
+        self.tx(0, command.SALTO_VICON1, pack('10c', ctrl_pack))
+        #time.sleep(0.005)
     
     ######TODO : sort out this function and flashReadback below
     def downloadTelemetry(self, timeout = 5, retry = True):

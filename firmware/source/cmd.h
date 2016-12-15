@@ -26,6 +26,8 @@
 #define CMD_SET_PHASE               0x93         
 #define CMD_SET_MOTOR_MODE          0x94
 #define CMD_SET_SERVO               0x95 // JY edits adding servo angle command
+#define CMD_CALIB_INIT              0x96 // JY edits adding initial calibration
+#define CMD_SALTO_VICON1            0x97 // JY edits adding Salto Vicon jumps
 // Redefine
 
 void cmdSetup(void);
@@ -94,5 +96,18 @@ typedef struct{
 typedef struct{
     float angle;
 } _args_cmdSetServo;
+
+//cmdSaltoVicon1 // JY edits
+typedef struct{
+    unsigned char rol;
+    unsigned char pit;
+    unsigned char yaw;
+    unsigned char thb;
+    unsigned char thl;
+    unsigned char Il;
+} _args_cmdSaltoVicon1;
+
+//cmdCalibInit // JY edits
+//no arguments
 
 #endif // __CMD_H

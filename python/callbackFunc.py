@@ -22,12 +22,13 @@ pktFormat = { \
     command.SET_STEERING_GAINS:     '6h', \
     command.SOFTWARE_RESET:         '', \
     command.ERASE_SECTORS:          'L', \
-    command.FLASH_READBACK:         '=LL' +'7l'+'H'+'9h', \
+    command.FLASH_READBACK:         '=LL' +'7l'+'10h', \
     command.SLEEP:                  'b', \
     command.ECHO:                   'c' ,\
     command.SET_VEL_PROFILE:        '8h' ,\
     command.WHO_AM_I:               '', \
     command.ZERO_POS:               '=2l', \
+    command.CALIBRATE_MOTOR:        '10i', \
     }
                
 #XBee callback function, called every time a packet is recieved
@@ -128,6 +129,12 @@ def xbee_received(packet):
             print "Set Velocity Profile readback:"
             temp = unpack(pattern, data)
             print temp
+        # CALIBRATE_MOTOR
+        elif (type == command.CALIBRATE_MOTOR):
+            temp = unpack(pattern, data)
+            shared.bytesIn = sum(temp)/len(temp)
+            #print "Motor calibration speeds:"
+            #print shared.bytesIn
         # WHO_AM_I
         elif (type == command.WHO_AM_I):
             #print "whoami:",status, hex(type), data

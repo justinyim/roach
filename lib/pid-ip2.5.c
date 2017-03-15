@@ -356,13 +356,7 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
                 }
             }
         }
-        if (pidObjs[0].mode == 0){
-            pidSetControl();
-        } else if (pidObjs[0].mode == 1)
-        {
-            tiHSetDC(1, 0xFFF);//pidObjs[0].pwmDes); // more terrible hacks 2/20/17
-            //tiHSetDC(2, pidObjs[1].pwmDes); //JY: terrible hacks 2/20/17
-        }
+        pidSetControl();
     }
     //LED_3 = 0;
     _T1IF = 0;
@@ -457,7 +451,7 @@ void pidSetControl()
 { int i,j;
 // 0 = right side
     for(j=0; j < NUM_PIDS; j++)
-   {  //pidobjs[0] : right side
+    {  //pidobjs[0] : right side
 	// p_input has scaled velocity interpolation to make smoother
 	// p_state is [16].[16]
         	pidObjs[j].p_error = pidObjs[j].p_input + pidObjs[j].interpolate  - pidObjs[j].p_state;
@@ -465,7 +459,10 @@ void pidSetControl()
             //Update values
             UpdatePID(&(pidObjs[j]),j);
        } // end of for(j)
-   for(i=0;i<NUM_PIDS;i++){
+    if (pidObjs[0].mode == 1) { // override
+        pidObjs[0].output = 0xFFF;
+    }
+    for(i=0;i<NUM_PIDS;i++){
         if(pidObjs[i].onoff) {tiHSetDC(i+1, pidObjs[i].output); }
         else {tiHSetDC(i+1,0);} // turn off motor if PID loop is off
     }

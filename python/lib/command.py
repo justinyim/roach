@@ -81,5 +81,6 @@ SET_EXP_PARAMS          =   0x9B
 
 STOP_EXPERIMENT         =   0xA0
 INTEGRATED_VICON        =   0xA1
+CALIBRATE_MOTOR         =   0xA2
 
 # CMD values of 0xF0(240) - 0xFF(255) are reserved for future use

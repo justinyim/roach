@@ -6,6 +6,7 @@ authors: stanbaek, apullin
 from lib import command
 import time,sys,os,traceback
 import serial
+import numpy as np
 
 # Path to imageproc-settings repo must be added
 sys.path.append(os.path.dirname("../../imageproc-settings/"))
@@ -19,32 +20,21 @@ def main():
 
     # Send robot a WHO_AM_I command, verify communications
     queryRobot()
-    #Motor gains format:
-    #  [ Kp , Ki , Kd , Kaw , Kff     ,  Kp , Ki , Kd , Kaw , Kff ]
-    #    ----------LEFT----------        ---------_RIGHT----------
-    motorgains = [450,0,20,0,100, 0,0,0,0,0] #[600,0,20,0,0, 100,0,0,0,0]
-    thrustGains = [300,100,300,30,0,40]
 
     motorgains = [0,0,0,0,0, 0,0,0,0,0] # disable thrusters and tail
     thrustGains = [0,0,0, 0,0,0]
 
-    xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h', *thrustGains))
-
-    duration = 5000
+    duration = 1000
     rightFreq = 0
     leftFreq = 0
     phase = 0
-    telemetry = True
+    telemetry = False#True
     repeat = False
 
     manParams = manueverParams(0, 0, 0, 0, 0, 0) # JY edits: added for compatibility
-    params = hallParams(motorgains, duration, rightFreq, leftFreq, phase, telemetry, repeat)
-    setMotorGains(motorgains)
-
     sj_params = sjParams(300, 800)
-    # wj_params = wjParams(-551287, -50000, 1000000, 4941297, 411774)
     wj_params = wjParams(-551287, -40000, 80000, 5353068, 411774)
-    wjParams.set(wj_params)
+    params = hallParams(motorgains, duration, rightFreq, leftFreq, phase, telemetry, repeat)
 
 
     while True:
@@ -69,53 +59,61 @@ def main():
             raw_input("Press enter to start run ...") 
             startTelemetrySave(numSamples)
 
-        #Start robot 0: wall jump, 1: single jump, 2: vicon jumps
-        exp = [2] 
         stopSignal = [0]
 
-        viconTest = [0,0,0,0,0,0,65*256,75*256]#55*256,70*256]
-        xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        time.sleep(0.01)
+        # Check eight points
+        n_steps = 8
+        ispdf = [0 for i in range(n_steps)]
+        #ispdb = [0 for i in range(n_steps)]
+        for i in range(n_steps):
+            toSend = [int(2730.7*i/n_steps),int(2**13)]
+            xb_send(0, command.CALIBRATE_MOTOR, pack('2h', *toSend))
+            time.sleep(1.0)
+            ispdf[i] = float(shared.bytesIn)/2**16
 
-        xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
+            '''
+            toSend = [int(2730.7*i/n_steps),-int(2**13)]
+            xb_send(0, command.CALIBRATE_MOTOR, pack('2h', *toSend))
+            time.sleep(1.0)
+            ispdb[i] = float(shared.bytesIn)/2**16
+            '''
 
-        '''
-        time.sleep(1)
-        viconTest = [0,0,0,0,0,0,20*256,20*256]#55*256,70*256]
-        xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        time.sleep(1)
-        viconTest = [0,0,0,0,0,0,40*256,40*256]#55*256,70*256]
-        xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        time.sleep(1)
-        viconTest = [0,0,0,0,0,0,60*256,60*256]#55*256,70*256]
-        xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        time.sleep(1)
-        viconTest = [0,0,0,0,0,0,80*256,80*256]#55*256,70*256]
-        xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        time.sleep(1)
-        '''
-
-        time.sleep(params.duration / 1000.0)
+        # Find the octant for higher resolution search
+        vel1 =  max(ispdf)
+        for i in range(n_steps):
+            if ispdf[i] == vel1:
+                ang1 = i
+                break
+        if ang1 == 0:
+            ang1 = n_steps-1
+            ang2 = n_steps+1
+        elif ang1 == n_steps-1:
+            ang1 = n_steps-2
+            ang2 = n_steps
+        else:
+            ang2 = ang1+1
+            ang1 = ang1-1
         
-        #time.sleep(10)
+        print ispdf
+        #print ispdb
+
+        n_search = int(360/6/8/0.3+1)
+        angles = 2730.7*np.linspace(float(ang1)/n_steps,float(ang2)/n_steps,num=n_search)
+        spdf = [0 for i in range(n_search)]
+        for i in range(n_search):
+            toSend = [int(angles[i]),int(2**13)]
+            xb_send(0, command.CALIBRATE_MOTOR, pack('2h', *toSend))
+            time.sleep(1.0)
+            spdf[i] = float(shared.bytesIn)/2**16
+        
+        print(angles.tolist())
+        print(spdf)
+
+                
+        #time.sleep(params.duration / 1000.0)
+        time.sleep(0.5)
         xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
 
-
-        '''
-        time.sleep(10)
-        #viconTest = [0,0,0,0,0,0,256,256]
-        #xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        time.sleep(20)
-        xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
-        '''
-
-
-        # temp = [0]
-        # xb_send(0, command.RESET_BODY_ANG, "0")
-        # xb_send(0, command.PID_START_MOTORS, "0")
-        # xb_send(0, command.SET_PITCH_SET, pack('l', *temp))
-        # time.sleep(params.duration/1000.0)
-        # xb_send(0, command.PID_STOP_MOTORS, "0")
 
         if params.telemetry and query_yes_no("Save Data?"):
             flashReadback(numSamples, params, manParams)

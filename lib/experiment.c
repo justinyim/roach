@@ -7,6 +7,7 @@
 #include "mpu6000.h"
 #include "uart_driver.h"
 #include "protocol.h"
+#include "tih.h"
 // #include "math.h"
 #include "lut.h"
 
@@ -30,7 +31,7 @@
 
 volatile unsigned char mj_state = MJ_IDLE;
 #define UART_PERIOD     10
-#define FULL_EXTENSION  14000
+#define FULL_EXTENSION  15000 //14000 before femur recalibrate 2/20/17
 
 
 volatile unsigned char  exp_state = EXP_IDLE;
@@ -81,6 +82,9 @@ void multiJumpFlow() {
             pidObjs[0].onoff = 0;
             pidObjs[2].onoff = 0;
             pidObjs[3].onoff = 0;
+            tiHSetDC(1,0);
+            tiHSetDC(3,0);
+            tiHSetDC(4,0);
             if(t1_ticks - t_start > UART_PERIOD) {
                 send_command_packet(&uart_tx_packet_global, 0, 0, 0);
                 t_start = t1_ticks;
@@ -271,7 +275,7 @@ extern packet_union_t* last_bldc_packet;
 extern uint8_t last_bldc_packet_is_new;
 
 
-#define MOTOR_OFFSET    500
+#define MOTOR_OFFSET    2500//-5300//500
 char footContact(void) {
     int eps = 1000;
     unsigned int mot, femur;
@@ -316,7 +320,7 @@ long calibPos(char idx){
     else if (idx == 2)
     {
     temp = -(((long)encPos[1].pos - (long)encPos[1].offset) << 2);       // pos 14 bits 0x0 -> 0x3fff
-    return temp + (encPos[1].oticks << 16);
+    return temp - (encPos[1].oticks << 16);
     }
     else{
         return -1;

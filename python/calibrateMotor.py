@@ -28,7 +28,7 @@ def main():
     rightFreq = 0
     leftFreq = 0
     phase = 0
-    telemetry = False#True
+    telemetry = True
     repeat = False
 
     manParams = manueverParams(0, 0, 0, 0, 0, 0) # JY edits: added for compatibility
@@ -61,6 +61,8 @@ def main():
 
         stopSignal = [0]
 
+        # Calibrate --------------------------------------
+        #'''
         # Check eight points
         n_steps = 8
         ispdf = [0 for i in range(n_steps)]
@@ -70,13 +72,8 @@ def main():
             xb_send(0, command.CALIBRATE_MOTOR, pack('2h', *toSend))
             time.sleep(1.0)
             ispdf[i] = float(shared.bytesIn)/2**16
-
-            '''
-            toSend = [int(2730.7*i/n_steps),-int(2**13)]
-            xb_send(0, command.CALIBRATE_MOTOR, pack('2h', *toSend))
-            time.sleep(1.0)
-            ispdb[i] = float(shared.bytesIn)/2**16
-            '''
+            xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
+            time.sleep(0.2)
 
         # Find the octant for higher resolution search
         vel1 =  max(ispdf)
@@ -105,13 +102,25 @@ def main():
             xb_send(0, command.CALIBRATE_MOTOR, pack('2h', *toSend))
             time.sleep(1.0)
             spdf[i] = float(shared.bytesIn)/2**16
+            xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
+            time.sleep(0.2)
         
         print(angles.tolist())
         print(spdf)
+        #'''
+
+
+        # Evaulate accuracy of calibration --------------
+        '''
+        toSend = [710,int((2**13))] # reterminated motor 1
+        #toSend = [2018,int(2**13)] # stock motor 1
+        xb_send(0, command.CALIBRATE_MOTOR, pack('2h', *toSend))
+        time.sleep(params.duration / 1000.0)
+        '''
 
                 
-        #time.sleep(params.duration / 1000.0)
-        time.sleep(0.5)
+        xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
+        time.sleep(0.1)
         xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
 
 

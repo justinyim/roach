@@ -31,7 +31,9 @@
 
 volatile unsigned char mj_state = MJ_IDLE;
 #define UART_PERIOD     10
-#define FULL_EXTENSION  15000 //14000 before femur recalibrate 2/20/17
+#define FULL_EXTENSION  14500
+    //15000 before femur recalibrate 4/5/17 
+    //14000 before femur recalibrate 2/20/17
 
 
 volatile unsigned char  exp_state = EXP_IDLE;
@@ -275,7 +277,8 @@ extern packet_union_t* last_bldc_packet;
 extern uint8_t last_bldc_packet_is_new;
 
 
-#define MOTOR_OFFSET    2500//-5300//500
+#define MOTOR_OFFSET    1000
+// 2500 before Salto1p2 rebuild 4/5/17
 char footContact(void) {
     int eps = 1000;
     unsigned int mot, femur;

@@ -73,7 +73,7 @@ def main():
         exp = [2] 
         stopSignal = [0]
 
-        viconTest = [0,0,0,0,0,0,65*256,75*256]#55*256,70*256]
+        viconTest = [0,0,0,0,0,0,60*256,80*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(0.01)
 
@@ -98,6 +98,8 @@ def main():
         time.sleep(params.duration / 1000.0)
         
         #time.sleep(10)
+        xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
+        time.sleep(0.01)
         xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
 
 

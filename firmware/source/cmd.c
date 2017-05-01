@@ -249,9 +249,12 @@ unsigned char cmdCalibrateMotor(unsigned char type, unsigned char status, unsign
     sensor_data_t* sensor_data;
     int32_t speed[N_SPEED];
     
-    send_command_packet(&uart_tx_packet_cmd, 0, frame[0] + (frame[1]<<8), 16);
+    int32_t voltage_command = (frame[2] + (frame[3]<<8)) << 1;
+    uint32_t calibration_point = frame[0] + (frame[1]<<8);
+
+    send_command_packet(&uart_tx_packet_cmd, 0, calibration_point, 16);
     delay_ms(50);
-    send_command_packet(&uart_tx_packet_cmd, frame[2] + (frame[3]<<8), 0, 3);
+    send_command_packet(&uart_tx_packet_cmd, voltage_command, 0, 3);
     delay_ms(600);
     for (i=0;i<N_SPEED;i++){
         sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);

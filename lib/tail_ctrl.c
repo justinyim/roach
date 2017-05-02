@@ -10,7 +10,7 @@
 #include "timer.h"
 #include "ports.h"
 #include "pid-ip2.5.h"
-#include "experiment.h"
+#include "salto_ctrl.h"
 #include "tih.h"
 #define ABS(my_val) ((my_val) < 0) ? -(my_val) : (my_val)
 

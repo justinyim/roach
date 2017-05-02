@@ -39,7 +39,7 @@
         <itemPath>../lib/vr_telem.h</itemPath>
         <itemPath>../lib/tail_ctrl.h</itemPath>
         <itemPath>../lib/as5047.h</itemPath>
-        <itemPath>../lib/experiment.h</itemPath>
+        <itemPath>../lib/salto_ctrl.h</itemPath>
       </logicalFolder>
       <logicalFolder name="f1" displayName="settings" projectFiles="true">
         <itemPath>../../imageproc-settings/settings.h</itemPath>
@@ -86,8 +86,8 @@
         <itemPath>../lib/vr_telem.c</itemPath>
         <itemPath>../lib/tail_ctrl.c</itemPath>
         <itemPath>../lib/as5047.c</itemPath>
-        <itemPath>../lib/experiment.c</itemPath>
         <itemPath>../lib/lut.h</itemPath>
+        <itemPath>../lib/salto_ctrl.c</itemPath>
       </logicalFolder>
       <itemPath>source/cmd.c</itemPath>
       <itemPath>source/main.c</itemPath>

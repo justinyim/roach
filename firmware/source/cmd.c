@@ -23,7 +23,7 @@
 #include "uart_driver.h"
 #include "protocol.h"
 #include "tail_ctrl.h"
-#include "experiment.h"
+#include "salto_ctrl.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -164,6 +164,7 @@ unsigned char cmdStartExperiment(unsigned char type, unsigned char status, unsig
 }
 
 unsigned char cmdSetExperimentParams(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
+    /*
     int32_t mode = frame[0];
 
     switch(mode) {
@@ -193,6 +194,8 @@ unsigned char cmdSetExperimentParams(unsigned char type, unsigned char status, u
         default:
             break;
     }
+    */
+    // no longer used
     return 1;
 }
 

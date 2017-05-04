@@ -19,25 +19,45 @@
 #include "uart_driver.h"
 #include "lut.h"
 
+#include "ports.h"
 
-
-#include "tail_ctrl.h"
 #include "pid-ip2.5.h"
 extern pidPos pidObjs[NUM_PIDS];
 
 
 
-packet_union_t uart_tx_packet_global;
+packet_union_t uart_tx_packet_global; // BLDC motor driver packet
 
-extern EncObj motPos;
+static volatile unsigned char interrupt_count = 0;
+volatile unsigned char mj_state = MJ_IDLE;
+
 extern EncObj encPos[NUM_ENC];
 extern unsigned long t1_ticks;
 
-extern long body_angle[3];
-volatile long legSetpoint;
-volatile long pushoffCmd;
+// Orientation
+long body_angle[3];     // Current body angle estimate
+long body_velocity[3];  // Current body velocity estimate
+long vicon_angle[3];    // Last Vicon-measured body angle
 
-volatile unsigned char mj_state = MJ_IDLE;
+// Setpoints and commands
+char pitchControlFlag = 0; // enable/disable attitude control
+volatile long pitchSetpoint = 0;
+volatile long rollSetpoint = 0;
+volatile long yawSetpoint = 0;
+volatile long legSetpoint = 0;  // Aerial leg setpoint
+volatile long pushoffCmd = 0;   // Ground leg command
+
+
+
+void setPitchControlFlag(char state){
+    pitchControlFlag = state;
+}
+
+void setAttitudeSetpoint(long yaw, long roll, long pitch){
+    yawSetpoint = yaw;
+    rollSetpoint = roll;
+    pitchSetpoint = pitch;
+}
 
 void setLegSetpoint(long length){
     legSetpoint = length << 8;
@@ -47,6 +67,21 @@ void setPushoffCmd(long cmd){
     pushoffCmd = cmd << 8;
 }
 
+void updateViconAngle(long* new_vicon_angle){
+    int i;
+    for (i=0; i<3; i++){
+        vicon_angle[i] = new_vicon_angle[i];
+        body_angle[i] = new_vicon_angle[i]; 
+        //TODO: integrate over lag
+    }
+}
+
+void resetBodyAngle(){
+    // mpuRunCalib(0,100); //re-offset gyro, assumes stationary
+    body_angle[0] = 0;
+    body_angle[1] = 0;
+    body_angle[2] = 0;
+}
 
 void expStart(uint8_t startSignal) {
     mj_state = MJ_START;
@@ -55,6 +90,95 @@ void expStart(uint8_t startSignal) {
 void expStop(uint8_t stopSignal) {
     mj_state = MJ_STOP;
 }
+
+
+
+void tailCtrlSetup(){
+    body_angle[0]=0;
+    body_angle[1]=0;
+    body_angle[2]=0;
+    initPIDObjPos( &(pidObjs[0]), 0,0,0,0,0);
+    // initPIDObjPos( &(pidObjs[2]), -500,0,-500,0,0);
+    initPIDObjPos( &(pidObjs[2]), 0,0,0,0,0);
+    initPIDObjPos( &(pidObjs[3]), 0,0,0,0,0); //100,100
+    SetupTimer5();
+    EnableIntT5;
+
+    pidObjs[0].timeFlag = 0;
+    pidObjs[0].mode = 0;
+    pidSetInput(0, 0);
+    pidObjs[0].p_input = pidObjs[0].p_state;
+    pidObjs[2].p_input = 0;
+    pidObjs[3].p_input = 0;
+    pidObjs[2].v_input = 0;
+    pidObjs[3].v_input = 0;
+}
+
+
+///////        Tail control ISR          ////////
+//////  Installed to Timer5 @ 1000hz  ////////
+void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
+    interrupt_count++;
+      
+    if(interrupt_count <= 5) {
+        // Do signal processing on gyro
+        int gdata[3];
+        mpuGetGyro(gdata);
+
+        gdata[0] -= -5;//20; // ImageProc board short axis
+        gdata[1] -= 15;//20; // ImageProc board long axis
+        gdata[2] -= 0;//-20; // ImageProc board normal
+        body_velocity[0] = (((long)(gdata[2] + gdata[1]))*181)>>8; //yaw
+        body_velocity[1] = (((long)(gdata[1] - gdata[2]))*181)>>8; //roll
+        body_velocity[2] = -gdata[0]; //pitch
+
+        //TODO: correct wrap-around, near singularity, etc.
+        body_angle[0] += body_velocity[0]; //yaw
+        body_angle[1] += body_velocity[1]; //roll
+        body_angle[2] += body_velocity[2]; //pitch
+
+    }
+    if(interrupt_count == 5) 
+    {
+        interrupt_count = 0;
+        multiJumpFlow();
+        if(pitchControlFlag == 0){
+            //LED_2 = 0;
+            // Control/motor off
+            pidObjs[0].onoff = 0;
+            pidObjs[2].onoff = 0;
+            pidObjs[3].onoff = 0;
+        } else {
+            //LED_2 = 1;
+            // Control pitch, roll, and yaw
+            if (mj_state == MJ_AIR) {
+                tiHChangeMode(1, TIH_MODE_COAST);
+                pidObjs[0].mode = 0;
+                pidObjs[0].p_input = pitchSetpoint;
+            } else { // brake on the ground
+                tiHChangeMode(1, TIH_MODE_BRAKE);
+                pidObjs[0].mode = 1;
+                //pidObjs[0].pwmDes = 0; this is not useful
+            }
+            pidObjs[2].p_input = rollSetpoint;
+            pidObjs[3].p_input = yawSetpoint;
+        }
+    }
+
+    _T5IF = 0;
+}
+
+
+void SetupTimer5() {
+    ///// Timer 5 setup, Steering ISR, 300Hz /////
+    // period value = Fcy/(prescale*Ftimer)
+    unsigned int T5CON1value, T5PERvalue;
+    // prescale 1:64
+    T5CON1value = T5_ON & T5_IDLE_CON & T5_GATE_OFF & T5_PS_1_64 & T5_SOURCE_INT;
+    T5PERvalue = 625; //1Khz
+    OpenTimer5(T5CON1value, T5PERvalue);
+}
+
 
 long transition_time = 0;
 void multiJumpFlow() {
@@ -116,7 +240,7 @@ volatile uint8_t flags_last =0;
 void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint32_t current, uint8_t flags){
     if (((t1_ticks - t_cmd_last) < UART_PERIOD) || 
         (position == position_last && current == current_last && flags == flags_last)) {
-        return;
+        return; // skip command sending if last command was too recent or was identical
     }
 
     // Create dummy UART TX packet
@@ -142,13 +266,13 @@ void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint3
 extern packet_union_t* last_bldc_packet;
 extern uint8_t last_bldc_packet_is_new;
 
-#define MOTOR_OFFSET    1000
+#define MOTOR_OFFSET    500
 char footContact(void) {
     int eps = 1000;
     unsigned int mot, femur;
     sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
-    mot = (unsigned int)(sensor_data->position/111);//*motPos_to_femur_crank_units); //UNITFIX
-    femur = crankFromFemur(); //TODO: put into Scripts/lut.m (lib/lut.h) constant
+    mot = (unsigned int)(sensor_data->position*motPos_to_femur_crank_units); //UNITFIX
+    femur = crankFromFemur();
     if ( mot-MOTOR_OFFSET>femur && (mot-MOTOR_OFFSET - eps) > femur)
     {
         LED_1 = 1;
@@ -163,7 +287,7 @@ char footTakeoff(void) {
     int eps = 1000;
     unsigned int mot, femur;
     sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
-    mot = (unsigned int)(sensor_data->position/111);//*motPos_to_femur_crank_units); //UNITFIX
+    mot = (unsigned int)(sensor_data->position*motPos_to_femur_crank_units); //UNITFIX
     femur = crankFromFemur();
     if ( (mot-MOTOR_OFFSET + eps) < femur){
         return 1;

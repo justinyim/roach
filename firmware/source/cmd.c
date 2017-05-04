@@ -22,7 +22,6 @@
 #include "telem.h"
 #include "uart_driver.h"
 #include "protocol.h"
-#include "tail_ctrl.h"
 #include "salto_ctrl.h"
 
 #include <stdio.h>
@@ -208,7 +207,7 @@ unsigned char cmdSetPitchSetpoint(unsigned char type, unsigned char status, unsi
         pos += ((long)frame[i] << 8*i );
     }
     setPitchControlFlag(1);
-    setPitchSetpoint(pos);
+    setAttitudeSetpoint(0,0,pos);
     return 1;
 }
 
@@ -229,9 +228,7 @@ unsigned char cmdIntegratedVicon(unsigned char type, unsigned char status, unsig
     long pushoff = (int16_t)frame[14] + ((int16_t)frame[15] << 8);
 
     updateViconAngle(new_vicon_angle);
-    setPitchSetpoint(new_setpoints[2]);
-    setRollSetpoint(new_setpoints[1]);
-    setYawSetpoint(new_setpoints[0]);
+    setAttitudeSetpoint(new_setpoints[0],new_setpoints[1],new_setpoints[2]);
     setLegSetpoint(leg_length);
     setPushoffCmd(pushoff);
 

@@ -29,7 +29,6 @@
 #include "init.h"  // for Timer1
 
 #include "as5047.h"
-#include "tail_ctrl.h"
 
 
 #define MC_CHANNEL_PWM1     1

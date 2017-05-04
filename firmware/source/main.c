@@ -73,7 +73,6 @@
 #include "uart_driver.h"
 #include "ppool.h"
 #include "carray.h"
-#include "tail_ctrl.h"
 #include "protocol.h"
 #include "salto_ctrl.h"
 

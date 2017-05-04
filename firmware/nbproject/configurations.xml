@@ -37,7 +37,6 @@
         <itemPath>../lib/pid-ip2.5.h</itemPath>
         <itemPath>../lib/tests.h</itemPath>
         <itemPath>../lib/vr_telem.h</itemPath>
-        <itemPath>../lib/tail_ctrl.h</itemPath>
         <itemPath>../lib/as5047.h</itemPath>
         <itemPath>../lib/salto_ctrl.h</itemPath>
       </logicalFolder>
@@ -84,7 +83,6 @@
         <itemPath>../lib/pid-ip2.5.c</itemPath>
         <itemPath>../lib/tests.c</itemPath>
         <itemPath>../lib/vr_telem.c</itemPath>
-        <itemPath>../lib/tail_ctrl.c</itemPath>
         <itemPath>../lib/as5047.c</itemPath>
         <itemPath>../lib/lut.h</itemPath>
         <itemPath>../lib/salto_ctrl.c</itemPath>
@@ -303,6 +301,7 @@
         <property key="ToolFirmwareOption.UseLatestFirmware" value="true"/>
         <property key="UART 1" value="true"/>
         <property key="UART 2" value="true"/>
+        <property key="firmware.download.all" value="false"/>
         <property key="hwtoolclock.frcindebug" value="false"/>
         <property key="memories.aux" value="false"/>
         <property key="memories.bootflash" value="true"/>

@@ -10,11 +10,22 @@
 #define MJ_AIR          3
 #define MJ_GND          4
 
-#define UART_PERIOD 10 // minimum UART period in ms (must be positive integer)
-#define FULL_EXTENSION 14500 // TODO: put in settings.h
+#define UART_PERIOD     10 // minimum UART period in ms (must be positive integer)
+#define FULL_EXTENSION  14500 // TODO: put in settings.h
 
+
+void SetupTimer5();
+void tailCtrlSetup();
+
+
+void setPitchControlFlag(char state);
+void resetBodyAngle();
+void updateViconAngle(long* new_vicon_angle);
+
+void setAttitudeSetpoint(long yaw, long roll, long pitch);
 void setLegSetpoint(long length);
 void setPushoffCmd(long cmd);
+
 void expStart(uint8_t startSignal);
 void expStop(uint8_t stopSignal);
 

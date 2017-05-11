@@ -446,6 +446,9 @@ void pidGetState()
 long min_pos = -3000;
 long max_pos = 1114112;
 
+#define EULER_SCALED_PI 5986015
+// 7443 * 2^8 * 3.14159
+// 7443 is the conversion from radians to euler angle units
 void pidSetControl()
 { int i,j;
 // 0 = right side
@@ -453,11 +456,18 @@ void pidSetControl()
     {  //pidobjs[0] : right side
 	// p_input has scaled velocity interpolation to make smoother
 	// p_state is [16].[16]
-        	pidObjs[j].p_error = pidObjs[j].p_input + pidObjs[j].interpolate  - pidObjs[j].p_state;
-            pidObjs[j].v_error = pidObjs[j].v_input - pidObjs[j].v_state;  // v_input should be revs/sec
-            //Update values
-            UpdatePID(&(pidObjs[j]),j);
-       } // end of for(j)
+        pidObjs[j].p_error = pidObjs[j].p_input + pidObjs[j].interpolate  - pidObjs[j].p_state;
+        pidObjs[j].v_error = pidObjs[j].v_input - pidObjs[j].v_state;  // v_input should be revs/sec
+        if (j==0 || j==2 || j==3) { // euler angle PIDs wrap around
+            if (pidObjs[j].p_error > EULER_SCALED_PI) {
+                pidObjs[j].p_error -= 2*EULER_SCALED_PI;
+            } else if (pidObjs[j].p_error < -EULER_SCALED_PI) {
+                pidObjs[j].p_error += 2*EULER_SCALED_PI;
+            }
+        }
+        //Update values
+        UpdatePID(&(pidObjs[j]),j);
+    } // end of for(j)
     if (pidObjs[0].mode == 1) { // override
         pidObjs[0].output = 0xFFF;
     }
@@ -487,21 +497,21 @@ void UpdatePID(pidPos *pid, int num)
 
     // saturate output - assume only worry about >0 for now
     // apply anti-windup to integrator  
-    if(num==0){
-        pid->preSat = -pid->preSat;
-        pid->output = -pid->output;
-    	if (pid->preSat > MAXTHROT) 
-    	{ 	      pid->output = MAXTHROT; 
-    			pid->i_error = (long) pid->i_error + 
-    				(long)(pid->Kaw) * ((long)(MAXTHROT) - (long)(pid->preSat)) 
-    				/ ((long)GAIN_SCALER);		
-    	}      
-    	if (pid->preSat < -MAXTHROT)
-          { 	      pid->output = -MAXTHROT; 
-    			pid->i_error = (long) pid->i_error + 
-    				(long)(pid->Kaw) * ((long)(MAXTHROT) - (long)(pid->preSat)) 
-    				/ ((long)GAIN_SCALER);		
-    	   }
+        if(num==0){
+            pid->preSat = -pid->preSat;
+            pid->output = -pid->output;
+            if (pid->preSat > MAXTHROT) {
+                pid->output = MAXTHROT;
+                pid->i_error = (long) pid->i_error +
+                (long)(pid->Kaw) * ((long)(MAXTHROT) - (long)(pid->preSat))
+                / ((long)GAIN_SCALER);
+            }
+            if (pid->preSat < -MAXTHROT) {
+                pid->output = -MAXTHROT;
+                pid->i_error = (long) pid->i_error +
+                (long)(pid->Kaw) * ((long)(MAXTHROT) - (long)(pid->preSat))
+                / ((long)GAIN_SCALER);
+            }
         } 
     }
 

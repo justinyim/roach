@@ -38,6 +38,7 @@ extern unsigned long t1_ticks;
 long body_angle[3];     // Current body angle estimate
 long body_velocity[3];  // Current body velocity estimate
 long vicon_angle[3];    // Last Vicon-measured body angle
+long body_vel_LP[3];    // Low-passed body velocity estimate
 
 // Setpoints and commands
 char pitchControlFlag = 0; // enable/disable attitude control
@@ -67,13 +68,14 @@ void setPushoffCmd(long cmd){
     pushoffCmd = cmd << 8;
 }
 
+#define LAG_MS  1
 void updateViconAngle(long* new_vicon_angle){
     int i;
     for (i=0; i<3; i++){
         vicon_angle[i] = new_vicon_angle[i];
-        body_angle[i] = new_vicon_angle[i]; 
-        //TODO: integrate over lag
+        body_angle[i] = new_vicon_angle[i];
     }
+    updateEuler(body_vel_LP,LAG_MS);
 }
 
 void resetBodyAngle(){
@@ -115,11 +117,13 @@ void tailCtrlSetup(){
 }
 
 
+#define BVLP_ALPHA 26 // out ouf 256
 ///////        Tail control ISR          ////////
 //////  Installed to Timer5 @ 1000hz  ////////
 void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
     interrupt_count++;
-      
+    int i;
+
     if(interrupt_count <= 5) {
         // Do signal processing on gyro
         int gdata[3];
@@ -132,10 +136,11 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         body_velocity[1] = (((long)(gdata[1] - gdata[2]))*181)>>8; //roll
         body_velocity[2] = -gdata[0]; //pitch
 
-        //TODO: correct wrap-around, near singularity, etc.
-        body_angle[0] += body_velocity[0]; //yaw
-        body_angle[1] += body_velocity[1]; //roll
-        body_angle[2] += body_velocity[2]; //pitch
+        for (i=0; i<3; i++) {
+            body_vel_LP[i] = ((256-BVLP_ALPHA)*body_vel_LP[i] + BVLP_ALPHA*body_velocity[i])>>8;
+        }
+
+        updateEuler(body_velocity,1);
 
     }
     if(interrupt_count == 5) 
@@ -321,4 +326,76 @@ unsigned int crankFromFemur(void) {
     if(femur>255){femur=255;}
     if(femur<0){femur=0;} 
     return crank_femur_256lut[femur];
+}
+
+
+#define PI          2949120 // 180(deg) * 2^15(ticks)/2000(deg/s) * 1000(Hz)
+#define PISQUARED   132710400 // bit shifted 16 bits down
+#define COS_PREC    15 // bits of precision in output of cosine
+void updateEuler(long* vels, long time) {
+    // Update the body_angle Euler angle estimates.
+    // INPUTS:
+    // long vels[3] is the body-fixed angular velocities from the gyro
+    // time: time in milliseconds (usually 1 to 20)
+
+    // TODO: what if updateEuler is called reentrantly
+    long temp_angle[3];
+    int i;
+    for (i=0; i<3; i++) {
+        temp_angle[i] = body_angle[i];
+    }
+
+    long sin_theta = cosApprox(temp_angle[2]-PI/2);
+    long cos_theta = cosApprox(temp_angle[2]);
+    long sin_phi = cosApprox(temp_angle[1]-PI/2);
+    long cos_phi = cosApprox(temp_angle[1]);
+
+    // Prevent divide by zero
+    if (cos_phi == 0) { cos_phi = 1; }
+
+    // Update Euler angles
+    temp_angle[2] += ((sin_phi*sin_theta*vels[1]/cos_phi
+            + (vels[2] << COS_PREC)
+            - cos_theta*sin_phi*vels[0]/cos_phi)*time) >> COS_PREC;
+    temp_angle[1] += (cos_theta*vels[1] + sin_theta*vels[0])*time >> COS_PREC;
+    temp_angle[0] += (-sin_theta*vels[1]/cos_phi + cos_theta*vels[0]/cos_phi)*time;
+
+    // Wrap Euler angles around at +/-180 degrees
+    for (i=0; i<3; i++) {
+        if (temp_angle[i] > PI) {
+            temp_angle[i] -= 2*PI;
+        } else if(temp_angle[i] < -PI) {
+            temp_angle[i] += 2*PI;
+        }
+    }
+
+    for (i=0; i<3; i++) {
+        body_angle[i] = temp_angle[i];
+    }
+}
+
+long cosApprox(long x) {
+    // Cosine approximation by Bhaskara I's method:
+    // https://en.wikipedia.org/wiki/Bhaskara_I%27s_sine_approximation_formula
+    //
+    // Returns a value between -2^COS_PREC and 2^COS_PREC
+    // INPUTS:
+    // x: angle scaled by 16384 ticks per degree (2000 deg/s MPU gyro integrated @ 1kHz).
+
+    long xSquared;
+    if (x < 0) { x = -x; }
+    long x_mod = (x+PI) % (2*PI) - PI;
+    if (x_mod > (PI/2)) { // quadrant 2
+        x_mod = (x_mod - PI) >> 8;
+        xSquared = x_mod*x_mod;
+        return -(PISQUARED - 4*xSquared)/((PISQUARED + xSquared)>>COS_PREC);
+    } else if (x_mod < (-PI/2)) { // quadrant 3
+        x_mod = (x_mod + PI) >> 8;
+        xSquared = x_mod*x_mod;
+        return -(PISQUARED - 4*xSquared)/((PISQUARED + xSquared)>>COS_PREC);
+    } else {
+        x_mod = x_mod >> 8; // quadrants 1 and 4
+        xSquared = x_mod*x_mod;
+        return (PISQUARED - 4*xSquared)/((PISQUARED + xSquared)>>COS_PREC);
+    }
 }

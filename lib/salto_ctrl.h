@@ -37,4 +37,7 @@ long calibPos(char idx);
 unsigned int crankFromFemur(void);
 void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint32_t current, uint8_t flags);
 
+void updateEuler(long* vels, long time);
+long cosApprox(long x);
+
 #endif // __SALTO_CTRL_H

@@ -446,9 +446,8 @@ void pidGetState()
 long min_pos = -3000;
 long max_pos = 1114112;
 
-#define EULER_SCALED_PI 5986015
-// 7443 * 2^8 * 3.14159
-// 7443 is the conversion from radians to euler angle units
+#define EULER_SCALED_PI 2949120
+// 180(deg) * 2^15(ticks)/2000(deg/s) * 1000(Hz)
 void pidSetControl()
 { int i,j;
 // 0 = right side

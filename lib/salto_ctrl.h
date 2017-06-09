@@ -11,7 +11,7 @@
 #define MJ_GND          4
 
 #define UART_PERIOD     10 // minimum UART period in ms (must be positive integer)
-#define FULL_EXTENSION  14500 // TODO: put in settings.h
+
 
 
 void SetupTimer5();

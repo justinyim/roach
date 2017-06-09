@@ -7,6 +7,7 @@
  */
 
 #include "salto_ctrl.h"
+#include "settings.h"
 
 #include "led.h"
 #include "mpu6000.h"
@@ -114,6 +115,13 @@ void tailCtrlSetup(){
     pidObjs[3].p_input = 0;
     pidObjs[2].v_input = 0;
     pidObjs[3].v_input = 0;
+
+#ifdef NAME_SALTO1P1
+    send_command_packet(&uart_tx_packet_global, 0, BLDC_CALIB, 16);
+    delay_ms(10);
+    send_command_packet(&uart_tx_packet_global, 0, BLDC_CALIB, 16);
+#endif
+
 }
 
 
@@ -132,9 +140,18 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         gdata[0] -= -5;//20; // ImageProc board short axis
         gdata[1] -= 15;//20; // ImageProc board long axis
         gdata[2] -= 0;//-20; // ImageProc board normal
+#ifdef NAME_SALTO1P1
+        // -55 degrees about roll
+        // x axis right, y axis forwards, z axis up from ImageProc
+        body_velocity[0] = (147*((long)gdata[2]) + 210*((long)gdata[0]))>>8; //yaw
+        body_velocity[1] = gdata[1];
+        body_velocity[2] = (-147*((long)gdata[0]) + 210*((long)gdata[2]))>>8; //pitch
+#else
+        // -45 degrees about pitch
         body_velocity[0] = (((long)(gdata[2] + gdata[1]))*181)>>8; //yaw
         body_velocity[1] = (((long)(gdata[1] - gdata[2]))*181)>>8; //roll
         body_velocity[2] = -gdata[0]; //pitch
+#endif
 
         for (i=0; i<3; i++) {
             body_vel_LP[i] = ((256-BVLP_ALPHA)*body_vel_LP[i] + BVLP_ALPHA*body_velocity[i])>>8;
@@ -271,14 +288,13 @@ void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint3
 extern packet_union_t* last_bldc_packet;
 extern uint8_t last_bldc_packet_is_new;
 
-#define MOTOR_OFFSET    500
 char footContact(void) {
     int eps = 1000;
     unsigned int mot, femur;
     sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
     mot = (unsigned int)(sensor_data->position*motPos_to_femur_crank_units); //UNITFIX
     femur = crankFromFemur();
-    if ( mot-MOTOR_OFFSET>femur && (mot-MOTOR_OFFSET - eps) > femur)
+    if ( mot-BLDC_MOTOR_OFFSET>femur && (mot-BLDC_MOTOR_OFFSET - eps) > femur)
     {
         LED_1 = 1;
         return 1;
@@ -294,7 +310,7 @@ char footTakeoff(void) {
     sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
     mot = (unsigned int)(sensor_data->position*motPos_to_femur_crank_units); //UNITFIX
     femur = crankFromFemur();
-    if ( (mot-MOTOR_OFFSET + eps) < femur){
+    if ( (mot-BLDC_MOTOR_OFFSET + eps) < femur){
         return 1;
     } else {
         return 0;

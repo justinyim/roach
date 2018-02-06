@@ -24,11 +24,11 @@ def main():
     motorgains = [0,0,0,0,0, 0,0,0,0,0] # disable thrusters and tail
     thrustGains = [0,0,0, 0,0,0]
 
-    duration = 1000
+    duration = 5000
     rightFreq = 0
     leftFreq = 0
     phase = 0
-    telemetry = True
+    telemetry = False#True
     repeat = False
 
     manParams = manueverParams(0, 0, 0, 0, 0, 0) # JY edits: added for compatibility
@@ -62,7 +62,7 @@ def main():
         stopSignal = [0]
 
         # Calibrate --------------------------------------
-        #'''
+        '''
         # Check eight points
         n_steps = 8
         ispdf = [0 for i in range(n_steps)]
@@ -107,16 +107,16 @@ def main():
         
         print(angles.tolist())
         print(spdf)
-        #'''
+        '''
 
 
         # Evaulate accuracy of calibration --------------
-        '''
-        toSend = [710,int((2**13))] # reterminated motor 1
+        #'''
+        toSend = [1600,int((2**11))] # reterminated motor 1
         #toSend = [2018,int(2**13)] # stock motor 1
         xb_send(0, command.CALIBRATE_MOTOR, pack('2h', *toSend))
         time.sleep(params.duration / 1000.0)
-        '''
+        #'''
 
                 
         xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))

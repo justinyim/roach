@@ -41,7 +41,15 @@
 #define FULLTHROT 2*HALFTHROT
 // MAXTHROT has to allow enough time at end of PWM for back emf measurement
 // was 3976
+
+
+#if ROBOT_NAME == SALTO_1P_RUDOLPH
+#define MAXTHROT 3500
+#define MAXTHROT_TAIL 2000
+#else
 #define MAXTHROT 3800
+#define MAXTHROT_TAIL 3800
+#endif
 
 #define ABS(my_val) ((my_val) < 0) ? -(my_val) : (my_val)
 
@@ -499,16 +507,16 @@ void UpdatePID(pidPos *pid, int num)
         if(num==0){
             pid->preSat = -pid->preSat;
             pid->output = -pid->output;
-            if (pid->preSat > MAXTHROT) {
-                pid->output = MAXTHROT;
+            if (pid->preSat > MAXTHROT_TAIL) {
+                pid->output = MAXTHROT_TAIL;
                 pid->i_error = (long) pid->i_error +
-                (long)(pid->Kaw) * ((long)(MAXTHROT) - (long)(pid->preSat))
+                (long)(pid->Kaw) * ((long)(MAXTHROT_TAIL) - (long)(pid->preSat))
                 / ((long)GAIN_SCALER);
             }
-            if (pid->preSat < -MAXTHROT) {
-                pid->output = -MAXTHROT;
+            if (pid->preSat < -MAXTHROT_TAIL) {
+                pid->output = -MAXTHROT_TAIL;
                 pid->i_error = (long) pid->i_error +
-                (long)(pid->Kaw) * ((long)(MAXTHROT) - (long)(pid->preSat))
+                (long)(pid->Kaw) * ((long)(MAXTHROT_TAIL) - (long)(pid->preSat))
                 / ((long)GAIN_SCALER);
             }
         } 

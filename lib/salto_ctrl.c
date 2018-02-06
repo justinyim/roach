@@ -41,6 +41,8 @@ long body_velocity[3];  // Current body velocity estimate
 long vicon_angle[3];    // Last Vicon-measured body angle
 long body_vel_LP[3];    // Low-passed body velocity estimate
 
+//long tail_velocity = 0;  // Current tail velocity estimate
+
 // Setpoints and commands
 char pitchControlFlag = 0; // enable/disable attitude control
 volatile long pitchSetpoint = 0;
@@ -49,6 +51,15 @@ volatile long yawSetpoint = 0;
 volatile long legSetpoint = 0;  // Aerial leg setpoint
 volatile long pushoffCmd = 0;   // Ground leg command
 
+/*
+#define ALPHA_TAIL 3 // out of 16
+long prev_tail_pos = 0;
+//long prev_tail_time = 0;
+long curr_tail_pos = 0;
+//long curr_tail_time = 0;
+long tail_BEMF = 0;
+long tail_curr = 0;
+*/
 
 
 void setPitchControlFlag(char state){
@@ -100,6 +111,8 @@ void tailCtrlSetup(){
     body_angle[0]=0;
     body_angle[1]=0;
     body_angle[2]=0;
+    //prev_tail_pos = calibPos(1);
+    //prev_tail_time = t1_ticks;
     initPIDObjPos( &(pidObjs[0]), 0,0,0,0,0);
     // initPIDObjPos( &(pidObjs[2]), -500,0,-500,0,0);
     initPIDObjPos( &(pidObjs[2]), 0,0,0,0,0);
@@ -116,11 +129,9 @@ void tailCtrlSetup(){
     pidObjs[2].v_input = 0;
     pidObjs[3].v_input = 0;
 
-#ifdef NAME_SALTO1P1
     send_command_packet(&uart_tx_packet_global, 0, BLDC_CALIB, 16);
     delay_ms(10);
     send_command_packet(&uart_tx_packet_global, 0, BLDC_CALIB, 16);
-#endif
 
 }
 
@@ -140,13 +151,18 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         gdata[0] -= -5;//20; // ImageProc board short axis
         gdata[1] -= 15;//20; // ImageProc board long axis
         gdata[2] -= 0;//-20; // ImageProc board normal
-#ifdef NAME_SALTO1P1
+#if ROBOT_NAME == SALTO_1P_RUDOLPH
         // -55 degrees about roll
         // x axis right, y axis forwards, z axis up from ImageProc
         body_velocity[0] = (147*((long)gdata[2]) + 210*((long)gdata[0]))>>8; //yaw
         body_velocity[1] = gdata[1];
         body_velocity[2] = (-147*((long)gdata[0]) + 210*((long)gdata[2]))>>8; //pitch
-#else
+#elif ROBOT_NAME == SALTO_1P_DASHER
+        // -55 degrees about x, follwed by 180 degrees about body z
+        body_velocity[0] = (147*((long)gdata[2]) - 210*((long)gdata[0]))>>8; //yaw
+        body_velocity[1] = -gdata[1];
+        body_velocity[2] = (147*((long)gdata[0]) + 210*((long)gdata[2]))>>8; //pitch
+#elif ROBOT_NAME == SALTO_1P_SANTA
         // -45 degrees about pitch
         body_velocity[0] = (((long)(gdata[2] + gdata[1]))*181)>>8; //yaw
         body_velocity[1] = (((long)(gdata[1] - gdata[2]))*181)>>8; //roll
@@ -158,6 +174,29 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         }
 
         updateEuler(body_velocity,1);
+
+        /*
+        // Tail velocity estimation
+        curr_tail_pos = calibPos(1);
+        curr_tail_time = t1_ticks;
+        
+        // tail velocity units: ticks * 1000 Hz
+        tail_velocity = (ALPHA_TAIL*(curr_tail_pos-prev_tail_pos) + // /(curr_tail_time-prev_tail_time) + 
+            (16-ALPHA_TAIL)*tail_velocity) >> 4;
+
+        #define TAIL_KV 56 // out of 256. Approximation to 0.2169. Units: PWM/(tick/ms)
+        // tail motor kV: 0.000707 V/(rad/s)
+        // conversion to PWM/(tick/ms): (2*pi rad)/(2^14 ticks) * (1000 ms)/(1 s) * (4000 PWM)/(5 V)
+        
+        #define TAIL_V_LIMIT 2960
+        // tail motor resistance: 3.7 ohms
+        // tail motor current limit: 1.0 amps
+        // tail motor voltage limit: 3.7 V
+        // conversion to PWM: (4000 PWM)/(5 V)
+
+        // tail voltage units: PWM
+        tail_voltage = TAIL_KV * tail_velocity >> 8;
+        */
 
     }
     if(interrupt_count == 5) 
@@ -225,7 +264,7 @@ void multiJumpFlow() {
             tiHSetDC(3,0);
             tiHSetDC(4,0);
             send_command_packet(&uart_tx_packet_global, 0, 0, 0);
-            mj_state = MJ_IDLE;
+            mj_state = MJ_STOPPED;
             break;
 
         case MJ_AIR:
@@ -248,6 +287,10 @@ void multiJumpFlow() {
             }
             break;
 
+        case MJ_STOPPED:
+            send_command_packet(&uart_tx_packet_global, 0, 0, 0);
+            break;
+
         default:
             mj_state = MJ_IDLE;
             break;
@@ -260,8 +303,8 @@ volatile int32_t position_last = 0;
 volatile uint32_t current_last = 0;
 volatile uint8_t flags_last =0;
 void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint32_t current, uint8_t flags){
-    if (((t1_ticks - t_cmd_last) < UART_PERIOD) || 
-        (position == position_last && current == current_last && flags == flags_last)) {
+    if (((t1_ticks - t_cmd_last) < UART_PERIOD)) {//|| 
+        //(position == position_last && current == current_last && flags == flags_last)) {
         return; // skip command sending if last command was too recent or was identical
     }
 

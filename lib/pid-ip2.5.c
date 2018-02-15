@@ -416,7 +416,7 @@ void checkSwapBuff(int j){
 
 /* update state variables including motor position and velocity */
 extern long body_angle[3];
-extern long body_velocity[3];
+extern long body_vel_LP[3];
 extern EncObj motPos;
 long oldTailPos;
 
@@ -445,9 +445,9 @@ void pidGetState()
 
     //int gdata[3];
     //mpuGetGyro(gdata);
-    pidObjs[0].v_state = body_velocity[2]; // Pitch angle
-    pidObjs[2].v_state = body_velocity[1]; // Roll angle
-    pidObjs[3].v_state = body_velocity[0]; // Yaw angle
+    pidObjs[0].v_state = body_vel_LP[2]; // Pitch angle
+    pidObjs[2].v_state = body_vel_LP[1]; // Roll angle
+    pidObjs[3].v_state = body_vel_LP[0]; // Yaw angle
 }
 
 

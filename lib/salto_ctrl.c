@@ -85,9 +85,9 @@ void updateViconAngle(long* new_vicon_angle){
     int i;
     for (i=0; i<3; i++){
         vicon_angle[i] = new_vicon_angle[i];
-        body_angle[i] = new_vicon_angle[i];
+        body_angle[i] = 3*(body_angle[i] >> 2) + (new_vicon_angle[i] >> 2);
     }
-    updateEuler(body_vel_LP,LAG_MS);
+    //updateEuler(body_vel_LP,LAG_MS);
 }
 
 void resetBodyAngle(){
@@ -136,7 +136,7 @@ void tailCtrlSetup(){
 }
 
 
-#define BVLP_ALPHA 26 // out ouf 256
+#define BVLP_ALPHA 128 // out ouf 256
 ///////        Tail control ISR          ////////
 //////  Installed to Timer5 @ 1000hz  ////////
 void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
@@ -173,7 +173,7 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
             body_vel_LP[i] = ((256-BVLP_ALPHA)*body_vel_LP[i] + BVLP_ALPHA*body_velocity[i])>>8;
         }
 
-        updateEuler(body_velocity,1);
+        updateEuler(body_vel_LP,1);
 
         /*
         // Tail velocity estimation

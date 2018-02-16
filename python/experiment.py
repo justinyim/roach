@@ -26,8 +26,8 @@ def main():
     #thrustGains = [300,100,300,30,0,40]
     motorgains = [160,0,30,0,0, 0,0,0,0,0]
     thrustGains = [170,0,120, 170,0,120]
-    motorgains = [0,0,0,0,0, 0,0,0,0,0]# disable thrusters and tail
-    thrustGains = [0,0,0, 0,0,0]
+    #motorgains = [0,0,0,0,0, 0,0,0,0,0]# disable thrusters and tail
+    #thrustGains = [0,0,0, 0,0,0]
 
     xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h', *thrustGains))
 

@@ -417,31 +417,15 @@ void checkSwapBuff(int j){
 /* update state variables including motor position and velocity */
 extern long body_angle[3];
 extern long body_vel_LP[3];
+extern long tail_vel;
 extern EncObj motPos;
 long oldTailPos;
 
 void pidGetState()
-{   int i;
-    long p_state, tail_pos;
-    long oldpos[NUM_PIDS], velocity;
-    
-    for(i=0; i<NUM_PIDS; i++)
-    { oldpos[i] = pidObjs[i].p_state; pidObjs[i].extraVel = 0;}
-    
-    p_state = (long)(motPos.pos << 2);		// pos 14 bits 0x0 -> 0x3fff
-    p_state = p_state + (motPos.oticks << 16);
-    p_state = p_state - (long)(motPos.offset <<2); 	// subtract offset to get zero position
+{
     pidObjs[0].p_state = body_angle[2]; //pitch
     pidObjs[2].p_state = body_angle[1]; //roll
     pidObjs[3].p_state = body_angle[0]; //yaw
-
-    tail_pos = (long)(encPos[0].pos << 2) + (encPos[0].oticks << 16);
-
-    velocity = (tail_pos - oldTailPos) / 64;  // Encoder ticks per ms
-    if (velocity > 0x7fff) velocity = 0x7fff; // saturate to int
-    if(velocity < -0x7fff) velocity = -0x7fff;  
-    pidObjs[0].extraVel = (int) velocity;
-    oldTailPos = tail_pos;
 
     //int gdata[3];
     //mpuGetGyro(gdata);
@@ -455,6 +439,7 @@ long min_pos = -3000;
 long max_pos = 1114112;
 
 #define EULER_SCALED_PI 2949120
+#define TAIL_BRAKE 20
 // 180(deg) * 2^15(ticks)/2000(deg/s) * 1000(Hz)
 void pidSetControl()
 { int i,j;
@@ -475,8 +460,19 @@ void pidSetControl()
         //Update values
         UpdatePID(&(pidObjs[j]),j);
     } // end of for(j)
-    if (pidObjs[0].mode == 1) { // override
-        pidObjs[0].output = 0xFFF;
+    if (pidObjs[0].mode == 1) { // tail braking override 
+        if (ROBOT_NAME == SALTO_1P_SANTA) {
+            pidObjs[0].output = 0xFFF; // The tail is in braking mode (passive brake through low impedance)
+        } else {
+            pidObjs[0].preSat = -TAIL_BRAKE*tail_vel; // Actively braking the tail
+            pidObjs[0].output = pidObjs[0].preSat;
+            if (pidObjs[0].preSat > MAXTHROT_TAIL) {
+                pidObjs[0].output = MAXTHROT_TAIL;
+            }
+            if (pidObjs[0].preSat < -MAXTHROT_TAIL) {
+                pidObjs[0].output = -MAXTHROT_TAIL;
+            }
+        }
     }
     for(i=0;i<NUM_PIDS;i++){
         if(pidObjs[i].onoff) {tiHSetDC(i+1, pidObjs[i].output); }

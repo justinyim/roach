@@ -41,8 +41,6 @@ long body_velocity[3];  // Current body velocity estimate
 long vicon_angle[3];    // Last Vicon-measured body angle
 long body_vel_LP[3];    // Low-passed body velocity estimate
 
-//long tail_velocity = 0;  // Current tail velocity estimate
-
 // Setpoints and commands
 char pitchControlFlag = 0; // enable/disable attitude control
 volatile long pitchSetpoint = 0;
@@ -51,15 +49,10 @@ volatile long yawSetpoint = 0;
 volatile long legSetpoint = 0;  // Aerial leg setpoint
 volatile long pushoffCmd = 0;   // Ground leg command
 
-/*
-#define ALPHA_TAIL 3 // out of 16
-long prev_tail_pos = 0;
-//long prev_tail_time = 0;
-long curr_tail_pos = 0;
-//long curr_tail_time = 0;
-long tail_BEMF = 0;
-long tail_curr = 0;
-*/
+#define TAIL_ALPHA 25 // out of 128
+long tail_pos = 0; // in ticks
+long tail_prev = 0; // in ticks
+long tail_vel = 0; // in ticks / count
 
 
 void setPitchControlFlag(char state){
@@ -111,8 +104,6 @@ void tailCtrlSetup(){
     body_angle[0]=0;
     body_angle[1]=0;
     body_angle[2]=0;
-    //prev_tail_pos = calibPos(1);
-    //prev_tail_time = t1_ticks;
     initPIDObjPos( &(pidObjs[0]), 0,0,0,0,0);
     // initPIDObjPos( &(pidObjs[2]), -500,0,-500,0,0);
     initPIDObjPos( &(pidObjs[2]), 0,0,0,0,0);
@@ -175,28 +166,9 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
 
         updateEuler(body_vel_LP,1);
 
-        /*
-        // Tail velocity estimation
-        curr_tail_pos = calibPos(1);
-        curr_tail_time = t1_ticks;
-        
-        // tail velocity units: ticks * 1000 Hz
-        tail_velocity = (ALPHA_TAIL*(curr_tail_pos-prev_tail_pos) + // /(curr_tail_time-prev_tail_time) + 
-            (16-ALPHA_TAIL)*tail_velocity) >> 4;
-
-        #define TAIL_KV 56 // out of 256. Approximation to 0.2169. Units: PWM/(tick/ms)
-        // tail motor kV: 0.000707 V/(rad/s)
-        // conversion to PWM/(tick/ms): (2*pi rad)/(2^14 ticks) * (1000 ms)/(1 s) * (4000 PWM)/(5 V)
-        
-        #define TAIL_V_LIMIT 2960
-        // tail motor resistance: 3.7 ohms
-        // tail motor current limit: 1.0 amps
-        // tail motor voltage limit: 3.7 V
-        // conversion to PWM: (4000 PWM)/(5 V)
-
-        // tail voltage units: PWM
-        tail_voltage = TAIL_KV * tail_velocity >> 8;
-        */
+        tail_pos = calibPos(1);
+        tail_vel = (((128-TAIL_ALPHA)*tail_vel) >> 7) + ((TAIL_ALPHA*(tail_pos - tail_prev)) >> 7);
+        tail_prev = tail_pos;
 
     }
     if(interrupt_count == 5) 
@@ -217,8 +189,12 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
                 pidObjs[0].mode = 0;
                 pidObjs[0].p_input = pitchSetpoint;
             } else { // brake on the ground
-                tiHChangeMode(1, TIH_MODE_BRAKE);
-                pidObjs[0].mode = 1;
+                if (ROBOT_NAME == SALTO_1P_SANTA) {
+                    tiHChangeMode(1, TIH_MODE_BRAKE);
+                    pidObjs[0].mode = 1;
+                } else {
+                    pidObjs[0].mode = 1;
+                }
                 //pidObjs[0].pwmDes = 0; this is not useful
             }
             pidObjs[2].p_input = rollSetpoint;

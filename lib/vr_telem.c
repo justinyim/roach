@@ -27,6 +27,8 @@ extern pidPos pidObjs[NUM_PIDS];
 extern packet_union_t* last_bldc_packet;
 extern uint8_t last_bldc_packet_is_new;
 
+extern long tail_vel;
+
 //void vrTelemGetData(unsigned char* ptr) {
 void vrTelemGetData(vrTelemStruct_t* ptr) {
     
@@ -46,7 +48,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->pitch = pidObjs[0].p_state;
     ptr->roll = pidObjs[2].p_state;
     ptr->yaw = pidObjs[3].p_state;
-    ptr->pitchSet = pidObjs[0].p_input + pidObjs[0].interpolate;
+    ptr->pitchSet = tail_vel;//pidObjs[0].p_input + pidObjs[0].interpolate;
     ptr->dcTail = pidObjs[0].output; // left
 
     sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);

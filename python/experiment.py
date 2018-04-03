@@ -26,8 +26,8 @@ def main():
     #thrustGains = [300,100,300,30,0,40]
     motorgains = [160,0,30,0,0, 0,0,0,0,0]
     thrustGains = [170,0,120, 170,0,120]
-    #motorgains = [0,0,0,0,0, 0,0,0,0,0]# disable thrusters and tail
-    #thrustGains = [0,0,0, 0,0,0]
+    motorgains = [0,0,0,0,0, 0,0,0,0,0]# disable thrusters and tail
+    thrustGains = [0,0,0, 0,0,0]
 
     xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h', *thrustGains))
 
@@ -74,13 +74,13 @@ def main():
         exp = [2] 
         stopSignal = [0]
 
-        viconTest = [0,0,0,0,0,0,65*256,78*256]#55*256,70*256]
+        viconTest = [0,0,0,0,0,0,60*256,80*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(0.01)
 
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
 
-        '''
+        #'''
         time.sleep(1)
         viconTest = [0,0,0,0,0,0,20*256,20*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
@@ -94,7 +94,7 @@ def main():
         viconTest = [0,0,0,0,0,0,80*256,80*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(1)
-        '''
+        #'''
 
         time.sleep(params.duration / 1000.0)
         

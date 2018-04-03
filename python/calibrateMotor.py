@@ -112,7 +112,7 @@ def main():
 
         # Evaulate accuracy of calibration --------------
         #'''
-        toSend = [1600,int((2**11))] # reterminated motor 1
+        toSend = [2100,int((2**11))] # reterminated motor 1
         #toSend = [2018,int(2**13)] # stock motor 1
         xb_send(0, command.CALIBRATE_MOTOR, pack('2h', *toSend))
         time.sleep(params.duration / 1000.0)

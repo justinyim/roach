@@ -51,17 +51,17 @@ BASE_ECHO = 0x3f
 
 # CMD values of 0x80(128) - 0xEF(239) are available for user applications.
 SET_THRUST_OPEN_LOOP    =   0x80
-PID_START_MOTORS	    =   0x81
+PID_START_MOTORS        =   0x81
 SET_PID_GAINS           =   0x82
 GET_PID_TELEMETRY       =   0x83
-GET_AMS_POS		        =   0x84
-GET_IMU_LOOP_ZGYRO      =   0x85
-SET_MOVE_QUEUE          =   0x86
-SET_STEERING_GAINS      =   0x87
-SOFTWARE_RESET          =   0x88
+GET_AMS_POS	            =   0x84
+GET_IMU_LOOP_ZGYRO      =   0x85 #these aren't implemented in roach/firmware/source/cmd.c and .h
+SET_MOVE_QUEUE          =   0x86 #these aren't implemented in roach/firmware/source/cmd.c and .h
+SET_STEERING_GAINS      =   0x87 #these aren't implemented in roach/firmware/source/cmd.c and .h
+SOFTWARE_RESET          =   0x88 #these aren't implemented in roach/firmware/source/cmd.c and .h
 ERASE_SECTORS           =   0x8A
 FLASH_READBACK          =   0x8B
-SLEEP                   =   0x8C
+SLEEP                   =   0x8C #these aren't implemented in roach/firmware/source/cmd.c and .h
 SET_VEL_PROFILE         =   0x8D
 WHO_AM_I                =   0x8E
 START_TELEMETRY         =   0x8F
@@ -71,7 +71,7 @@ PID_STOP_MOTORS         =   0x92
 SET_PHASE               =   0x93
 SET_MOTOR_MODE          =   0x94
 
-SET_TAIL_POS            =   0x95
+SET_TAIL_POS            =   0x95 #these aren't implemented in roach/firmware/source/cmd.c and .h
 SET_PITCH_SET           =   0x96
 RESET_BODY_ANG          =   0x97
 SET_CURRENT_LIMITS      =   0x98
@@ -82,5 +82,7 @@ SET_EXP_PARAMS          =   0x9B
 STOP_EXPERIMENT         =   0xA0
 INTEGRATED_VICON        =   0xA1
 CALIBRATE_MOTOR         =   0xA2
+ONBOARD_MODE            =   0xA3
+GYRO_BIAS               =   0xA4
 
 # CMD values of 0xF0(240) - 0xFF(255) are reserved for future use

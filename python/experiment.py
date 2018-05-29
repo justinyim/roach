@@ -31,7 +31,7 @@ def main():
 
     xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h', *thrustGains))
 
-    duration = 5000
+    duration = 300
     rightFreq = 0
     leftFreq = 0
     phase = 0
@@ -51,7 +51,7 @@ def main():
     while True:
 
         if not(params.repeat):
-            settingsMenu(params, sj_params, wj_params)   
+            settingsMenu(params, sj_params, wj_params)
 
         if params.telemetry:
             # Construct filename
@@ -80,7 +80,16 @@ def main():
 
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
 
-        #'''
+        '''
+        # small step calibration for crank
+        for x in np.hstack((np.linspace(0,80,17),np.linspace(75,0,16))):
+            viconTest = [0,0,0,0,0,0, x*256, x*256]
+            xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+            time.sleep(0.3)
+
+        ''' 
+
+        '''
         time.sleep(1)
         viconTest = [0,0,0,0,0,0,20*256,20*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
@@ -94,7 +103,7 @@ def main():
         viconTest = [0,0,0,0,0,0,80*256,80*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(1)
-        #'''
+        '''
 
         time.sleep(params.duration / 1000.0)
         

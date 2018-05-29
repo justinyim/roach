@@ -32,6 +32,8 @@
 #define CMD_STOP_EXP                0xA0
 #define CMD_INTEGRATED_VICON        0xA1
 #define CMD_CALIBRATE_MOTOR         0xA2
+#define CMD_ONBOARD_MODE            0xA3
+#define CMD_GYRO_BIAS               0xA4
 // Redefine
 
 void cmdSetup(void);

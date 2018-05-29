@@ -18,9 +18,10 @@
 void SetupTimer5();
 void tailCtrlSetup();
 
-
 void setPitchControlFlag(char state);
 void resetBodyAngle();
+void calibGyroBias();
+void setOnboardMode(char mode, char flags); 
 void updateViconAngle(long* new_vicon_angle);
 
 void setAttitudeSetpoint(long yaw, long roll, long pitch);

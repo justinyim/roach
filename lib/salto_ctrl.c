@@ -43,6 +43,7 @@ long body_vel_LP[3];    // Low-passed body velocity estimate
 
 // Setpoints and commands
 char pitchControlFlag = 0; // enable/disable attitude control
+char onboardMode = 0; // mode for onboard controllers & estimators
 volatile long pitchSetpoint = 0;
 volatile long rollSetpoint = 0;
 volatile long yawSetpoint = 0;
@@ -57,6 +58,13 @@ long tail_vel = 0; // in ticks / count
 
 void setPitchControlFlag(char state){
     pitchControlFlag = state;
+}
+
+void setOnboardMode(char mode, char flags){
+    // onboard mode switch (first introduced for testing onboard gyro integration only 29 May 2018)
+    // 0: previous default operation
+    // 1: use only onboard gyro integration and no vicon attitude updates
+    onboardMode = mode;
 }
 
 void setAttitudeSetpoint(long yaw, long roll, long pitch){
@@ -76,6 +84,11 @@ void setPushoffCmd(long cmd){
 #define LAG_MS  1
 void updateViconAngle(long* new_vicon_angle){
     int i;
+
+    if (onboardMode == 1){ // onboardMode 1: use only gyro integration
+        return;
+    }
+
     for (i=0; i<3; i++){
         vicon_angle[i] = new_vicon_angle[i];
         body_angle[i] = 3*(body_angle[i] >> 2) + (new_vicon_angle[i] >> 2);
@@ -84,10 +97,14 @@ void updateViconAngle(long* new_vicon_angle){
 }
 
 void resetBodyAngle(){
-    // mpuRunCalib(0,100); //re-offset gyro, assumes stationary
+    //mpuRunCalib(0,100); //re-offset gyro, assumes stationary
     body_angle[0] = 0;
     body_angle[1] = 0;
     body_angle[2] = 0;
+}
+
+void calibGyroBias(){
+    mpuRunCalib(0,100); //re-offset gyro, assumes stationary
 }
 
 void expStart(uint8_t startSignal) {
@@ -219,8 +236,8 @@ void SetupTimer5() {
 
 long transition_time = 0;
 void multiJumpFlow() {
-    int gdata[3];
-    mpuGetGyro(gdata);
+    //int gdata[3];
+    //mpuGetGyro(gdata);
     switch(mj_state) {
         case MJ_START:
             pidObjs[0].timeFlag = 0;

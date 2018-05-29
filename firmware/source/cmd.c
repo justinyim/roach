@@ -54,6 +54,8 @@ static unsigned char cmdSetExperimentParams(unsigned char type, unsigned char st
 static unsigned char cmdIntegratedVicon(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdStopExperiment(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdCalibrateMotor(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
+static unsigned char cmdOnboardMode(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
+static unsigned char cmdGyroBias(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 
 //Motor and PID functions
 static unsigned char cmdSetThrustOpenLoop(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
@@ -103,7 +105,8 @@ void cmdSetup(void) {
     cmd_func[CMD_INTEGRATED_VICON] = &cmdIntegratedVicon;
     cmd_func[CMD_STOP_EXP] = &cmdStopExperiment;
     cmd_func[CMD_CALIBRATE_MOTOR] = &cmdCalibrateMotor;
-
+    cmd_func[CMD_ONBOARD_MODE] = &cmdOnboardMode;
+    cmd_func[CMD_GYRO_BIAS] = &cmdGyroBias;
 }
 
 void cmdPushFunc(MacPacket rx_packet) {
@@ -264,6 +267,16 @@ unsigned char cmdCalibrateMotor(unsigned char type, unsigned char status, unsign
         
     radioSendData(src_addr, status, CMD_CALIBRATE_MOTOR, 
         sizeof(speed), (unsigned char *)speed, 0);
+    return 1;
+}
+
+unsigned char cmdOnboardMode(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
+    setOnboardMode((char)frame[0], (char)frame[1]);
+    return 1;
+}
+
+unsigned char cmdGyroBias(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
+    calibGyroBias();
     return 1;
 }
 

@@ -356,13 +356,7 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
                 }
             }
         }
-        if (pidObjs[0].mode == 0){
-            pidSetControl();
-        } else if (pidObjs[0].mode == 1)
-        {
-            tiHSetDC(1, pidObjs[0].pwmDes);
-            tiHSetDC(2, pidObjs[1].pwmDes);
-        }
+        pidSetControl();
     }
     //LED_3 = 0;
     _T1IF = 0;
@@ -457,7 +451,7 @@ void pidSetControl()
 { int i,j;
 // 0 = right side
     for(j=0; j < NUM_PIDS; j++)
-   {  //pidobjs[0] : right side
+    {  //pidobjs[0] : right side
 	// p_input has scaled velocity interpolation to make smoother
 	// p_state is [16].[16]
         	pidObjs[j].p_error = pidObjs[j].p_input + pidObjs[j].interpolate  - pidObjs[j].p_state;
@@ -465,7 +459,10 @@ void pidSetControl()
             //Update values
             UpdatePID(&(pidObjs[j]),j);
        } // end of for(j)
-   for(i=0;i<NUM_PIDS;i++){
+    if (pidObjs[0].mode == 1) { // override
+        pidObjs[0].output = 0xFFF;
+    }
+    for(i=0;i<NUM_PIDS;i++){
         if(pidObjs[i].onoff) {tiHSetDC(i+1, pidObjs[i].output); }
         else {tiHSetDC(i+1,0);} // turn off motor if PID loop is off
     }
@@ -486,8 +483,7 @@ void UpdatePID(pidPos *pid, int num)
  
     /* i_error say up to 1 rev error 0x10000, X 256 ms would be 0x1 00 00 00  
         scale p_error by 16, so get 12 bit angle value*/
-    	//pid-> i_error = (long)pid-> i_error + ((long)pid->p_error >> 4); // integrate error
-        pid-> i_error = (long)pid->i_error + ((long)pid->output >> 2); // TODO: tail temporary hack
+    	pid-> i_error = (long)pid-> i_error + ((long)pid->p_error >> 4); // integrate error
 
 
     // saturate output - assume only worry about >0 for now
@@ -527,6 +523,7 @@ void UpdatePID(pidPos *pid, int num)
     	//pid-> i_error = (long)pid-> i_error + ((long)pid->p_error >> 4); // integrate error
      	//pid-> i_error = (long)pid-> i_error + ((long)pid->v_error); // integrate velocity error
         pid-> i_error = (long)pid-> i_error + ((long)pid->output >> 2); // integrate output
+            // TODO: change integration of output to use extraVel instead of taking over the i_error
 
 
         // pidObjs[2] is roll and pidObjs[3] is yaw
@@ -540,7 +537,6 @@ void UpdatePID(pidPos *pid, int num)
              ((yaw->i ) >> 4) +  // divide by 16
               (yaw->d >> 4); // divide by 16
         yaw->output = yaw->preSat;
-        yaw->preSat = -yaw->preSat; //TODO: yaw minus sign hack because I soldered the props swapped
 
         long temp_roll, temp_yaw;
 

@@ -54,6 +54,7 @@ static unsigned char cmdStartExperiment(unsigned char type, unsigned char status
 static unsigned char cmdSetExperimentParams(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdIntegratedVicon(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdStopExperiment(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
+static unsigned char cmdCalibrateMotor(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 
 //Motor and PID functions
 static unsigned char cmdSetThrustOpenLoop(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
@@ -102,6 +103,7 @@ void cmdSetup(void) {
     cmd_func[CMD_SET_EXP_PARAMS] = &cmdSetExperimentParams;
     cmd_func[CMD_INTEGRATED_VICON] = &cmdIntegratedVicon;
     cmd_func[CMD_STOP_EXP] = &cmdStopExperiment;
+    cmd_func[CMD_CALIBRATE_MOTOR] = &cmdCalibrateMotor;
 
 }
 
@@ -209,26 +211,26 @@ unsigned char cmdSetPitchSetpoint(unsigned char type, unsigned char status, unsi
 
 unsigned char cmdIntegratedVicon(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
     // Receive Vicon-measured attitude (3), desired attitude (3), leg length (1), and push-off command (1)
-    int16_t new_vicon_angle[3];
-    int16_t new_setpoints[3];
+    long new_vicon_angle[3];
+    long new_setpoints[3];
     int i;
     for (i=0; i<3; i++){
         new_vicon_angle[i] = (int16_t)frame[2*i] + ((int16_t)frame[2*i+1] << 8);
-        new_vicon_angle[i] = new_vicon_angle[i]<<8;
+        new_vicon_angle[i] = new_vicon_angle[i] << 8;
     }
     for (i=0; i<3; i++){
         new_setpoints[i] = (int16_t)frame[2*i+6] + ((int16_t)frame[2*i+7] << 8);
-        new_setpoints[i] = new_setpoints[i]<<8;
+        new_setpoints[i] = new_setpoints[i] << 8;
     }
-    int16_t leg_length = (int16_t)frame[12] + ((int16_t)frame[13] << 8);
-    int16_t pushoff = (int16_t)frame[14] + ((int16_t)frame[15] << 8);
+    long leg_length = (int16_t)frame[12] + ((int16_t)frame[13] << 8);
+    long pushoff = (int16_t)frame[14] + ((int16_t)frame[15] << 8);
 
-    updateViconAngle((long*)new_vicon_angle);
-    setPitchSetpoint((long)new_setpoints[0]);
-    setRollSetpoint((long)new_setpoints[1]);
-    setYawSetpoint((long)new_setpoints[2]);
-    setLegSetpoint((long)leg_length);
-    setPushoffCmd((long)pushoff);
+    updateViconAngle(new_vicon_angle);
+    setPitchSetpoint(new_setpoints[2]);
+    setRollSetpoint(new_setpoints[1]);
+    setYawSetpoint(new_setpoints[0]);
+    setLegSetpoint(leg_length);
+    setPushoffCmd(pushoff);
 
     return 1;
 }
@@ -236,6 +238,32 @@ unsigned char cmdIntegratedVicon(unsigned char type, unsigned char status, unsig
 unsigned char cmdStopExperiment(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
     // Stop PID and leg
     expStop((int)frame[0]);
+    return 1;
+}
+
+unsigned char cmdCalibrateMotor(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
+    // Calibrate BLDC motor driver encoder offset
+#define N_SPEED 10
+    int i;
+    extern packet_union_t* last_bldc_packet;
+    sensor_data_t* sensor_data;
+    int32_t speed[N_SPEED];
+    
+    int32_t voltage_command = (frame[2] + (frame[3]<<8)) << 1;
+    uint32_t calibration_point = frame[0] + (frame[1]<<8);
+
+    send_command_packet(&uart_tx_packet_cmd, 0, calibration_point, 16);
+    delay_ms(50);
+    send_command_packet(&uart_tx_packet_cmd, voltage_command, 0, 3);
+    delay_ms(600);
+    for (i=0;i<N_SPEED;i++){
+        sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
+        speed[i] = sensor_data->velocity;
+        delay_ms(10);
+    }
+        
+    radioSendData(src_addr, status, CMD_CALIBRATE_MOTOR, 
+        sizeof(speed), (unsigned char *)speed, 0);
     return 1;
 }
 

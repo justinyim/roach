@@ -11,6 +11,7 @@
 #include "ports.h"
 #include "pid-ip2.5.h"
 #include "experiment.h"
+#include "tih.h"
 #define ABS(my_val) ((my_val) < 0) ? -(my_val) : (my_val)
 
 
@@ -27,11 +28,13 @@ long body_velocity[3]; // Current body velocity estimate
 extern pidPos pidObjs[NUM_PIDS];
 
 char pitchControlFlag;
-int16_t pitchSetpoint;
-int16_t rollSetpoint;
-int16_t yawSetpoint;
+volatile long pitchSetpoint;
+volatile long rollSetpoint;
+volatile long yawSetpoint;
 
 extern packet_union_t uart_tx_packet_global;
+
+extern unsigned char mj_state;
 
 void tailCtrlSetup(){
     int i;
@@ -83,9 +86,8 @@ void updateViconAngle(long* new_vicon_angle){
     int i;
     for (i=0; i<3; i++){
         vicon_angle[i] = new_vicon_angle[i];
-        body_angle[i] = new_vicon_angle[i] + 
-            body_velocity[i]*2/1000; // integrate over lag
-        //TODO: correct wrap-around, near singularity, etc.
+        body_angle[i] = new_vicon_angle[i]; 
+        //TODO: integrate over lag
     }
 }
 
@@ -106,19 +108,16 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         int gdata[3];
         mpuGetGyro(gdata);
 
-        // JY edits
-        // update attitude with vicon_attitude
-        // TODO: calibrate Vicon -> python -> Xbee -> ImageProc delay
-        //      integrate gyros over lag time
-
         // body_angle += gdata[2]*GYRO_LSB2_DEG*0.001;
-        gdata[0] -= -5; // ImageProc board short axis
-        gdata[1] -= 10; // ImageProc board long axis
-        gdata[2] -= -5; // ImageProc board normal
+        gdata[0] -= -5;//20; // ImageProc board short axis
+        gdata[1] -= 15;//20; // ImageProc board long axis
+        gdata[2] -= 0;//-20; // ImageProc board normal
         body_velocity[0] = (((long)(gdata[2] + gdata[1]))*181)>>8; //yaw
         body_velocity[1] = (((long)(gdata[1] - gdata[2]))*181)>>8; //roll
-        body_velocity[2] = gdata[0]; //pitch
+        body_velocity[2] = -gdata[0]; //pitch
 
+
+        //TODO: correct wrap-around, near singularity, etc.
         body_angle[0] += body_velocity[0]; //yaw
         body_angle[1] += body_velocity[1]; //roll
         body_angle[2] += body_velocity[2]; //pitch
@@ -138,9 +137,17 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         } else {
             //LED_2 = 1;
             // Control pitch, roll, and yaw
-            pidObjs[0].p_input = (long)pitchSetpoint << 8;
-            pidObjs[2].p_input = (long)rollSetpoint << 8;
-            pidObjs[3].p_input = (long)yawSetpoint << 8;
+            if (mj_state == MJ_AIR) {
+                tiHChangeMode(1, TIH_MODE_COAST);
+                pidObjs[0].mode = 0;
+                pidObjs[0].p_input = pitchSetpoint;
+            } else { // brake on the ground
+                tiHChangeMode(1, TIH_MODE_BRAKE);
+                pidObjs[0].mode = 1;
+                //pidObjs[0].pwmDes = 0; this is not useful
+            }
+            pidObjs[2].p_input = rollSetpoint;
+            pidObjs[3].p_input = yawSetpoint;
         }
     }
 

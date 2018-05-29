@@ -451,6 +451,9 @@ def writeFileHeader(dataFileName, params, manParams):
 
     fileout.write('"%  Experiment.py "\n')
     fileout.write('"%  Motor Gains    = ' + repr(params.motorgains) + '\n')
+    fileout.write('"%  Thruster gains = ' + repr(params.rightFreq) + '\n')
+    fileout.write('"%  Raibert gains  = ' + repr(params.leftFreq) + '\n')
+    fileout.write('"%  Leg angles     = ' + repr(params.phase) + '\n')
     fileout.write('"% Columns: "\n')
     fileout.write('time (us), Tail Positon, Femur Position, Motor Position, Est. Pitch, Est. Roll, Est. Yaw, Commanded Pitch, Commanded Motor Angle, Tail DC, Rear Prop DC, Front Prop DC, BLDC DC, GyroX, GryoY, GryoZ, AX ,AY ,AZ\n')
     fileout.close()

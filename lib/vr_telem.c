@@ -28,6 +28,7 @@ extern packet_union_t* last_bldc_packet;
 extern uint8_t last_bldc_packet_is_new;
 
 extern long tail_vel;
+extern int* gdata;
 
 //void vrTelemGetData(unsigned char* ptr) {
 void vrTelemGetData(vrTelemStruct_t* ptr) {
@@ -35,10 +36,10 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     //vrTelemStruct_t* tptr;
     //tptr = (vrTelemStruct_t*) ptr;
 
-    int gdata[3];   //gyrodata
+    //int gdata[3];   //gyrodata
     int xldata[3];  // accelerometer data
     /////// Get XL data
-    mpuGetGyro(gdata);
+    //mpuGetGyro(gdata); // this is read in salto_ctrl.c
     mpuGetXl(xldata);
 
     //Motion control

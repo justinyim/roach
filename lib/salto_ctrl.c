@@ -36,10 +36,16 @@ extern EncObj encPos[NUM_ENC];
 extern unsigned long t1_ticks;
 
 // Orientation
+int gdata[3];           // raw gyro readings
+
 long body_angle[3];     // Current body angle estimate
 long body_velocity[3];  // Current body velocity estimate
 long vicon_angle[3];    // Last Vicon-measured body angle
 long body_vel_LP[3];    // Low-passed body velocity estimate
+#define VICON_LAG 20    // Vicon comms lag in ImageProc control steps (one step per ms)
+long body_lag_log[VICON_LAG][3];    // circular buffer history of body angles for countering lag
+long body_lag_sum[3] = {0,0,0};     // average angular velocity over VICON_LAG steps
+unsigned char BLL_ind = 0;          // circular buffer index
 
 // Setpoints and commands
 char pitchControlFlag = 0; // enable/disable attitude control
@@ -81,7 +87,6 @@ void setPushoffCmd(long cmd){
     pushoffCmd = cmd << 8;
 }
 
-#define LAG_MS  1
 void updateViconAngle(long* new_vicon_angle){
     int i;
 
@@ -89,11 +94,12 @@ void updateViconAngle(long* new_vicon_angle){
         return;
     }
 
+    updateEuler(vicon_angle,body_lag_sum,1); // attempt to counter comms lag
+
     for (i=0; i<3; i++){
         vicon_angle[i] = new_vicon_angle[i];
         body_angle[i] = 3*(body_angle[i] >> 2) + (new_vicon_angle[i] >> 2);
     }
-    //updateEuler(body_vel_LP,LAG_MS);
 }
 
 void resetBodyAngle(){
@@ -144,7 +150,7 @@ void tailCtrlSetup(){
 }
 
 
-#define BVLP_ALPHA 128 // out ouf 256
+#define BVLP_ALPHA 64 // out ouf 256
 ///////        Tail control ISR          ////////
 //////  Installed to Timer5 @ 1000hz  ////////
 void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
@@ -153,12 +159,11 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
 
     if(interrupt_count <= 5) {
         // Do signal processing on gyro
-        int gdata[3];
-        mpuGetGyro(gdata);
+        mpuGetGyro(gdata); // TODO: this should be the only call to mpuGetGyro(gdata)
 
-        gdata[0] -= -5;//20; // ImageProc board short axis
-        gdata[1] -= 15;//20; // ImageProc board long axis
-        gdata[2] -= 0;//-20; // ImageProc board normal
+        //gdata[0] -= -5;//20; // ImageProc board short axis
+        //gdata[1] -= 15;//20; // ImageProc board long axis
+        //gdata[2] -= 0;//-20; // ImageProc board normal
 #if ROBOT_NAME == SALTO_1P_RUDOLPH
         // -55 degrees about roll
         // x axis right, y axis forwards, z axis up from ImageProc
@@ -181,7 +186,16 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
             body_vel_LP[i] = ((256-BVLP_ALPHA)*body_vel_LP[i] + BVLP_ALPHA*body_velocity[i])>>8;
         }
 
-        updateEuler(body_vel_LP,1);
+        body_lag_sum[0] += (-body_lag_log[BLL_ind][0] + body_velocity[0]);
+        body_lag_sum[1] += (-body_lag_log[BLL_ind][1] + body_velocity[1]);
+        body_lag_sum[2] += (-body_lag_log[BLL_ind][2] + body_velocity[2]);
+        body_lag_log[BLL_ind][0] = body_velocity[0];
+        body_lag_log[BLL_ind][1] = body_velocity[1];
+        body_lag_log[BLL_ind][2] = body_velocity[2];
+        BLL_ind = (BLL_ind+1)%VICON_LAG;
+
+        //updateEuler(body_angle,body_vel_LP,1);
+        updateEuler(body_angle,body_velocity,1);
 
         tail_pos = calibPos(1);
         tail_vel = (((128-TAIL_ALPHA)*tail_vel) >> 7) + ((TAIL_ALPHA*(tail_pos - tail_prev)) >> 7);
@@ -384,9 +398,10 @@ unsigned int crankFromFemur(void) {
 #define PI          2949120 // 180(deg) * 2^15(ticks)/2000(deg/s) * 1000(Hz)
 #define PISQUARED   132710400 // bit shifted 16 bits down
 #define COS_PREC    15 // bits of precision in output of cosine
-void updateEuler(long* vels, long time) {
-    // Update the body_angle Euler angle estimates.
+void updateEuler(long* angs, long* vels, long time) {
+    // Update the Euler angle estimates (usually body_angle).
     // INPUTS:
+    // long angs[3] are the Euler angles to be updated
     // long vels[3] is the body-fixed angular velocities from the gyro
     // time: time in milliseconds (usually 1 to 20)
 
@@ -394,7 +409,7 @@ void updateEuler(long* vels, long time) {
     long temp_angle[3];
     int i;
     for (i=0; i<3; i++) {
-        temp_angle[i] = body_angle[i];
+        temp_angle[i] = angs[i];
     }
 
     long sin_theta = cosApprox(temp_angle[2]-PI/2);
@@ -422,7 +437,7 @@ void updateEuler(long* vels, long time) {
     }
 
     for (i=0; i<3; i++) {
-        body_angle[i] = temp_angle[i];
+        angs[i] = temp_angle[i];
     }
 }
 

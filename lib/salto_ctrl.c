@@ -26,6 +26,10 @@
 extern pidPos pidObjs[NUM_PIDS];
 
 
+#define PI          2949120 // 180(deg) * 2^15(ticks)/2000(deg/s) * 1000(Hz)
+#define PISQUARED   132710400 // bit shifted 16 bits down
+#define COS_PREC    15 // bits of precision in output of cosine
+
 
 packet_union_t uart_tx_packet_global; // BLDC motor driver packet
 
@@ -38,10 +42,10 @@ extern unsigned long t1_ticks;
 // Orientation
 int gdata[3];           // raw gyro readings
 
-long body_angle[3];     // Current body angle estimate
+long body_angle[3];     // Current body angle estimate (0 yaw, 1 roll, 2 pitch)
 long body_velocity[3];  // Current body velocity estimate
 long vicon_angle[3];    // Last Vicon-measured body angle
-long body_vel_LP[3];    // Low-passed body velocity estimate
+long body_vel_LP[3];    // Low-passed body velocity estimate (0 yaw, 1 roll, 2 pitch)
 #define VICON_LAG 20    // Vicon comms lag in ImageProc control steps (one step per ms)
 long body_lag_log[VICON_LAG][3];    // circular buffer history of body angles for countering lag
 long body_lag_sum[3] = {0,0,0};     // average angular velocity over VICON_LAG steps
@@ -70,6 +74,7 @@ void setOnboardMode(char mode, char flags){
     // onboard mode switch (first introduced for testing onboard gyro integration only 29 May 2018)
     // 0: previous default operation
     // 1: use only onboard gyro integration and no vicon attitude updates
+    LED_1 ^= 1;
     onboardMode = mode;
 }
 
@@ -110,7 +115,20 @@ void resetBodyAngle(){
 }
 
 void calibGyroBias(){
-    mpuRunCalib(0,100); //re-offset gyro, assumes stationary
+    mpuRunCalib(0,5); //re-offset gyro, assumes stationary
+    // TODO this fucntion call is sometimes causing Salto to hang
+}
+
+void accZeroAtt(){
+    // get an APPROXIMATE Euler angle relative to the g vector from the accelerometer radings
+
+    int xldata[3];  // accelerometer data
+    mpuGetXl(xldata);
+    long body_acc[3]; // body-frame accelerometer readings
+    orientImageProc(body_acc, xldata);
+
+    body_angle[1] = PI*body_acc[2]/(3.14159*body_acc[0]); // roll
+    body_angle[2] = -PI*body_acc[1]/(3.14159*body_acc[0]); // pitch
 }
 
 void expStart(uint8_t startSignal) {
@@ -159,28 +177,8 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
 
     if(interrupt_count <= 5) {
         // Do signal processing on gyro
-        mpuGetGyro(gdata); // TODO: this should be the only call to mpuGetGyro(gdata)
-
-        //gdata[0] -= -5;//20; // ImageProc board short axis
-        //gdata[1] -= 15;//20; // ImageProc board long axis
-        //gdata[2] -= 0;//-20; // ImageProc board normal
-#if ROBOT_NAME == SALTO_1P_RUDOLPH
-        // -55 degrees about roll
-        // x axis right, y axis forwards, z axis up from ImageProc
-        body_velocity[0] = (147*((long)gdata[2]) + 210*((long)gdata[0]))>>8; //yaw
-        body_velocity[1] = gdata[1];
-        body_velocity[2] = (-147*((long)gdata[0]) + 210*((long)gdata[2]))>>8; //pitch
-#elif ROBOT_NAME == SALTO_1P_DASHER
-        // -55 degrees about x, follwed by 180 degrees about body z
-        body_velocity[0] = (147*((long)gdata[2]) - 210*((long)gdata[0]))>>8; //yaw
-        body_velocity[1] = -gdata[1];
-        body_velocity[2] = (147*((long)gdata[0]) + 210*((long)gdata[2]))>>8; //pitch
-#elif ROBOT_NAME == SALTO_1P_SANTA
-        // -45 degrees about pitch
-        body_velocity[0] = (((long)(gdata[2] + gdata[1]))*181)>>8; //yaw
-        body_velocity[1] = (((long)(gdata[1] - gdata[2]))*181)>>8; //roll
-        body_velocity[2] = -gdata[0]; //pitch
-#endif
+        mpuGetGyro(gdata); // This should be the only call to mpuGetGyro(gdata)
+        orientImageProc(body_velocity, gdata); // orient gyro readings gdata into body frame body_velocity
 
         for (i=0; i<3; i++) {
             body_vel_LP[i] = ((256-BVLP_ALPHA)*body_vel_LP[i] + BVLP_ALPHA*body_velocity[i])>>8;
@@ -197,6 +195,13 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         //updateEuler(body_angle,body_vel_LP,1);
         updateEuler(body_angle,body_velocity,1);
 
+        // Additional 1kHz attitude estimator actions
+        if (onboardMode == 2) {
+            body_angle[1] += (pidObjs[2].output>>7) + (pidObjs[3].output>>7);
+            body_angle[2] += (tail_vel>>3);
+        }
+
+        // Tail estimation
         tail_pos = calibPos(1);
         tail_vel = (((128-TAIL_ALPHA)*tail_vel) >> 7) + ((TAIL_ALPHA*(tail_pos - tail_prev)) >> 7);
         tail_prev = tail_pos;
@@ -215,10 +220,13 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         } else {
             //LED_2 = 1;
             // Control pitch, roll, and yaw
-            if (mj_state == MJ_AIR) {
+            if (mj_state == MJ_AIR && pidObjs[0].mode != 2) {
                 tiHChangeMode(1, TIH_MODE_COAST);
                 pidObjs[0].mode = 0;
                 pidObjs[0].p_input = pitchSetpoint;
+            } else if (onboardMode == 2) { // standing on the ground
+                tiHChangeMode(1, TIH_MODE_COAST);
+                pidObjs[0].mode = 2;
             } else { // brake on the ground
                 if (ROBOT_NAME == SALTO_1P_SANTA) {
                     tiHChangeMode(1, TIH_MODE_BRAKE);
@@ -395,9 +403,30 @@ unsigned int crankFromFemur(void) {
 }
 
 
-#define PI          2949120 // 180(deg) * 2^15(ticks)/2000(deg/s) * 1000(Hz)
-#define PISQUARED   132710400 // bit shifted 16 bits down
-#define COS_PREC    15 // bits of precision in output of cosine
+void orientImageProc(long* body_frame, int* ImageProc_frame) {
+    // Rotate ImageProc_frame vectors from the ImageProc IMU frame (0:x,right, 1:y,forwards, 2:z,up)
+    // into body_frame in the robot body frame (0:z,up,yaw, 1:x,forwards,roll, 2:y,left,pitch)
+    // ImageProc_frame is an int (from MPU IMU) but body_frame is a long
+#if ROBOT_NAME == SALTO_1P_RUDOLPH
+        // -55 degrees about roll
+        // x axis right, y axis forwards, z axis up from ImageProc
+        body_frame[0] = (147*((long)ImageProc_frame[2]) + 210*((long)ImageProc_frame[0]))>>8; //yaw
+        body_frame[1] = ImageProc_frame[1];
+        body_frame[2] = (-147*((long)ImageProc_frame[0]) + 210*((long)ImageProc_frame[2]))>>8; //pitch
+#elif ROBOT_NAME == SALTO_1P_DASHER
+        // -55 degrees about x, follwed by 180 degrees about body z
+        body_frame[0] = (147*((long)ImageProc_frame[2]) - 210*((long)ImageProc_frame[0]))>>8; //yaw
+        body_frame[1] = -ImageProc_frame[1];
+        body_frame[2] = (147*((long)ImageProc_frame[0]) + 210*((long)ImageProc_frame[2]))>>8; //pitch
+#elif ROBOT_NAME == SALTO_1P_SANTA
+        // -45 degrees about pitch
+        body_frame[0] = (((long)(ImageProc_frame[2] + ImageProc_frame[1]))*181)>>8; //yaw
+        body_frame[1] = (((long)(ImageProc_frame[1] - ImageProc_frame[2]))*181)>>8; //roll
+        body_frame[2] = -ImageProc_frame[0]; //pitch
+#endif
+}
+
+
 void updateEuler(long* angs, long* vels, long time) {
     // Update the Euler angle estimates (usually body_angle).
     // INPUTS:

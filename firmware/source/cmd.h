@@ -34,6 +34,7 @@
 #define CMD_CALIBRATE_MOTOR         0xA2
 #define CMD_ONBOARD_MODE            0xA3
 #define CMD_GYRO_BIAS               0xA4
+#define CMD_G_VECT_ATT              0xA5
 // Redefine
 
 void cmdSetup(void);

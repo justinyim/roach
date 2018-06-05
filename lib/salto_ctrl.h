@@ -21,6 +21,7 @@ void tailCtrlSetup();
 void setPitchControlFlag(char state);
 void resetBodyAngle();
 void calibGyroBias();
+void accZeroAtt();
 void setOnboardMode(char mode, char flags); 
 void updateViconAngle(long* new_vicon_angle);
 
@@ -39,6 +40,7 @@ long calibPos(char idx);
 unsigned int crankFromFemur(void);
 void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint32_t current, uint8_t flags);
 
+void orientImageProc(long* body_frame, int* ImageProc_frame);
 void updateEuler(long* angs, long* vels, long time);
 long cosApprox(long x);
 

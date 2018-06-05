@@ -29,13 +29,15 @@ def main():
     motorgains = [0,0,0,0,0, 0,0,0,0,0]# disable thrusters and tail
     thrustGains = [0,0,0, 0,0,0]
 
+    thrustGains = [300,0,150, 50,0,50]
+
     xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h', *thrustGains))
 
-    duration = 300
+    duration = 15000
     rightFreq = 0
     leftFreq = 0
     phase = 0
-    telemetry = True
+    telemetry = False#True
     repeat = False
 
     manParams = manueverParams(0, 0, 0, 0, 0, 0) # JY edits: added for compatibility
@@ -73,12 +75,34 @@ def main():
         #Start robot 0: wall jump, 1: single jump, 2: vicon jumps
         exp = [2] 
         stopSignal = [0]
+        arbitrary = [0]
 
-        viconTest = [0,0,0,0,0,0,60*256,80*256]#55*256,70*256]
+        #viconTest = [0,0,0,0,0,0,60*256,80*256]#55*256,70*256]
+        viconTest = [0,0,0,0,0,0,0*256,0*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(0.01)
 
+        xb_send(0, command.RESET_BODY_ANG, pack('h', *arbitrary))
+        time.sleep(0.01)
+
+        xb_send(0, command.GYRO_BIAS, pack('h', *arbitrary))
+        time.sleep(0.01)
+
+        xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
+        time.sleep(0.01)
+
+        modeSignal = [2]
+        xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+        time.sleep(0.01)
+
+        
+
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
+
+        time.sleep(4.0)
+        motorgains = [500,0,30,0,0, 0,0,0,0,0]
+        xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
+
 
         '''
         # small step calibration for crank
@@ -105,7 +129,7 @@ def main():
         time.sleep(1)
         '''
 
-        time.sleep(params.duration / 1000.0)
+        time.sleep(params.duration / 1000.0 - 4)
         
         #time.sleep(10)
         xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))

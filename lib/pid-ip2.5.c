@@ -440,6 +440,7 @@ long max_pos = 1114112;
 
 #define EULER_SCALED_PI 2949120
 #define TAIL_BRAKE 20
+#define BALANCE_FF 4
 // 180(deg) * 2^15(ticks)/2000(deg/s) * 1000(Hz)
 void pidSetControl()
 { int i,j;
@@ -472,6 +473,14 @@ void pidSetControl()
             if (pidObjs[0].preSat < -MAXTHROT_TAIL) {
                 pidObjs[0].output = -MAXTHROT_TAIL;
             }
+        }
+    } else if(pidObjs[0].mode == 2) { // balancing on toe
+        pidObjs[0].output += BALANCE_FF*tail_vel;
+        if (pidObjs[0].output > MAXTHROT_TAIL) {
+            pidObjs[0].output = MAXTHROT_TAIL;
+        }
+        if (pidObjs[0].output < -MAXTHROT_TAIL) {
+            pidObjs[0].output = -MAXTHROT_TAIL;
         }
     }
     for(i=0;i<NUM_PIDS;i++){

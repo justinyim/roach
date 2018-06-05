@@ -28,7 +28,7 @@ extern packet_union_t* last_bldc_packet;
 extern uint8_t last_bldc_packet_is_new;
 
 extern long tail_vel;
-extern int* gdata;
+extern int gdata[3];
 
 //void vrTelemGetData(unsigned char* ptr) {
 void vrTelemGetData(vrTelemStruct_t* ptr) {

@@ -440,7 +440,7 @@ long max_pos = 1114112;
 
 #define EULER_SCALED_PI 2949120
 #define TAIL_BRAKE 20
-#define BALANCE_FF 4
+#define BALANCE_FF 5
 // 180(deg) * 2^15(ticks)/2000(deg/s) * 1000(Hz)
 void pidSetControl()
 { int i,j;

@@ -293,17 +293,13 @@ unsigned char cmdresetBodyAngle(unsigned char type, unsigned char status, unsign
 }
 
 unsigned char cmdSetMotorPos(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
-    long pos = 0;
-    //int relative_flag = frame[4] + (frame[5] << 8);
+    long pos = ((long)frame[0] << 8) + ((long)frame[1]<<16);
+    uint32_t p_gain = (uint32_t)frame[2] + ((uint32_t)frame[3]<<8);
+    uint32_t d_gain = (uint32_t)frame[4] + ((uint32_t)frame[5]<<8);
 
-    int i;
-    for (i = 0; i < 4; i++)
-    {
-        pos += ((long)frame[i] << 8*i );
-    }
-
+    uint32_t gain = (p_gain<<16) + d_gain;
     
-    send_command_packet(&uart_tx_packet_cmd, pos, 0, 2); 
+    send_command_packet(&uart_tx_packet_cmd, pos, gain, 2);
 
     return 1;
 }

@@ -66,6 +66,18 @@ long tail_prev = 0; // in ticks
 long tail_vel = 0; // in ticks / count
 
 
+#define P_AIR ((1*65536)/10) // leg proportional gain in the air (duty cycle/rad * 65536)
+#define D_AIR ((2*65536)/1000) // leg derivative gain in the air (duty cycle/[rad/s] * 65536)
+#define P_GND ((5*65536)/10) // leg proportional gain on the ground
+#define D_GND ((1*65536)/1000)
+#define P_STAND ((5*65536)/1000) // leg proportional gain for standing
+#define D_STAND ((3*65536)/1000)
+
+uint32_t GAINS_AIR = (P_AIR<<16)+D_AIR;
+uint32_t GAINS_GND = (P_GND<<16)+D_GND;
+uint32_t GAINS_STAND = (P_STAND<<16)+D_STAND;
+
+
 void setPitchControlFlag(char state){
     pitchControlFlag = state;
 }
@@ -95,7 +107,7 @@ void setPushoffCmd(long cmd){
 void updateViconAngle(long* new_vicon_angle){
     int i;
 
-    if (onboardMode == 1){ // onboardMode 1: use only gyro integration
+    if (onboardMode == 1 || onboardMode == 3 || onboardMode == 7){ // onboardMode 1: use only gyro integration
         return;
     }
 
@@ -115,7 +127,7 @@ void resetBodyAngle(){
 }
 
 void calibGyroBias(){
-    mpuRunCalib(0,5); //re-offset gyro, assumes stationary
+    mpuRunCalib(0,3); //re-offset gyro, assumes stationary
     // TODO this fucntion call is sometimes causing Salto to hang
 }
 
@@ -196,9 +208,9 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         updateEuler(body_angle,body_velocity,1);
 
         // Additional 1kHz attitude estimator actions
-        if (onboardMode == 2) {
+        if (onboardMode == 3 || onboardMode == 7) {
             body_angle[1] += (pidObjs[2].output>>7) + (pidObjs[3].output>>7);
-            body_angle[2] += (tail_vel>>3);
+            body_angle[2] += (pidObjs[0].output>>5);//(tail_vel>>3);
         }
 
         // Tail estimation
@@ -224,7 +236,7 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
                 tiHChangeMode(1, TIH_MODE_COAST);
                 pidObjs[0].mode = 0;
                 pidObjs[0].p_input = pitchSetpoint;
-            } else if (onboardMode == 2) { // standing on the ground
+            } else if (onboardMode == 3 || onboardMode == 7) { // standing on the ground
                 tiHChangeMode(1, TIH_MODE_COAST);
                 pidObjs[0].mode = 2;
             } else { // brake on the ground
@@ -283,27 +295,34 @@ void multiJumpFlow() {
             break;
 
         case MJ_AIR:
-            send_command_packet(&uart_tx_packet_global, legSetpoint, 0, 2);
-
             // Ground contact transition out of air to ground
             if (t1_ticks - transition_time > 200 && (footContact() == 1)) {
                 mj_state = MJ_GND;
                 transition_time = t1_ticks;
+            } else { // remain in air state
+                if (onboardMode != 7) {
+                    send_command_packet(&uart_tx_packet_global, legSetpoint, GAINS_AIR, 2);
+                } else {
+                    send_command_packet(&uart_tx_packet_global, legSetpoint, GAINS_STAND, 2);
+                }
             }
             break;
 
         case MJ_GND:
-            send_command_packet(&uart_tx_packet_global, pushoffCmd, 0, 2);
-
             // Liftoff transition from ground to air
             if (t1_ticks - transition_time > 50 && (footTakeoff() == 1 || calibPos(2) > FULL_EXTENSION)) {
                 mj_state = MJ_AIR;
                 transition_time = t1_ticks;
+            } else { // remain in ground state
+                if (onboardMode != 7) {
+                    send_command_packet(&uart_tx_packet_global, pushoffCmd, GAINS_GND, 2);
+                } else {
+                    send_command_packet(&uart_tx_packet_global, legSetpoint, GAINS_STAND, 2);
+                }
             }
             break;
 
         case MJ_STOPPED:
-            send_command_packet(&uart_tx_packet_global, 0, 0, 0);
             break;
 
         default:
@@ -318,8 +337,8 @@ volatile int32_t position_last = 0;
 volatile uint32_t current_last = 0;
 volatile uint8_t flags_last =0;
 void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint32_t current, uint8_t flags){
-    if (((t1_ticks - t_cmd_last) < UART_PERIOD)) {//|| 
-        //(position == position_last && current == current_last && flags == flags_last)) {
+    if (((t1_ticks - t_cmd_last) < UART_PERIOD) ||
+        (position == position_last && current == current_last && flags == flags_last)) {
         return; // skip command sending if last command was too recent or was identical
     }
 

@@ -29,15 +29,15 @@ def main():
     motorgains = [0,0,0,0,0, 0,0,0,0,0]# disable thrusters and tail
     thrustGains = [0,0,0, 0,0,0]
 
-    thrustGains = [300,0,150, 50,0,50]
+    #thrustGains = [350,0,150, 50,0,100]
 
     xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h', *thrustGains))
 
-    duration = 15000
+    duration = 1000#15000
     rightFreq = 0
     leftFreq = 0
     phase = 0
-    telemetry = False#True
+    telemetry = False
     repeat = False
 
     manParams = manueverParams(0, 0, 0, 0, 0, 0) # JY edits: added for compatibility
@@ -72,9 +72,31 @@ def main():
             raw_input("Press enter to start run ...") 
             startTelemetrySave(numSamples)
 
+
+        '''
+        # basic leg extension test
+        exp = [2]
+        viconTest = [0,0,0,0,0,0,30*256,30*256]#55*256,70*256]
+        xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+        time.sleep(0.01)
+        xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
+
+        '''
+
+
+        #'''
+        # leg extension test with gains
+        arbitrary = [0]
+        legPosition = [30*256, 0.1*65536, 0.002*65536]
+        # motor deflection [radians * 256], P gain [65536 * duty cyle/rad], D gain [65536 * duty cyle/(rad/s)]
+        xb_send(0, command.SET_MOTOR_POS, pack('3h', *legPosition))
+        #'''
+
+
+        '''
+        # Balance on toe test
         #Start robot 0: wall jump, 1: single jump, 2: vicon jumps
-        exp = [2] 
-        stopSignal = [0]
+        exp = [2]
         arbitrary = [0]
 
         #viconTest = [0,0,0,0,0,0,60*256,80*256]#55*256,70*256]
@@ -91,21 +113,38 @@ def main():
         xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
         time.sleep(0.01)
 
-        modeSignal = [2]
+        modeSignal = [3]
         xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
         time.sleep(0.01)
 
-        
-
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
 
-        time.sleep(4.0)
-        motorgains = [500,0,30,0,0, 0,0,0,0,0]
+        time.sleep(3.0)
+        motorgains = [350,0,30,0,0, 0,0,0,0,0]
         xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
+
+        time.sleep(5.0)
+        viconTest = [0,0,0,0,0,0,58*256,58*256]#55*256,70*256]
+        xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+
+        time.sleep(0.4)
+        viconTest = [0,0,0,0,0,0,30*256,30*256]#55*256,70*256]
+        xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+
+        time.sleep(0.05)
+        modeSignal = [7]
+        xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+
+        params.duration = params.duration - 8
+        '''
+
 
 
         '''
         # small step calibration for crank
+        exp = [2]
+        xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
+        time.sleep(0.01)
         for x in np.hstack((np.linspace(0,80,17),np.linspace(75,0,16))):
             viconTest = [0,0,0,0,0,0, x*256, x*256]
             xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
@@ -114,6 +153,9 @@ def main():
         ''' 
 
         '''
+        # five leg extension points
+        exp = [2]
+        xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
         time.sleep(1)
         viconTest = [0,0,0,0,0,0,20*256,20*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
@@ -129,21 +171,14 @@ def main():
         time.sleep(1)
         '''
 
-        time.sleep(params.duration / 1000.0 - 4)
+
+        time.sleep(params.duration / 1000.0)
         
         #time.sleep(10)
+        stopSignal = [0]
         xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
         time.sleep(0.01)
         xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
-
-
-        '''
-        time.sleep(10)
-        #viconTest = [0,0,0,0,0,0,256,256]
-        #xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        time.sleep(20)
-        xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
-        '''
 
 
         # temp = [0]

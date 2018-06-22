@@ -1,7 +1,9 @@
 fmax = pi/2;
 resolution = 2^8;
 femur = linspace(0,fmax,resolution);
-extension = - 0.04776*femur.^3 + 0.1042*femur.^2 + 0.05917*femur + 0.07623; % meters
+%extension = - 0.04776*femur.^3 + 0.1042*femur.^2 + 0.05917*femur + 0.07623; % meters
+x = femur;
+extension = 0.04563*x.^3 + 0.07215*x.^2 - 0.0944*x + 0.0003031 + 0.07; % Rudolph
 extScale = extension(end); % Extension scale in m per 2^16 counts
 scale = (2^16-1)/extension(end);
 

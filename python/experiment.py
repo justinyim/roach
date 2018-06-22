@@ -33,11 +33,11 @@ def main():
 
     xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h', *thrustGains))
 
-    duration = 1000#15000
+    duration = 3000#15000
     rightFreq = 0
     leftFreq = 0
     phase = 0
-    telemetry = False
+    telemetry = True#False
     repeat = False
 
     manParams = manueverParams(0, 0, 0, 0, 0, 0) # JY edits: added for compatibility
@@ -84,13 +84,13 @@ def main():
         '''
 
 
-        #'''
+        '''
         # leg extension test with gains
         arbitrary = [0]
         legPosition = [30*256, 0.1*65536, 0.002*65536]
         # motor deflection [radians * 256], P gain [65536 * duty cyle/rad], D gain [65536 * duty cyle/(rad/s)]
         xb_send(0, command.SET_MOTOR_POS, pack('3h', *legPosition))
-        #'''
+        '''
 
 
         '''

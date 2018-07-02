@@ -322,6 +322,13 @@ static volatile unsigned char telemetry_count = 0;
 extern volatile MacPacket uart_tx_packet;
 extern volatile unsigned char uart_tx_flag;
 
+uint32_t startTime1;
+uint32_t timeElapsed1;
+uint32_t startTime2;
+uint32_t timeElapsed2;
+uint32_t startTime3;
+uint32_t timeElapsed3;
+
 void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
     int j,i;
     interrupt_count++;
@@ -329,17 +336,22 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
     //Telemetry save, at 1Khz
     //TODO: Break coupling between PID module and telemetry triggering
     if(interrupt_count == 3) {
+        startTime1 = sclockGetTime();
         telemSaveNow();
+        timeElapsed1 = sclockGetTime() - startTime1;
     }
     //Update IMU
     //TODO: Break coupling between PID module and IMU update
     if(interrupt_count == 4) {
+        startTime2 = sclockGetTime();
         mpuBeginUpdate();
         amsEncoderStartAsyncRead();
+        timeElapsed2 = sclockGetTime() - startTime2;
     }
     //PID controller update
     else if(interrupt_count == 5)
     {
+        startTime1 = sclockGetTime();
         interrupt_count = 0;
 
         if (t1_ticks == T1_MAX) t1_ticks = 0;
@@ -364,6 +376,7 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
             }
         }
         pidSetControl();
+        timeElapsed3 = sclockGetTime() - startTime3;
     }
     //LED_3 = 0;
     _T1IF = 0;

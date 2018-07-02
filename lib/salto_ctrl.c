@@ -192,12 +192,17 @@ void tailCtrlSetup(){
 }
 
 
+uint32_t startTime4;
+uint32_t timeElapsed4;
+
 #define BVLP_ALPHA 64 // out ouf 256
 ///////        Tail control ISR          ////////
 //////  Installed to Timer5 @ 1000hz  ////////
 void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
     interrupt_count++;
     int i;
+
+    startTime4 = sclockGetTime();
 
     if(interrupt_count <= 5) {
         // Do signal processing on gyro
@@ -270,6 +275,9 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
     }
 
     _T5IF = 0;
+
+    timeElapsed4 = sclockGetTime() - startTime4;
+
 }
 
 

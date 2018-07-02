@@ -33,7 +33,7 @@ def main():
 
     xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h', *thrustGains))
 
-    duration = 3000#15000
+    duration = 5000#15000
     rightFreq = 0
     leftFreq = 0
     phase = 0
@@ -73,19 +73,19 @@ def main():
             startTelemetrySave(numSamples)
 
 
-        '''
+        #'''
         # basic leg extension test
         exp = [2]
-        viconTest = [0,0,0,0,0,0,30*256,30*256]#55*256,70*256]
+        viconTest = [0,0,0,0,0,0,60*256,80*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(0.01)
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
 
-        '''
+        #'''
 
 
         '''
-        # leg extension test with gains
+        # leg extension test with variable motor gains
         arbitrary = [0]
         legPosition = [30*256, 0.1*65536, 0.002*65536]
         # motor deflection [radians * 256], P gain [65536 * duty cyle/rad], D gain [65536 * duty cyle/(rad/s)]

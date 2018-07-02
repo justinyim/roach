@@ -37,11 +37,13 @@ char footContact(void);
 char footTakeoff(void);
  
 long calibPos(char idx);
-unsigned int crankFromFemur(void);
+void femurLUTs(void);
 void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint32_t current, uint8_t flags);
 
 void orientImageProc(long* body_frame, int* ImageProc_frame);
 void updateEuler(long* angs, long* vels, long time);
 long cosApprox(long x);
+
+void updateVelocity(long time);
 
 #endif // __SALTO_CTRL_H

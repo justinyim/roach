@@ -26,6 +26,18 @@ typedef struct {
     int16_t accelX;
     int16_t accelY;
     int16_t accelZ;
+    // 2017-2018 modes. Above modes should be maintained for backwards compatibility.
+
+    // Base new modes
+    uint16_t otherMode; // Other modes (telemetry and commands)
+    uint16_t onboardMode; // Onboard modes, discrete states, etc.
+    uint16_t voltage; // Battery voltage 
+
+    // Additional modes
+    uint16_t crank; // Crank angle
+    uint16_t foot; // Foot distance
+    uint16_t MA; // Mechanical advantage
+    uint16_t force; // Foot force
 } vrTelemStruct_t;
 
 //void vrTelemGetData(unsigned char* ptr);

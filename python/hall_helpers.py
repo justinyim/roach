@@ -455,7 +455,7 @@ def writeFileHeader(dataFileName, params, manParams):
     fileout.write('"%  Raibert gains  = ' + repr(params.leftFreq) + '\n')
     fileout.write('"%  Leg angles     = ' + repr(params.phase) + '\n')
     fileout.write('"% Columns: "\n')
-    fileout.write('time (us), Tail Positon, Femur Position, Motor Position, Est. Pitch, Est. Roll, Est. Yaw, Commanded Pitch, Commanded Motor Angle, Tail DC, Rear Prop DC, Front Prop DC, BLDC DC, GyroX, GryoY, GryoZ, AX ,AY ,AZ\n')
+    fileout.write('time (us), Tail Pos., Femur Pos., Motor Pos., Att 1 (pitch), Att 2 (roll), Att 3 (yaw), Att. 4, Cmd Motor DC, Tail DC, Rear Prop DC, Front Prop DC, BLDC DC, GyroX, GryoY, GryoZ, AX ,AY ,AZ, State, Additional data \n')
     fileout.close()
 
 def eraseFlashMem(numSamples):

@@ -30,6 +30,14 @@ extern uint8_t last_bldc_packet_is_new;
 extern long tail_vel;
 extern int gdata[3];
 
+extern unsigned char mj_state;
+extern unsigned int crank;
+extern char pitchControlFlag;
+extern char onboardMode;
+extern unsigned int foot;
+extern unsigned int MA;
+extern unsigned int force;
+
 //void vrTelemGetData(unsigned char* ptr) {
 void vrTelemGetData(vrTelemStruct_t* ptr) {
     
@@ -68,6 +76,14 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->accelX = xldata[0];
     ptr->accelY = xldata[1];
     ptr->accelZ = xldata[2];
+
+    ptr->otherMode = 1;
+    ptr->onboardMode = mj_state + (pitchControlFlag <<7) + (onboardMode << 8);
+    ptr->voltage = sensor_data->voltage;
+    ptr->crank = crank;
+    ptr->foot = foot;
+    ptr->MA = MA;
+    ptr->force = force;
 }
 
 //This may be unneccesary, since the telemtry type isn't totally anonymous

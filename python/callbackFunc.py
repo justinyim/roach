@@ -7,7 +7,7 @@ sys.path.append(os.path.dirname("../../imageproc-settings/"))
 sys.path.append(os.path.dirname("../imageproc-settings/"))      # Some projects have a single-directory structure
 import shared
 
-#Dictionary of packet formats, for unpack()
+#Dictionary of packet formats, for unpack() #https://docs.python.org/2/library/struct.html
 pktFormat = { \
     command.TX_DUTY_CYCLE:          'l3f', \
     command.GET_IMU_DATA:           'l6h', \
@@ -22,7 +22,7 @@ pktFormat = { \
     command.SET_STEERING_GAINS:     '6h', \
     command.SOFTWARE_RESET:         '', \
     command.ERASE_SECTORS:          'L', \
-    command.FLASH_READBACK:         '=LL' +'7l'+'10h', \
+    command.FLASH_READBACK:         '=LL' +'7l'+'10h'+'7H', \
     command.SLEEP:                  'b', \
     command.ECHO:                   'c' ,\
     command.SET_VEL_PROFILE:        '8h' ,\

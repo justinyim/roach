@@ -51,6 +51,18 @@ long body_lag_log[VICON_LAG][3];    // circular buffer history of body angles fo
 long body_lag_sum[3] = {0,0,0};     // average angular velocity over VICON_LAG steps
 unsigned char BLL_ind = 0;          // circular buffer index
 
+// Robot position estimation states
+long position[3];       // Esimated robot location in world frame
+long velocity[3];       // Estimated robot velocity in world frame
+long leg;               // Estimated stance phase leg length
+long legVel;            // Estimated stance phase leg extension velocity
+
+unsigned int crank;     // Crank angle
+unsigned int foot;      // Foot distance
+unsigned int MA;        // Mechanical advantage
+unsigned int spring;      // Spring torque
+unsigned int force;     // Foot force
+
 // Setpoints and commands
 char pitchControlFlag = 0; // enable/disable attitude control
 char onboardMode = 0; // mode for onboard controllers & estimators
@@ -66,12 +78,12 @@ long tail_prev = 0; // in ticks
 long tail_vel = 0; // in ticks / count
 
 
-#define P_AIR ((1*65536)/10) // leg proportional gain in the air (duty cycle/rad * 65536)
-#define D_AIR ((2*65536)/1000) // leg derivative gain in the air (duty cycle/[rad/s] * 65536)
+#define P_AIR ((2*65536)/10) // leg proportional gain in the air (duty cycle/rad * 65536)
+#define D_AIR ((4*65536)/1000) // leg derivative gain in the air (duty cycle/[rad/s] * 65536)
 #define P_GND ((5*65536)/10) // leg proportional gain on the ground
 #define D_GND ((1*65536)/1000)
 #define P_STAND ((5*65536)/1000) // leg proportional gain for standing
-#define D_STAND ((3*65536)/1000)
+#define D_STAND ((4*65536)/1000)
 
 uint32_t GAINS_AIR = (P_AIR<<16)+D_AIR;
 uint32_t GAINS_GND = (P_GND<<16)+D_GND;
@@ -218,10 +230,14 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         tail_vel = (((128-TAIL_ALPHA)*tail_vel) >> 7) + ((TAIL_ALPHA*(tail_pos - tail_prev)) >> 7);
         tail_prev = tail_pos;
 
+        femurLUTs(); // calculate crank, foot, and MA
+        updateVelocity(1); // leg length estimation
+
     }
     if(interrupt_count == 5) 
     {
         interrupt_count = 0;
+
         multiJumpFlow();
         if(pitchControlFlag == 0){
             //LED_2 = 0;
@@ -367,27 +383,23 @@ extern uint8_t last_bldc_packet_is_new;
 
 char footContact(void) {
     int eps = 1000;
-    unsigned int mot, femur;
+    unsigned int mot;
     sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
     mot = (unsigned int)(sensor_data->position*motPos_to_femur_crank_units); //UNITFIX
-    femur = crankFromFemur();
-    if ( mot-BLDC_MOTOR_OFFSET>femur && (mot-BLDC_MOTOR_OFFSET - eps) > femur)
+    if ( mot-BLDC_MOTOR_OFFSET>crank && (mot-BLDC_MOTOR_OFFSET - eps) > crank)
     {
-        LED_1 = 1;
         return 1;
     } else {
-        LED_1 = 0;
         return 0;
     }
 }
 
 char footTakeoff(void) {
     int eps = 1000;
-    unsigned int mot, femur;
+    unsigned int mot;
     sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
     mot = (unsigned int)(sensor_data->position*motPos_to_femur_crank_units); //UNITFIX
-    femur = crankFromFemur();
-    if ( (mot-BLDC_MOTOR_OFFSET + eps) < femur){
+    if ( (mot-BLDC_MOTOR_OFFSET + eps) < crank){
         return 1;
     } else {
         return 0;
@@ -413,12 +425,37 @@ long calibPos(char idx){
     }
 }
 
-unsigned int crankFromFemur(void) { 
-    unsigned int femur;
+void femurLUTs(void) { 
+    // calculate crank, foot, and MA
+    uint32_t femur, femurInd, femurDelta;
+
+    /*
+    // Linearly interpolate between lookup table entries
+    femur = calibPos(2);
+    femurInd = femur / 64; // Scale position to 8 bits
+    femurDelta = femur % 64;
+
+    if(femurInd>254){femurInd = 254;}
+    if(femurInd<0){femurInd = 0;}
+
+    crank = ((64-femurDelta)*(uint32_t)crank_femur_256lut[femurInd] + 
+        femurDelta*(uint32_t)crank_femur_256lut[femurInd+1]) >> 6;
+    foot = ((64-femurDelta)*(uint32_t)leg_femur_256lut[femurInd] + 
+        femurDelta*(uint32_t)leg_femur_256lut[femurInd+1]) >> 6;
+    MA = ((64-femurDelta)*(uint32_t)MA_femur_256lut[femurInd] + 
+        femurDelta*(uint32_t)MA_femur_256lut[femurInd+1]) >> 6;
+    */
+
+    //*
+    // Round down to nearest lookup table entry
     femur = calibPos(2) / 64; // Scale position to 8 bits
     if(femur>255){femur=255;}
-    if(femur<0){femur=0;} 
-    return crank_femur_256lut[femur];
+    if(femur<0){femur=0;}
+
+    crank = crank_femur_256lut[femur];
+    foot = leg_femur_256lut[femur];
+    MA = MA_femur_256lut[femur];
+    //*/
 }
 
 
@@ -487,6 +524,25 @@ void updateEuler(long* angs, long* vels, long time) {
     for (i=0; i<3; i++) {
         angs[i] = temp_angle[i];
     }
+}
+
+void updateVelocity(long time) {
+    sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
+    int mot = (unsigned int)(sensor_data->position*motPos_to_femur_crank_units); //UNITFIX
+    int spring_def = mot - crank;
+    if(spring_def < 0){spring_def=0;}
+
+
+
+    spring = 0.3836493898315605*spring_def - 
+        (0.0029279712493158* (((uint32_t)spring_def*(uint32_t)spring_def) >> 14));
+    force = (unsigned int)(((uint32_t)MA)*((uint32_t)spring) >> 13);
+    // sensor_data->position is 1 rad / 2^16 ticks (through a 25 to 1 gear ratio)
+    // crank and spring_def are 4 rad / 2^16 tick, or 1 rad / 2^14 ticks
+    // spring is 1 Nm / 2^14 ticks
+    // MA is 1 N/Nm / 2^9 ticks
+    // force is 1 N / (2^10 ticks)
+
 }
 
 long cosApprox(long x) {

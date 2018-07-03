@@ -52,10 +52,10 @@ long body_lag_sum[3] = {0,0,0};     // average angular velocity over VICON_LAG s
 unsigned char BLL_ind = 0;          // circular buffer index
 
 // Robot position estimation states
-long position[3];       // Esimated robot location in world frame
-long velocity[3];       // Estimated robot velocity in world frame
-long leg;               // Estimated stance phase leg length
-long legVel;            // Estimated stance phase leg extension velocity
+int16_t position[3];       // Esimated robot location in world frame
+int16_t velocity[3];       // Estimated robot velocity in world frame
+int16_t leg;              // Estimated stance phase leg length
+int16_t legVel;            // Estimated stance phase leg extension velocity
 
 unsigned int crank;     // Crank angle
 unsigned int foot;      // Foot distance
@@ -192,17 +192,12 @@ void tailCtrlSetup(){
 }
 
 
-uint32_t startTime4;
-uint32_t timeElapsed4;
-
 #define BVLP_ALPHA 64 // out ouf 256
 ///////        Tail control ISR          ////////
 //////  Installed to Timer5 @ 1000hz  ////////
 void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
     interrupt_count++;
     int i;
-
-    startTime4 = sclockGetTime();
 
     if(interrupt_count <= 5) {
         // Do signal processing on gyro
@@ -238,12 +233,12 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         femurLUTs(); // calculate crank, foot, and MA
         updateVelocity(1); // leg length estimation
 
+        multiJumpFlow();
     }
     if(interrupt_count == 5) 
     {
         interrupt_count = 0;
 
-        multiJumpFlow();
         if(pitchControlFlag == 0){
             //LED_2 = 0;
             // Control/motor off
@@ -275,9 +270,6 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
     }
 
     _T5IF = 0;
-
-    timeElapsed4 = sclockGetTime() - startTime4;
-
 }
 
 
@@ -402,14 +394,18 @@ char footContact(void) {
     }
 }
 
+int16_t lastLegVel = -1<<14;
 char footTakeoff(void) {
     int eps = 1000;
     unsigned int mot;
     sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
     mot = (unsigned int)(sensor_data->position*motPos_to_femur_crank_units); //UNITFIX
-    if ( (mot-BLDC_MOTOR_OFFSET + eps) < crank){
+    if ( ((mot-BLDC_MOTOR_OFFSET + eps) < crank) || 
+        ((legVel < lastLegVel) && (legVel > 4000)) ) {
+        lastLegVel = 3*(lastLegVel >> 2) + (legVel >> 2);
         return 1;
     } else {
+        lastLegVel = 3*(lastLegVel >> 2) + (legVel >> 2);
         return 0;
     }
 }
@@ -435,7 +431,7 @@ long calibPos(char idx){
 
 void femurLUTs(void) { 
     // calculate crank, foot, and MA
-    uint32_t femur, femurInd, femurDelta;
+    uint32_t femur;//, femurInd, femurDelta;
 
     /*
     // Linearly interpolate between lookup table entries
@@ -540,16 +536,44 @@ void updateVelocity(long time) {
     int spring_def = mot - crank;
     if(spring_def < 0){spring_def=0;}
 
-
-
     spring = 0.3836493898315605*spring_def - 
         (0.0029279712493158* (((uint32_t)spring_def*(uint32_t)spring_def) >> 14));
     force = (unsigned int)(((uint32_t)MA)*((uint32_t)spring) >> 13);
+
+    force -= (legVel>0?1:-1)*0.18*force;
     // sensor_data->position is 1 rad / 2^16 ticks (through a 25 to 1 gear ratio)
     // crank and spring_def are 4 rad / 2^16 tick, or 1 rad / 2^14 ticks
     // spring is 1 Nm / 2^14 ticks
     // MA is 1 N/Nm / 2^9 ticks
     // force is 1 N / (2^10 ticks)
+
+    #define GRAV_ACC 39 // -9.81 m/s * (2^2 ticks / m/s^2) 
+    #define MASS 26 // kg / 2^8 ticks: 0.103kg * 2^8
+
+
+    int16_t legErr;
+    if (mj_state == MJ_GND) {
+        legErr = (foot>>2) - leg;
+        if (legErr > 1000) {legErr = 1000;}
+        if (legErr < -1000) {legErr = -1000;} 
+        leg += legVel/31 * time + 3*(legErr >> 2);
+        // leg is in 1 m / 2^16 ticks
+        // conversion from legVel*time to leg is 1000000*2/2^16 or about 31
+        legVel += (((-GRAV_ACC + (int32_t)force/MASS) * time) >> 1) + (legErr << 1);
+        // legVel is in 1 m/s / (1000*2 ticks)
+        // acceleration is in m/s^2 / (2^2 ticks)
+    } else if (mj_state == MJ_AIR) {
+        leg = foot >> 2;
+        legVel -= (GRAV_ACC *time) >> 1;
+    } else {
+        leg = foot >> 2;
+        legVel = 0;
+    }
+
+    if (legVel > 20000) { legVel = 20000;}
+    if (legVel < -20000) {legVel = -20000;}
+
+
 
 }
 
@@ -561,20 +585,17 @@ long cosApprox(long x) {
     // INPUTS:
     // x: angle scaled by 16384 ticks per degree (2000 deg/s MPU gyro integrated @ 1kHz).
 
-    long xSquared;
-    if (x < 0) { x = -x; }
-    long x_mod = (x+PI) % (2*PI) - PI;
-    if (x_mod > (PI/2)) { // quadrant 2
-        x_mod = (x_mod - PI) >> 8;
-        xSquared = x_mod*x_mod;
-        return -(PISQUARED - 4*xSquared)/((PISQUARED + xSquared)>>COS_PREC);
-    } else if (x_mod < (-PI/2)) { // quadrant 3
-        x_mod = (x_mod + PI) >> 8;
-        xSquared = x_mod*x_mod;
-        return -(PISQUARED - 4*xSquared)/((PISQUARED + xSquared)>>COS_PREC);
+    long xSquared, out;
+    x = (x+PI) % (PI<<1) - PI;
+    if (x < 0) { x = -x; } // cosine is even
+    if (x > (PI>>1)) { // quadrants 2 and 3
+        x = (x - PI) >> 8;
+        xSquared = x*x;
+        out = -(PISQUARED - (xSquared<<2))/((PISQUARED + xSquared)>>COS_PREC);
     } else {
-        x_mod = x_mod >> 8; // quadrants 1 and 4
-        xSquared = x_mod*x_mod;
-        return (PISQUARED - 4*xSquared)/((PISQUARED + xSquared)>>COS_PREC);
+        x = x >> 8; // quadrants 1 and 4
+        xSquared = x*x;
+        out = (PISQUARED - (xSquared<<2))/((PISQUARED + xSquared)>>COS_PREC);
     }
+    return out;
 }

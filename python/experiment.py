@@ -76,6 +76,9 @@ def main():
         #'''
         # basic leg extension test
         exp = [2]
+        arbitrary = [0]
+        xb_send(0, command.RESET_BODY_ANG, pack('h', *arbitrary))
+        time.sleep(0.01)
         viconTest = [0,0,0,0,0,0,60*256,80*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(0.01)

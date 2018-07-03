@@ -37,11 +37,8 @@ extern char onboardMode;
 extern unsigned int foot;
 extern unsigned int MA;
 extern unsigned int force;
-
-extern uint32_t timeElapsed1;
-extern uint32_t timeElapsed2;
-extern uint32_t timeElapsed3;
-extern uint32_t timeElapsed4;
+extern int16_t leg;
+extern int32_t legVel;
 
 //void vrTelemGetData(unsigned char* ptr) {
 void vrTelemGetData(vrTelemStruct_t* ptr) {
@@ -82,13 +79,13 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->accelY = xldata[1];
     ptr->accelZ = xldata[2];
 
-    ptr->otherMode = 1;
+    ptr->otherMode = 2;
     ptr->onboardMode = mj_state + (pitchControlFlag <<7) + (onboardMode << 8);
     ptr->voltage = sensor_data->voltage;
-    ptr->crank = timeElapsed1;
-    ptr->foot = timeElapsed2;
-    ptr->MA = timeElapsed3;
-    ptr->force = timeElapsed4;
+    ptr->crank = crank;
+    ptr->foot = leg;
+    ptr->MA = legVel;
+    ptr->force = force;
 }
 
 //This may be unneccesary, since the telemtry type isn't totally anonymous

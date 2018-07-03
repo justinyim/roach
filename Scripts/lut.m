@@ -29,10 +29,10 @@ extension = [-x.*(-9.689463228112449e-2)+x.^2.*6.989908944388874e-2-...
     -x.*(-1.10783409238789e-1)+x.^2.*3.18398134512155e-2-...
     x.^3.*2.62460134201421e-2 + 0.09; ... % Dasher
     - 0.04776*x.^3 + 0.1042*x.^2 + 0.05917*x + 0.07623]; % Unused
-extensionScale = floor((2^16-1)./max(extension,[],2));
+extensionScale = floor((2^16-1)/0.25);%floor((2^16-1)./max(extension,[],2));
 extension_scaled = floor(max(0,extension.*extensionScale));
 
-extScale = max(extension,[],2); % Leg extension in m per 2^16 counts
+extScale = 0.25*ones(size(crankScale));%max(extension,[],2); % Leg extension in m per 2^16 counts
 
 % MA function output is in N/Nm (mechanical advantage from femur angle)
 % TODO: these are currently wrong

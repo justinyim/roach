@@ -51,17 +51,24 @@ long body_lag_log[VICON_LAG][3];    // circular buffer history of body angles fo
 long body_lag_sum[3] = {0,0,0};     // average angular velocity over VICON_LAG steps
 unsigned char BLL_ind = 0;          // circular buffer index
 
-// Robot position estimation states
-int16_t position[3];       // Esimated robot location in world frame
-int16_t velocity[3];       // Estimated robot velocity in world frame
-int16_t leg;              // Estimated stance phase leg length
-int16_t legVel;            // Estimated stance phase leg extension velocity
+long sin_theta = 0;     // pitch angle
+long cos_theta = 1<<COS_PREC;
+long sin_phi = 0;       // roll angle
+long cos_phi = 1<<COS_PREC;
+long sin_psi = 0;       // yaw angle
+long cos_psi = 1<<COS_PREC;
 
-unsigned int crank;     // Crank angle
-unsigned int foot;      // Foot distance
-unsigned int MA;        // Mechanical advantage
-unsigned int spring;      // Spring torque
-unsigned int force;     // Foot force
+// Robot position estimation states
+int16_t position[3];    // Esimated robot location in world frame
+int16_t velocity[3];    // Estimated robot velocity in world frame
+int16_t leg;            // Estimated stance phase leg length
+int16_t legVel;         // Estimated stance phase leg extension velocity
+
+int32_t crank;      // Crank angle
+int32_t foot;       // Foot distance
+int32_t MA;         // Mechanical advantage
+int32_t spring;     // Spring torque
+int32_t force;      // Foot force
 
 // Setpoints and commands
 char pitchControlFlag = 0; // enable/disable attitude control
@@ -248,7 +255,8 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         } else {
             //LED_2 = 1;
             // Control pitch, roll, and yaw
-            if (mj_state == MJ_AIR && pidObjs[0].mode != 2) {
+            if (mj_state == MJ_AIR &&
+                (pidObjs[0].mode != 2 && pidObjs[0].mode != 3 && pidObjs[0].mode != 7)) {
                 tiHChangeMode(1, TIH_MODE_COAST);
                 pidObjs[0].mode = 0;
                 pidObjs[0].p_input = pitchSetpoint;
@@ -394,18 +402,14 @@ char footContact(void) {
     }
 }
 
-int16_t lastLegVel = -1<<14;
 char footTakeoff(void) {
     int eps = 1000;
     unsigned int mot;
     sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
     mot = (unsigned int)(sensor_data->position*motPos_to_femur_crank_units); //UNITFIX
-    if ( ((mot-BLDC_MOTOR_OFFSET + eps) < crank) || 
-        ((legVel < lastLegVel) && (legVel > 4000)) ) {
-        lastLegVel = 3*(lastLegVel >> 2) + (legVel >> 2);
+    if ( ((mot-BLDC_MOTOR_OFFSET + eps) < crank) ) {
         return 1;
     } else {
-        lastLegVel = 3*(lastLegVel >> 2) + (legVel >> 2);
         return 0;
     }
 }
@@ -501,10 +505,10 @@ void updateEuler(long* angs, long* vels, long time) {
         temp_angle[i] = angs[i];
     }
 
-    long sin_theta = cosApprox(temp_angle[2]-PI/2);
-    long cos_theta = cosApprox(temp_angle[2]);
-    long sin_phi = cosApprox(temp_angle[1]-PI/2);
-    long cos_phi = cosApprox(temp_angle[1]);
+    sin_theta = cosApprox(temp_angle[2]-PI/2);
+    cos_theta = cosApprox(temp_angle[2]);
+    sin_phi = cosApprox(temp_angle[1]-PI/2);
+    cos_phi = cosApprox(temp_angle[1]);
 
     // Prevent divide by zero
     if (cos_phi == 0) { cos_phi = 1; }
@@ -530,17 +534,24 @@ void updateEuler(long* angs, long* vels, long time) {
     }
 }
 
+unsigned char last_state = MJ_IDLE;
+#define VEL_BUF_LEN 15
+unsigned char vel_ind = 0;
+int16_t vels[VEL_BUF_LEN];
 void updateVelocity(long time) {
+    // Update the onboard leg velocity estiamtes
+
     sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
-    int mot = (unsigned int)(sensor_data->position*motPos_to_femur_crank_units); //UNITFIX
-    int spring_def = mot - crank;
+    unsigned char i, cntr;
+    int32_t mot = sensor_data->position*motPos_to_femur_crank_units; //UNITFIX
+    int32_t spring_def = mot - crank;
     if(spring_def < 0){spring_def=0;}
 
     spring = 0.3836493898315605*spring_def - 
-        (0.0029279712493158* (((uint32_t)spring_def*(uint32_t)spring_def) >> 14));
-    force = (unsigned int)(((uint32_t)MA)*((uint32_t)spring) >> 13);
+        (0.0029279712493158* ((spring_def*spring_def) >> 14));
+    force = ((MA)*(spring) >> 13);
 
-    force -= (legVel>0?1:-1)*0.18*force;
+    force -= ((legVel>0?1:-1)*18*force/100); // 18/100 = 0.18
     // sensor_data->position is 1 rad / 2^16 ticks (through a 25 to 1 gear ratio)
     // crank and spring_def are 4 rad / 2^16 tick, or 1 rad / 2^14 ticks
     // spring is 1 Nm / 2^14 ticks
@@ -550,21 +561,31 @@ void updateVelocity(long time) {
     #define GRAV_ACC 39 // -9.81 m/s * (2^2 ticks / m/s^2) 
     #define MASS 26 // kg / 2^8 ticks: 0.103kg * 2^8
 
-
-    int16_t legErr;
+    int32_t legErr;
     if (mj_state == MJ_GND) {
         legErr = (foot>>2) - leg;
         if (legErr > 1000) {legErr = 1000;}
-        if (legErr < -1000) {legErr = -1000;} 
+        if (legErr < -1000) {legErr = -1000;}
         leg += legVel/31 * time + 3*(legErr >> 2);
         // leg is in 1 m / 2^16 ticks
         // conversion from legVel*time to leg is 1000000*2/2^16 or about 31
-        legVel += (((-GRAV_ACC + (int32_t)force/MASS) * time) >> 1) + (legErr << 1);
+        legVel += (((-GRAV_ACC + force/MASS) * time) >> 1) + (legErr << 1);
         // legVel is in 1 m/s / (1000*2 ticks)
         // acceleration is in m/s^2 / (2^2 ticks)
     } else if (mj_state == MJ_AIR) {
+
+        if (last_state == MJ_GND) { // robot thinks it just took off; check if takeoff was really earlier
+            cntr = vel_ind;
+            for (i=0; i<VEL_BUF_LEN; i++) {
+                if (vels[cntr] - (GRAV_ACC*i) > legVel) {
+                    legVel = vels[cntr] - (GRAV_ACC*i); // take max velocity as takeoff velocity
+                }
+                cntr = (cntr-1)%VEL_BUF_LEN;
+            }
+        }
+
         leg = foot >> 2;
-        legVel -= (GRAV_ACC *time) >> 1;
+        legVel -= (GRAV_ACC*time) >> 1; // gravitational acceleration
     } else {
         leg = foot >> 2;
         legVel = 0;
@@ -573,7 +594,11 @@ void updateVelocity(long time) {
     if (legVel > 20000) { legVel = 20000;}
     if (legVel < -20000) {legVel = -20000;}
 
+    // Save the recent velocities to check takeoff
+    vels[vel_ind] = legVel;
+    vel_ind = (vel_ind+1)%VEL_BUF_LEN;
 
+    last_state = mj_state;
 
 }
 

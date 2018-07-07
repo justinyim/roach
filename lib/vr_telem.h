@@ -35,8 +35,8 @@ typedef struct {
 
     // Additional modes
     uint16_t crank; // Crank angle
-    uint16_t force; // Foot force
-    uint16_t foot; // Foot distance
+    int16_t force; // Foot force
+    int16_t foot; // Foot distance
     int16_t footVel; // Mechanical advantage
 } vrTelemStruct_t;
 

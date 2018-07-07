@@ -75,6 +75,7 @@
 #include "carray.h"
 #include "protocol.h"
 #include "salto_ctrl.h"
+#include "takeoff_est.h"
 
 static Payload rx_payload;
 static MacPacket rx_packet;
@@ -88,6 +89,7 @@ volatile CircArray fun_queue;
 
 #define TX_COUNT_MAX 285
 
+extern unsigned char TOcompFlag; // TODO: this is a bit of a hack
 
 int main() {
 
@@ -174,6 +176,10 @@ int main() {
                }
                ppoolReturnFullPacket(rx_packet);
             }
+        }
+
+        if (TOcompFlag) { // do long computation at the beginning of flight phase
+            takeoffEstimation();
         }
     }
     return 0;

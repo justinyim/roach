@@ -43,8 +43,8 @@ extern unsigned long t1_ticks;
 int gdata[3];           // raw gyro readings
 
 long body_angle[3];     // Current body angle estimate (0 yaw, 1 roll, 2 pitch)
-long body_velocity[3];  // Current body velocity estimate
-long vicon_angle[3];    // Last Vicon-measured body angle
+long body_velocity[3];  // Current body velocity estimate (0 yaw, 1 roll, 2 pitch)
+long vicon_angle[3];    // Last Vicon-measured body angle (0 yaw, 1 roll, 2 pitch)
 long body_vel_LP[3];    // Low-passed body velocity estimate (0 yaw, 1 roll, 2 pitch)
 #define VICON_LAG 20    // Vicon comms lag in ImageProc control steps (one step per ms)
 long body_lag_log[VICON_LAG][3];    // circular buffer history of body angles for countering lag
@@ -60,7 +60,7 @@ long cos_psi = 1<<COS_PREC;
 
 // Robot position estimation states
 int16_t position[3];    // Esimated robot location in world frame
-int16_t velocity[3];    // Estimated robot velocity in world frame
+int16_t velocity[3];    // Estimated robot velocity in world frame (x, y, z)
 int16_t leg;            // Estimated stance phase leg length
 int16_t legVel;         // Estimated stance phase leg extension velocity
 
@@ -199,7 +199,7 @@ void tailCtrlSetup(){
 }
 
 
-#define BVLP_ALPHA 64 // out ouf 256
+#define BVLP_ALPHA 128 // out ouf 256
 ///////        Tail control ISR          ////////
 //////  Installed to Timer5 @ 1000hz  ////////
 void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
@@ -534,15 +534,24 @@ void updateEuler(long* angs, long* vels, long time) {
     }
 }
 
+
+unsigned char TOcompFlag = 0;
+unsigned char g_accumulator = 0;
+int16_t TOleg;
+int16_t TOlegVel;
+long TObody_angle[3];
+long TObody_vel_LP[3];
+
 unsigned char last_state = MJ_IDLE;
 #define VEL_BUF_LEN 15
 unsigned char vel_ind = 0;
-int16_t vels[VEL_BUF_LEN];
+int16_t legBuf[VEL_BUF_LEN*2];
+long angBuf[VEL_BUF_LEN*6];
 void updateVelocity(long time) {
     // Update the onboard leg velocity estiamtes
 
     sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
-    unsigned char i, cntr;
+    unsigned char i, j, cntr;
     int32_t mot = sensor_data->position*motPos_to_femur_crank_units; //UNITFIX
     int32_t spring_def = mot - crank;
     if(spring_def < 0){spring_def=0;}
@@ -558,7 +567,7 @@ void updateVelocity(long time) {
     // MA is 1 N/Nm / 2^9 ticks
     // force is 1 N / (2^10 ticks)
 
-    #define GRAV_ACC 39 // -9.81 m/s * (2^2 ticks / m/s^2) 
+    #define GRAV_ACC 40 // -9.81 m/s * (2^2 ticks / m/s^2) 
     #define MASS 26 // kg / 2^8 ticks: 0.103kg * 2^8
 
     int32_t legErr;
@@ -572,20 +581,42 @@ void updateVelocity(long time) {
         legVel += (((-GRAV_ACC + force/MASS) * time) >> 1) + (legErr << 1);
         // legVel is in 1 m/s / (1000*2 ticks)
         // acceleration is in m/s^2 / (2^2 ticks)
+
+        velocity[0] = 0; // zero velocities; not really necessary
+        velocity[1] = 0;
     } else if (mj_state == MJ_AIR) {
 
-        if (last_state == MJ_GND) { // robot thinks it just took off; check if takeoff was really earlier
+        if (last_state == MJ_GND) { // robot thinks it just took off; 
+            // save the pose and velocity states for calculating takeoff velocities
+            // first, check if takeoff actually happened earlier
             cntr = vel_ind;
             for (i=0; i<VEL_BUF_LEN; i++) {
-                if (vels[cntr] - (GRAV_ACC*i) > legVel) {
-                    legVel = vels[cntr] - (GRAV_ACC*i); // take max velocity as takeoff velocity
+                if (legBuf[cntr*2+1] - (GRAV_ACC*i) > legVel) {
+                    legVel = legBuf[cntr*2+1] - (GRAV_ACC*i); // take max velocity as takeoff velocity
+                    TOlegVel = legBuf[cntr*2+1];
+                    g_accumulator = i; // set the accumulator to the number of steps elapsed
+
+                    TOleg = legBuf[cntr*2];
+                    for (j=0; j<3; j++) {
+                        TObody_angle[j] = angBuf[cntr*6+j];
+                        TObody_vel_LP[j] = angBuf[cntr*6+3+j];
+                    }
                 }
                 cntr = (cntr-1)%VEL_BUF_LEN;
             }
+            velocity[2] = -velocity[2]; // velocity estimate until real calculation is done
+            TOcompFlag = 1; // tell the main loop to calculate the takeoff velocities
         }
 
         leg = foot >> 2;
         legVel -= (GRAV_ACC*time) >> 1; // gravitational acceleration
+
+        g_accumulator++;
+        if (!TOcompFlag) {
+            velocity[2] -= (GRAV_ACC*g_accumulator) >> 1; // gravitational acceleration
+            g_accumulator = 0;
+        }
+
     } else {
         leg = foot >> 2;
         legVel = 0;
@@ -595,7 +626,12 @@ void updateVelocity(long time) {
     if (legVel < -20000) {legVel = -20000;}
 
     // Save the recent velocities to check takeoff
-    vels[vel_ind] = legVel;
+    legBuf[vel_ind*2] = leg;
+    legBuf[vel_ind*2+1] = legVel;
+    for (i=0; i<3; i++){
+        angBuf[vel_ind*6+i] = body_angle[i];
+        angBuf[vel_ind*6+3+i] = body_vel_LP[i];
+    }
     vel_ind = (vel_ind+1)%VEL_BUF_LEN;
 
     last_state = mj_state;

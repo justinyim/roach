@@ -39,6 +39,7 @@
         <itemPath>../lib/vr_telem.h</itemPath>
         <itemPath>../lib/as5047.h</itemPath>
         <itemPath>../lib/salto_ctrl.h</itemPath>
+        <itemPath>../lib/takeoff_est.h</itemPath>
       </logicalFolder>
       <logicalFolder name="f1" displayName="settings" projectFiles="true">
         <itemPath>../../imageproc-settings/settings.h</itemPath>
@@ -86,6 +87,7 @@
         <itemPath>../lib/as5047.c</itemPath>
         <itemPath>../lib/lut.h</itemPath>
         <itemPath>../lib/salto_ctrl.c</itemPath>
+        <itemPath>../lib/takeoff_est.c</itemPath>
       </logicalFolder>
       <itemPath>source/cmd.c</itemPath>
       <itemPath>source/main.c</itemPath>
@@ -301,6 +303,7 @@
         <property key="ToolFirmwareOption.UseLatestFirmware" value="true"/>
         <property key="UART 1" value="true"/>
         <property key="UART 2" value="true"/>
+        <property key="firmware.download.all" value="false"/>
         <property key="hwtoolclock.frcindebug" value="false"/>
         <property key="memories.aux" value="false"/>
         <property key="memories.bootflash" value="true"/>

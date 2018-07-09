@@ -30,6 +30,9 @@ extern pidPos pidObjs[NUM_PIDS];
 #define PISQUARED   132710400 // bit shifted 16 bits down
 #define COS_PREC    15 // bits of precision in output of cosine
 
+#define GRAV_ACC 40 // -9.81 m/s * (2^2 ticks / m/s^2)
+
+
 
 packet_union_t uart_tx_packet_global; // BLDC motor driver packet
 
@@ -556,19 +559,16 @@ void updateVelocity(long time) {
     int32_t spring_def = mot - crank;
     if(spring_def < 0){spring_def=0;}
 
-    spring = 0.3836493898315605*spring_def - 
-        (0.0029279712493158* ((spring_def*spring_def) >> 14));
+    spring = SPRING_LINEAR*spring_def -
+        (SPRING_QUADRATIC*((spring_def*spring_def) >> 14));
     force = ((MA)*(spring) >> 13);
 
-    force -= ((legVel>0?1:-1)*18*force/100); // 18/100 = 0.18
+    force -= ((legVel>0?1:-1)*LEG_FRICTION*force/1000); // LEG_FRICTION/1000
     // sensor_data->position is 1 rad / 2^16 ticks (through a 25 to 1 gear ratio)
     // crank and spring_def are 4 rad / 2^16 tick, or 1 rad / 2^14 ticks
     // spring is 1 Nm / 2^14 ticks
     // MA is 1 N/Nm / 2^9 ticks
     // force is 1 N / (2^10 ticks)
-
-    #define GRAV_ACC 40 // -9.81 m/s * (2^2 ticks / m/s^2) 
-    #define MASS 26 // kg / 2^8 ticks: 0.103kg * 2^8
 
     int32_t legErr;
     if (mj_state == MJ_GND) {
@@ -578,7 +578,7 @@ void updateVelocity(long time) {
         leg += legVel/31 * time + 3*(legErr >> 2);
         // leg is in 1 m / 2^16 ticks
         // conversion from legVel*time to leg is 1000000*2/2^16 or about 31
-        legVel += (((-GRAV_ACC + force/MASS) * time) >> 1) + (legErr << 1);
+        legVel += (((-GRAV_ACC + force/FULL_MASS) * time) >> 1) + (legErr << 1);
         // legVel is in 1 m/s / (1000*2 ticks)
         // acceleration is in m/s^2 / (2^2 ticks)
 

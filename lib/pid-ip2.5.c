@@ -345,6 +345,7 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
         if (t1_ticks == T1_MAX) t1_ticks = 0;
         t1_ticks++;
         pidGetState();	// always update state, even if motor is coasting
+        /*
         for (j = 0; j< NUM_PIDS; j++) {
         // only update tracking setpoint if time has not yet expired
             if (pidObjs[j].onoff) {
@@ -363,11 +364,34 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
                 }
             }
         }
+        */
         pidSetControl();
     }
     //LED_3 = 0;
     _T1IF = 0;
 }
+
+/* update state variables including motor position and velocity */
+extern long body_angle[3];
+extern long body_vel_LP[3];
+extern long tail_vel;
+extern EncObj motPos;
+long oldTailPos;
+
+void pidGetState()
+{
+    pidObjs[0].p_state = body_angle[2]; //pitch
+    pidObjs[2].p_state = body_angle[1]; //roll
+    pidObjs[3].p_state = body_angle[0]; //yaw
+
+    //int gdata[3];
+    //mpuGetGyro(gdata);
+    pidObjs[0].v_state = body_vel_LP[2]; // Pitch angle
+    pidObjs[2].v_state = body_vel_LP[1]; // Roll angle
+    pidObjs[3].v_state = body_vel_LP[0]; // Yaw angle
+}
+
+
 
 // update desired velocity and position tracking setpoints for each leg
 void pidGetSetpoint(int j){
@@ -410,33 +434,6 @@ void checkSwapBuff(int j){
     }
 }
 
- // select either back emf or backwd diff for vel est
-
-#define VEL_BEMF 0
-
-/* update state variables including motor position and velocity */
-extern long body_angle[3];
-extern long body_vel_LP[3];
-extern long tail_vel;
-extern EncObj motPos;
-long oldTailPos;
-
-void pidGetState()
-{
-    pidObjs[0].p_state = body_angle[2]; //pitch
-    pidObjs[2].p_state = body_angle[1]; //roll
-    pidObjs[3].p_state = body_angle[0]; //yaw
-
-    //int gdata[3];
-    //mpuGetGyro(gdata);
-    pidObjs[0].v_state = body_vel_LP[2]; // Pitch angle
-    pidObjs[2].v_state = body_vel_LP[1]; // Roll angle
-    pidObjs[3].v_state = body_vel_LP[0]; // Yaw angle
-}
-
-
-long min_pos = -3000;
-long max_pos = 1114112;
 
 #define EULER_SCALED_PI 2949120
 #define TAIL_BRAKE 20
@@ -447,10 +444,12 @@ void pidSetControl()
 // 0 = right side
     for(j=0; j < NUM_PIDS; j++)
     {  //pidobjs[0] : right side
-	// p_input has scaled velocity interpolation to make smoother
-	// p_state is [16].[16]
-        pidObjs[j].p_error = pidObjs[j].p_input + pidObjs[j].interpolate  - pidObjs[j].p_state;
-        pidObjs[j].v_error = pidObjs[j].v_input - pidObjs[j].v_state;  // v_input should be revs/sec
+        // p_input has scaled velocity interpolation to make smoother
+        // p_state is [16].[16]
+        //pidObjs[j].p_error = pidObjs[j].p_input + pidObjs[j].interpolate  - pidObjs[j].p_state;
+        //pidObjs[j].v_error = pidObjs[j].v_input - pidObjs[j].v_state;  // v_input should be revs/sec
+        pidObjs[j].p_error = pidObjs[j].p_input - pidObjs[j].p_state;
+        pidObjs[j].v_error = - pidObjs[j].v_state;
         if (j==0 || j==2 || j==3) { // euler angle PIDs wrap around
             if (pidObjs[j].p_error > EULER_SCALED_PI) {
                 pidObjs[j].p_error -= 2*EULER_SCALED_PI;
@@ -488,6 +487,7 @@ void pidSetControl()
         else {tiHSetDC(i+1,0);} // turn off motor if PID loop is off
     }
 }
+
 
 void UpdatePID(pidPos *pid, int num)
 {

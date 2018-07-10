@@ -88,8 +88,8 @@ long tail_prev = 0; // in ticks
 long tail_vel = 0; // in ticks / count
 
 
-#define P_AIR ((2*65536)/10) // leg proportional gain in the air (duty cycle/rad * 65536)
-#define D_AIR ((4*65536)/1000) // leg derivative gain in the air (duty cycle/[rad/s] * 65536)
+#define P_AIR ((1*65536)/10) // leg proportional gain in the air (duty cycle/rad * 65536)
+#define D_AIR ((3*65536)/1000) // leg derivative gain in the air (duty cycle/[rad/s] * 65536)
 #define P_GND ((5*65536)/10) // leg proportional gain on the ground
 #define D_GND ((1*65536)/1000)
 #define P_STAND ((5*65536)/1000) // leg proportional gain for standing
@@ -209,44 +209,41 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
     interrupt_count++;
     int i;
 
-    if(interrupt_count <= 5) {
-        // Do signal processing on gyro
-        mpuGetGyro(gdata); // This should be the only call to mpuGetGyro(gdata)
-        orientImageProc(body_velocity, gdata); // orient gyro readings gdata into body frame body_velocity
+    // Do signal processing on gyro
+    mpuGetGyro(gdata); // This should be the only call to mpuGetGyro(gdata)
+    orientImageProc(body_velocity, gdata); // orient gyro readings gdata into body frame body_velocity
+    for (i=0; i<3; i++) {
+        // Low pass the gyro signal
+        body_vel_LP[i] = ((256-BVLP_ALPHA)*body_vel_LP[i] + BVLP_ALPHA*body_velocity[i])>>8;
 
-        for (i=0; i<3; i++) {
-            body_vel_LP[i] = ((256-BVLP_ALPHA)*body_vel_LP[i] + BVLP_ALPHA*body_velocity[i])>>8;
-        }
+        // Keep a circular buffer of gyro readings for compensating mocap lag
+        body_lag_sum[i] += (-body_lag_log[BLL_ind][i] + body_velocity[i]);
+        body_lag_log[BLL_ind][i] = body_velocity[i];
+    }
+    BLL_ind = (BLL_ind+1)%VICON_LAG; // Circular buffer index
 
-        body_lag_sum[0] += (-body_lag_log[BLL_ind][0] + body_velocity[0]);
-        body_lag_sum[1] += (-body_lag_log[BLL_ind][1] + body_velocity[1]);
-        body_lag_sum[2] += (-body_lag_log[BLL_ind][2] + body_velocity[2]);
-        body_lag_log[BLL_ind][0] = body_velocity[0];
-        body_lag_log[BLL_ind][1] = body_velocity[1];
-        body_lag_log[BLL_ind][2] = body_velocity[2];
-        BLL_ind = (BLL_ind+1)%VICON_LAG;
-
-        //updateEuler(body_angle,body_vel_LP,1);
-        updateEuler(body_angle,body_velocity,1);
-
-        // Additional 1kHz attitude estimator actions
-        if (onboardMode == 3 || onboardMode == 7) {
-            body_angle[1] += (pidObjs[2].output>>7) + (pidObjs[3].output>>7);
-            body_angle[2] += (pidObjs[0].output>>5);//(tail_vel>>3);
-        }
-
+    // Processes to run less frequently -------------------
+    if(interrupt_count % 2) {
+        updateEuler(body_angle,body_vel_LP,2); // attitude integration
+    } else {
         // Tail estimation
         tail_pos = calibPos(1);
-        tail_vel = (((128-TAIL_ALPHA)*tail_vel) >> 7) + ((TAIL_ALPHA*(tail_pos - tail_prev)) >> 7);
+        tail_vel = (((128-TAIL_ALPHA)*tail_vel) >> 7) + ((TAIL_ALPHA*(tail_pos - tail_prev) >> 1) >> 7);
+        // difference >> 1 (divide by 2) because it updates at 500Hz instead of 1kHz now
         tail_prev = tail_pos;
 
-        femurLUTs(); // calculate crank, foot, and MA
-        updateVelocity(1); // leg length estimation
+        // Additional 1kHz attitude estimator actions for toe balance
+        if (onboardMode == 3 || onboardMode == 7) {
+            body_angle[1] += ((pidObjs[2].output>>7) + (pidObjs[3].output>>7))<<1;
+            body_angle[2] += (pidObjs[0].output>>5) << 1;
+            // >> 1 because it updates at 500Hz instead of 1kHz now
+        }
 
-        multiJumpFlow();
+        femurLUTs(); // calculate crank, foot, and MA
+        updateVelocity(2); // leg length estimation
+        multiJumpFlow(); // state machine
     }
-    if(interrupt_count == 5) 
-    {
+    if(interrupt_count == 4) {
         interrupt_count = 0;
 
         if(pitchControlFlag == 0){
@@ -460,8 +457,7 @@ void femurLUTs(void) {
     //*
     // Round down to nearest lookup table entry
     femur = calibPos(2) / 64; // Scale position to 8 bits
-    if(femur>255){femur=255;}
-    if(femur<0){femur=0;}
+    if(femur>255 || femur < 0){return;} // Femur reading is bad: out of physical range
 
     crank = crank_femur_256lut[femur];
     foot = leg_femur_256lut[femur];
@@ -611,7 +607,7 @@ void updateVelocity(long time) {
         leg = foot >> 2;
         legVel -= (GRAV_ACC*time) >> 1; // gravitational acceleration
 
-        g_accumulator++;
+        g_accumulator+=time;
         if (!TOcompFlag) {
             velocity[2] -= (GRAV_ACC*g_accumulator) >> 1; // gravitational acceleration
             g_accumulator = 0;

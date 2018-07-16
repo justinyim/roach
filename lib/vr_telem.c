@@ -40,6 +40,7 @@ extern int32_t force;
 extern int16_t leg;
 extern int32_t legVel;
 extern int16_t velocity[3];
+extern long body_vel_LP[3];
 
 //void vrTelemGetData(unsigned char* ptr) {
 void vrTelemGetData(vrTelemStruct_t* ptr) {
@@ -73,12 +74,24 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->dcProp2 = pidObjs[3].output; // Fore
 
     //gyro and XL
+    //*
     ptr->gyroX = gdata[0];
     ptr->gyroY = gdata[1];
     ptr->gyroZ = gdata[2];
     ptr->accelX = xldata[0];
     ptr->accelY = xldata[1];
     ptr->accelZ = xldata[2];
+    //*/
+    /*
+    //ptr->otherMode = 6; // onboard body velocities and lowpass angular velocity in place of accels
+    ptr->gyroX = gdata[0];
+    ptr->gyroY = gdata[1];
+    ptr->gyroZ = gdata[2];
+    ptr->accelX = body_vel_LP[0];
+    ptr->accelY = body_vel_LP[1];
+    ptr->accelZ = body_vel_LP[2];
+    */
+
 
     /*
     ptr->otherMode = 4;
@@ -99,6 +112,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->foot = velocity[1];
     ptr->footVel = velocity[2];
     //*/
+
 }
 
 //This may be unneccesary, since the telemtry type isn't totally anonymous

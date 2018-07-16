@@ -73,7 +73,7 @@ def main():
             startTelemetrySave(numSamples)
 
 
-       # '''
+        #'''
         # basic leg extension test
         exp = [2]
         arbitrary = [0]
@@ -125,7 +125,8 @@ def main():
         time.sleep(3.0)
         motorgains = [350,0,30,0,0, 0,0,0,0,0]
         xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
-
+        '''
+        '''
         time.sleep(5.0)
         viconTest = [0,0,0,0,0,0,58*256,58*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))

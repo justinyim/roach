@@ -183,7 +183,7 @@ void pidSetInput(int pid_num, int input_val){
 unsigned long temp;	
 /*      ******   use velocity setpoint + throttle for compatibility between Hall and Pullin code *****/
 /* otherwise, miss first velocity set point */
-    pidObjs[pid_num].v_input = input_val + (int)(( (long)pidVel[pid_num].vel[0] * K_EMF) >> 8);	//initialize first velocity ;
+    pidObjs[pid_num].v_input = input_val + (int)(( (long)pidVel[pid_num].vel[0] * K_EMF) >> 8);	//init first vel
     pidObjs[pid_num].start_time = t1_ticks;
     //zero out running PID values
     pidObjs[pid_num].i_error = 0;
@@ -323,7 +323,7 @@ extern volatile MacPacket uart_tx_packet;
 extern volatile unsigned char uart_tx_flag;
 
 void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
-    int j,i;
+    //int j,i;
     interrupt_count++;
 
     //Telemetry save, at 1Khz

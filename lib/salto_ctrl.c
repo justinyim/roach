@@ -30,7 +30,7 @@ extern pidPos pidObjs[NUM_PIDS];
 #define PISQUARED   132710400 // bit shifted 16 bits down
 #define COS_PREC    15 // bits of precision in output of cosine
 
-#define GRAV_ACC 40 // -9.81 m/s * (2^2 ticks / m/s^2)
+#define GRAV_ACC 39 // -9.81 m/s * (2^2 ticks / m/s^2)
 
 
 
@@ -223,9 +223,10 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
     BLL_ind = (BLL_ind+1)%VICON_LAG; // Circular buffer index
 
     // Processes to run less frequently -------------------
-    if(interrupt_count % 2) {
+    // Estimators and planning below swap off on odd and even counts
+    if(interrupt_count % 2) { // odd
         updateEuler(body_angle,body_vel_LP,2); // attitude integration
-    } else {
+    } else { // even
         // Tail estimation
         tail_pos = calibPos(1);
         tail_vel = (((128-TAIL_ALPHA)*tail_vel) >> 7) + ((TAIL_ALPHA*(tail_pos - tail_prev) >> 1) >> 7);
@@ -236,14 +237,15 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         if (onboardMode == 3 || onboardMode == 7) {
             body_angle[1] += ((pidObjs[2].output>>7) + (pidObjs[3].output>>7))<<1;
             body_angle[2] += (pidObjs[0].output>>5) << 1;
-            // >> 1 because it updates at 500Hz instead of 1kHz now
+            // << 1 because it updates at 500Hz instead of 1kHz now
         }
 
-        femurLUTs(); // calculate crank, foot, and MA
+        femurLUTs(); // calculate crank angle, foot distance, and MA
         updateVelocity(2); // leg length estimation
         multiJumpFlow(); // state machine
     }
-    if(interrupt_count == 4) {
+
+    if(interrupt_count == 4) { // reset interrupt_count after 4 counts
         interrupt_count = 0;
 
         if(pitchControlFlag == 0){
@@ -542,16 +544,22 @@ long TObody_angle[3];
 long TObody_vel_LP[3];
 
 unsigned char last_state = MJ_IDLE;
-#define VEL_BUF_LEN 15
+#define VEL_BUF_LEN 10
 unsigned char vel_ind = 0;
 int16_t legBuf[VEL_BUF_LEN*2];
 long angBuf[VEL_BUF_LEN*6];
+int32_t last_mot;
 void updateVelocity(long time) {
     // Update the onboard leg velocity estiamtes
-
+    unsigned char i, j;
+    char cntr;
     sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
-    unsigned char i, j, cntr;
     int32_t mot = sensor_data->position*motPos_to_femur_crank_units; //UNITFIX
+    if (mot - last_mot > 1<<14 || last_mot - mot > 1<<14) {
+        mot = last_mot; // reject bad samples
+    }
+    last_mot = mot;
+
     int32_t spring_def = mot - crank;
     if(spring_def < 0){spring_def=0;}
 
@@ -586,11 +594,13 @@ void updateVelocity(long time) {
             // save the pose and velocity states for calculating takeoff velocities
             // first, check if takeoff actually happened earlier
             cntr = vel_ind;
+            TOlegVel = legVel;
             for (i=0; i<VEL_BUF_LEN; i++) {
-                if (legBuf[cntr*2+1] - (GRAV_ACC*i) > legVel) {
-                    legVel = legBuf[cntr*2+1] - (GRAV_ACC*i); // take max velocity as takeoff velocity
+                if (legBuf[cntr*2+1] - ((GRAV_ACC*i*time) >> 1) > legVel) { // TODO: time assumed constant
+                    legVel = legBuf[cntr*2+1] - ((GRAV_ACC*i*time) >> 1) ; // take max velocity as takeoff velocity
+
                     TOlegVel = legBuf[cntr*2+1];
-                    g_accumulator = i; // set the accumulator to the number of steps elapsed
+                    g_accumulator = i*time; // set the accumulator to the number of steps elapsed
 
                     TOleg = legBuf[cntr*2];
                     for (j=0; j<3; j++) {
@@ -598,8 +608,12 @@ void updateVelocity(long time) {
                         TObody_vel_LP[j] = angBuf[cntr*6+3+j];
                     }
                 }
-                cntr = (cntr-1)%VEL_BUF_LEN;
+                cntr = cntr-1;
+                if (cntr < 0) {cntr = VEL_BUF_LEN - 1;}
             }
+            legVel += 500; // takeoff boost of 0.25 m/s?
+            TOlegVel += 500;
+
             velocity[2] = -velocity[2]; // velocity estimate until real calculation is done
             TOcompFlag = 1; // tell the main loop to calculate the takeoff velocities
         }
@@ -624,9 +638,9 @@ void updateVelocity(long time) {
     // Save the recent velocities to check takeoff
     legBuf[vel_ind*2] = leg;
     legBuf[vel_ind*2+1] = legVel;
-    for (i=0; i<3; i++){
-        angBuf[vel_ind*6+i] = body_angle[i];
-        angBuf[vel_ind*6+3+i] = body_vel_LP[i];
+    for (j=0; j<3; j++){
+        angBuf[vel_ind*6+j] = body_angle[j];
+        angBuf[vel_ind*6+3+j] = body_vel_LP[j];
     }
     vel_ind = (vel_ind+1)%VEL_BUF_LEN;
 

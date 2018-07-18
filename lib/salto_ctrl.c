@@ -26,14 +26,6 @@
 extern pidPos pidObjs[NUM_PIDS];
 
 
-#define PI          2949120 // 180(deg) * 2^15(ticks)/2000(deg/s) * 1000(Hz)
-#define PISQUARED   132710400 // bit shifted 16 bits down
-#define COS_PREC    15 // bits of precision in output of cosine
-
-#define GRAV_ACC 39 // -9.81 m/s * (2^2 ticks / m/s^2)
-
-
-
 packet_union_t uart_tx_packet_global; // BLDC motor driver packet
 
 static volatile unsigned char interrupt_count = 0;
@@ -44,12 +36,12 @@ extern unsigned long t1_ticks;
 
 // Orientation
 int gdata[3];           // raw gyro readings
-
+#define BVLP_ALPHA 128  // Low pass attitude angles (out ouf 256)
+#define VICON_LAG 20    // Vicon comms lag in ImageProc control steps (one step per ms)
 long body_angle[3];     // Current body angle estimate (0 yaw, 1 roll, 2 pitch)
 long body_velocity[3];  // Current body velocity estimate (0 yaw, 1 roll, 2 pitch)
 long vicon_angle[3];    // Last Vicon-measured body angle (0 yaw, 1 roll, 2 pitch)
 long body_vel_LP[3];    // Low-passed body velocity estimate (0 yaw, 1 roll, 2 pitch)
-#define VICON_LAG 20    // Vicon comms lag in ImageProc control steps (one step per ms)
 long body_lag_log[VICON_LAG][3];    // circular buffer history of body angles for countering lag
 long body_lag_sum[3] = {0,0,0};     // average angular velocity over VICON_LAG steps
 unsigned char BLL_ind = 0;          // circular buffer index
@@ -74,7 +66,7 @@ int32_t spring;     // Spring torque
 int32_t force;      // Foot force
 
 // Setpoints and commands
-char pitchControlFlag = 0; // enable/disable attitude control
+char controlFlag = 0; // enable/disable attitude control
 char onboardMode = 0; // mode for onboard controllers & estimators
 volatile long pitchSetpoint = 0;
 volatile long rollSetpoint = 0;
@@ -82,7 +74,7 @@ volatile long yawSetpoint = 0;
 volatile long legSetpoint = 0;  // Aerial leg setpoint
 volatile long pushoffCmd = 0;   // Ground leg command
 
-#define TAIL_ALPHA 25 // out of 128
+#define TAIL_ALPHA 25 // Low pass tail velocity out of 128
 long tail_pos = 0; // in ticks
 long tail_prev = 0; // in ticks
 long tail_vel = 0; // in ticks / count
@@ -100,8 +92,8 @@ uint32_t GAINS_GND = (P_GND<<16)+D_GND;
 uint32_t GAINS_STAND = (P_STAND<<16)+D_STAND;
 
 
-void setPitchControlFlag(char state){
-    pitchControlFlag = state;
+void setControlFlag(char state){
+    controlFlag = state;
 }
 
 void setOnboardMode(char mode, char flags){
@@ -129,7 +121,7 @@ void setPushoffCmd(long cmd){
 void updateViconAngle(long* new_vicon_angle){
     int i;
 
-    if (onboardMode == 1 || onboardMode == 3 || onboardMode == 7){ // onboardMode 1: use only gyro integration
+    if (onboardMode & 0b111){ // use only gyro integration
         return;
     }
 
@@ -202,7 +194,6 @@ void tailCtrlSetup(){
 }
 
 
-#define BVLP_ALPHA 128 // out ouf 256
 ///////        Tail control ISR          ////////
 //////  Installed to Timer5 @ 1000hz  ////////
 void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
@@ -234,7 +225,7 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         tail_prev = tail_pos;
 
         // Additional 1kHz attitude estimator actions for toe balance
-        if (onboardMode == 3 || onboardMode == 7) {
+        if (onboardMode & 0b110) { // balance CG above toe and zero attitude
             body_angle[1] += ((pidObjs[2].output>>7) + (pidObjs[3].output>>7))<<1;
             body_angle[2] += (pidObjs[0].output>>5) << 1;
             // << 1 because it updates at 500Hz instead of 1kHz now
@@ -245,34 +236,35 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         multiJumpFlow(); // state machine
     }
 
+    if(interrupt_count == 2) {
+        raibert(); // onboard velocity control
+    }
+
     if(interrupt_count == 4) { // reset interrupt_count after 4 counts
         interrupt_count = 0;
 
-        if(pitchControlFlag == 0){
-            //LED_2 = 0;
-            // Control/motor off
+        if(controlFlag == 0){ // Control/motor off
             pidObjs[0].onoff = 0;
             pidObjs[2].onoff = 0;
             pidObjs[3].onoff = 0;
-        } else {
-            //LED_2 = 1;
-            // Control pitch, roll, and yaw
-            if (mj_state == MJ_AIR &&
-                (pidObjs[0].mode != 2 && pidObjs[0].mode != 3 && pidObjs[0].mode != 7)) {
-                tiHChangeMode(1, TIH_MODE_COAST);
-                pidObjs[0].mode = 0;
-                pidObjs[0].p_input = pitchSetpoint;
-            } else if (onboardMode == 3 || onboardMode == 7) { // standing on the ground
+        } else { // Control pitch, roll, and yaw
+            if (onboardMode & 0b110) { // standing on the ground
                 tiHChangeMode(1, TIH_MODE_COAST);
                 pidObjs[0].mode = 2;
-            } else { // brake on the ground
-                if (ROBOT_NAME == SALTO_1P_SANTA) {
-                    tiHChangeMode(1, TIH_MODE_BRAKE);
-                    pidObjs[0].mode = 1;
-                } else {
-                    pidObjs[0].mode = 1;
+            } else { // normal jumping operation
+                if (mj_state == MJ_AIR) { // in the air
+                    tiHChangeMode(1, TIH_MODE_COAST);
+                    pidObjs[0].mode = 0;
+                    pidObjs[0].p_input = pitchSetpoint;
+                } else { // brake on the ground
+                    if (ROBOT_NAME == SALTO_1P_SANTA) {
+                        tiHChangeMode(1, TIH_MODE_BRAKE);
+                        pidObjs[0].mode = 1;
+                    } else {
+                        pidObjs[0].mode = 1;
+                    }
+                    //pidObjs[0].pwmDes = 0; this is not useful
                 }
-                //pidObjs[0].pwmDes = 0; this is not useful
             }
             pidObjs[2].p_input = rollSetpoint;
             pidObjs[3].p_input = yawSetpoint;
@@ -301,7 +293,7 @@ void multiJumpFlow() {
     switch(mj_state) {
         case MJ_START:
             pidObjs[0].timeFlag = 0;
-            setPitchControlFlag(1);
+            setControlFlag(1);
             pidOn(0);
             pidOn(2);
             pidOn(3);
@@ -326,10 +318,10 @@ void multiJumpFlow() {
                 mj_state = MJ_GND;
                 transition_time = t1_ticks;
             } else { // remain in air state
-                if (onboardMode != 7) {
-                    send_command_packet(&uart_tx_packet_global, legSetpoint, GAINS_AIR, 2);
-                } else {
+                if (onboardMode & 0b100) { // static standing on ground
                     send_command_packet(&uart_tx_packet_global, legSetpoint, GAINS_STAND, 2);
+                } else { // normal operation
+                    send_command_packet(&uart_tx_packet_global, legSetpoint, GAINS_AIR, 2);
                 }
             }
             break;
@@ -340,10 +332,10 @@ void multiJumpFlow() {
                 mj_state = MJ_AIR;
                 transition_time = t1_ticks;
             } else { // remain in ground state
-                if (onboardMode != 7) {
-                    send_command_packet(&uart_tx_packet_global, pushoffCmd, GAINS_GND, 2);
-                } else {
+                if (onboardMode & 0b100) { // static standing on ground
                     send_command_packet(&uart_tx_packet_global, legSetpoint, GAINS_STAND, 2);
+                } else { // normal operation
+                    send_command_packet(&uart_tx_packet_global, pushoffCmd, GAINS_GND, 2);
                 }
             }
             break;
@@ -535,7 +527,7 @@ void updateEuler(long* angs, long* vels, long time) {
     }
 }
 
-
+// Pass these estimates to takeoff_est.c for velocity estimation on takeoff
 unsigned char TOcompFlag = 0;
 unsigned char g_accumulator = 0;
 int16_t TOleg;
@@ -544,11 +536,14 @@ long TObody_angle[3];
 long TObody_vel_LP[3];
 
 unsigned char last_state = MJ_IDLE;
-#define VEL_BUF_LEN 10
+#define VEL_BUF_LEN 10  // Buffer to find peak velocity at takeoff
 unsigned char vel_ind = 0;
 int16_t legBuf[VEL_BUF_LEN*2];
 long angBuf[VEL_BUF_LEN*6];
 int32_t last_mot;
+
+#define GRAV_ACC 39 // -9.81 m/s * (2^2 ticks / m/s^2)
+
 void updateVelocity(long time) {
     // Update the onboard leg velocity estiamtes
     unsigned char i, j;
@@ -574,8 +569,9 @@ void updateVelocity(long time) {
     // MA is 1 N/Nm / 2^9 ticks
     // force is 1 N / (2^10 ticks)
 
+    // Update leg and leg velocity estimates
     int32_t legErr;
-    if (mj_state == MJ_GND) {
+    if (mj_state == MJ_GND) { // Stance phase estimation
         legErr = (foot>>2) - leg;
         if (legErr > 1000) {legErr = 1000;}
         if (legErr < -1000) {legErr = -1000;}
@@ -588,7 +584,7 @@ void updateVelocity(long time) {
 
         velocity[0] = 0; // zero velocities; not really necessary
         velocity[1] = 0;
-    } else if (mj_state == MJ_AIR) {
+    } else if (mj_state == MJ_AIR) { // Flight phase estimation
 
         if (last_state == MJ_GND) { // robot thinks it just took off; 
             // save the pose and velocity states for calculating takeoff velocities
@@ -646,6 +642,21 @@ void updateVelocity(long time) {
 
     last_state = mj_state;
 
+}
+
+#define T_STEP 70 // 70 ms
+#define K_RAIBERT 8 // 0.008 m/(m/s)
+#define CTRL_CONVERT 1/2 // 0.5 ~ 0.4694 // from meters to radians PI / (3.14159 *1000*2000)
+volatile long x_ctrl, y_ctrl;
+void raibert() {
+    x_ctrl = CTRL_CONVERT*((T_STEP*velocity[0]/2 + K_RAIBERT*(0 - velocity[0]))*0.2);
+    y_ctrl = CTRL_CONVERT*((T_STEP*velocity[1]/2 - K_RAIBERT*(0 - velocity[1]))*0.2);
+    x_ctrl = x_ctrl > PI/6 ? PI/6 :
+             x_ctrl < -PI/6 ? -PI/6 :
+             x_ctrl;
+    y_ctrl = y_ctrl > PI/6 ? PI/6 :
+             y_ctrl < -PI/6 ? -PI/6 :
+             y_ctrl;
 }
 
 long cosApprox(long x) {

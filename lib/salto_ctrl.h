@@ -13,12 +13,16 @@
 
 #define UART_PERIOD     10 // minimum UART period in ms (must be positive integer)
 
+// Parameters for cosApprox
+#define PI          2949120 // 180(deg) * 2^15(ticks)/2000(deg/s) * 1000(Hz)
+#define PISQUARED   132710400 // bit shifted 16 bits down
+#define COS_PREC    15 // bits of precision in output of cosine
 
 
 void SetupTimer5();
 void tailCtrlSetup();
 
-void setPitchControlFlag(char state);
+void setControlFlag(char state);
 void resetBodyAngle();
 void calibGyroBias();
 void accZeroAtt();
@@ -45,5 +49,6 @@ void updateEuler(long* angs, long* vels, long time);
 long cosApprox(long x);
 
 void updateVelocity(long time);
+void raibert();
 
 #endif // __SALTO_CTRL_H

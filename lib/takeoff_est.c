@@ -2,10 +2,6 @@
 #include "takeoff_est.h"
 #include "salto_ctrl.h"
 
-#define PI          2949120 // 180(deg) * 2^15(ticks)/2000(deg/s) * 1000(Hz)
-#define PISQUARED   132710400 // bit shifted 16 bits down
-#define COS_PREC    15 // bits of precision in output of cosine
-
 
 extern int16_t TOleg;
 extern int16_t TOlegVel;

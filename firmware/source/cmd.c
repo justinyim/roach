@@ -211,7 +211,7 @@ unsigned char cmdSetPitchSetpoint(unsigned char type, unsigned char status, unsi
     {
         pos += ((long)frame[i] << 8*i );
     }
-    setPitchControlFlag(1);
+    setControlFlag(1);
     setAttitudeSetpoint(0,0,pos);
     return 1;
 }
@@ -469,7 +469,7 @@ unsigned char cmdPIDStartMotors(unsigned char type, unsigned char status, unsign
     pidObjs[i].p_input = pidObjs[i].p_state;
     pidOn(i);
     }
-    setPitchControlFlag(1);
+    setControlFlag(1);
 
     return 1;
 }

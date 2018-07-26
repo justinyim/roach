@@ -141,7 +141,7 @@ void resetBodyAngle(){
 }
 
 void calibGyroBias(){
-    mpuRunCalib(0,3); //re-offset gyro, assumes stationary
+    mpuRunCalib(0,5); //re-offset gyro, assumes stationary
     // TODO this fucntion call is sometimes causing Salto to hang
 }
 
@@ -187,9 +187,13 @@ void tailCtrlSetup(){
     pidObjs[2].v_input = 0;
     pidObjs[3].v_input = 0;
 
-    send_command_packet(&uart_tx_packet_global, 0, BLDC_CALIB, 16);
+    send_command_packet(&uart_tx_packet_global, 0, BLDC_CALIB, 16); // set BLDC angle offset
     delay_ms(10);
     send_command_packet(&uart_tx_packet_global, 0, BLDC_CALIB, 16);
+    delay_ms(10);
+    send_command_packet(&uart_tx_packet_global, 0, (3*65536/4), 17); // set BLDC max PWM (65536=100%)
+    delay_ms(10);
+    send_command_packet(&uart_tx_packet_global, 0, (3*65536/4), 17);
 
 }
 
@@ -668,6 +672,7 @@ long cosApprox(long x) {
     // x: angle scaled by 16384 ticks per degree (2000 deg/s MPU gyro integrated @ 1kHz).
 
     long xSquared, out;
+    if (x < 0) { x = -x; } // cosine is even
     x = (x+PI) % (PI<<1) - PI;
     if (x < 0) { x = -x; } // cosine is even
     if (x > (PI>>1)) { // quadrants 2 and 3

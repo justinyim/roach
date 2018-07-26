@@ -15,8 +15,8 @@
 
 // Parameters for cosApprox
 #define PI          2949120 // 180(deg) * 2^15(ticks)/2000(deg/s) * 1000(Hz)
-#define PISQUARED   32400 // bit shifted 28 bits down
-#define COS_PREC    8 // bits of precision in output of cosine
+#define PISQUARED   132710400 // bit shifted 16 bits down
+#define COS_PREC    15 // bits of precision in output of cosine
 
 
 void SetupTimer5();
@@ -46,7 +46,7 @@ void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint3
 
 void orientImageProc(long* body_frame, int* ImageProc_frame);
 void updateEuler(long* angs, long* vels, long time);
-int16_t cosApprox(long x);
+long cosApprox(long x);
 
 void updateVelocity(long time);
 void raibert();

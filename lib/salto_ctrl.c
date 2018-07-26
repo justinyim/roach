@@ -46,12 +46,12 @@ long body_lag_log[VICON_LAG][3];    // circular buffer history of body angles fo
 long body_lag_sum[3] = {0,0,0};     // average angular velocity over VICON_LAG steps
 unsigned char BLL_ind = 0;          // circular buffer index
 
-int16_t sin_theta = 0;     // pitch angle
-int16_t cos_theta = 1<<COS_PREC;
-int16_t sin_phi = 0;       // roll angle
-int16_t cos_phi = 1<<COS_PREC;
-int16_t sin_psi = 0;       // yaw angle
-int16_t cos_psi = 1<<COS_PREC;
+long sin_theta = 0;     // pitch angle
+long cos_theta = 1<<COS_PREC;
+long sin_phi = 0;       // roll angle
+long cos_phi = 1<<COS_PREC;
+long sin_psi = 0;       // yaw angle
+long cos_psi = 1<<COS_PREC;
 
 // Robot position estimation states
 int16_t position[3];    // Esimated robot location in world frame
@@ -141,7 +141,7 @@ void resetBodyAngle(){
 }
 
 void calibGyroBias(){
-    mpuRunCalib(0,5); //re-offset gyro, assumes stationary
+    mpuRunCalib(0,3); //re-offset gyro, assumes stationary
     // TODO this fucntion call is sometimes causing Salto to hang
 }
 
@@ -190,8 +190,6 @@ void tailCtrlSetup(){
     send_command_packet(&uart_tx_packet_global, 0, BLDC_CALIB, 16);
     delay_ms(10);
     send_command_packet(&uart_tx_packet_global, 0, BLDC_CALIB, 16);
-    delay_ms(10);
-    send_command_packet(&uart_tx_packet_global, 0, (3*65536/4), 17);
 
 }
 
@@ -508,7 +506,7 @@ void updateEuler(long* angs, long* vels, long time) {
     // Prevent divide by zero
     if (cos_phi == 0) { cos_phi = 1; }
 
-    // Update Euler angles by projecting body-fixed angular velocities into Euler basis
+    // Update Euler angles
     temp_angle[2] += ((sin_phi*sin_theta*vels[1]/cos_phi
             + (vels[2] << COS_PREC)
             - cos_theta*sin_phi*vels[0]/cos_phi)*time) >> COS_PREC;
@@ -595,7 +593,7 @@ void updateVelocity(long time) {
             TOlegVel = legVel;
             for (i=0; i<VEL_BUF_LEN; i++) {
                 if (legBuf[cntr*2+1] - ((GRAV_ACC*i*time) >> 1) > legVel) { // TODO: time assumed constant
-                    legVel = legBuf[cntr*2+1] - ((GRAV_ACC*i*time) >> 1) ; // take peak vel as takeoff vel
+                    legVel = legBuf[cntr*2+1] - ((GRAV_ACC*i*time) >> 1) ; // take max velocity as takeoff velocity
 
                     TOlegVel = legBuf[cntr*2+1];
                     g_accumulator = i*time; // set the accumulator to the number of steps elapsed
@@ -661,7 +659,7 @@ void raibert() {
              y_ctrl;
 }
 
-int16_t cosApprox(long x) {
+long cosApprox(long x) {
     // Cosine approximation by Bhaskara I's method:
     // https://en.wikipedia.org/wiki/Bhaskara_I%27s_sine_approximation_formula
     //
@@ -669,16 +667,15 @@ int16_t cosApprox(long x) {
     // INPUTS:
     // x: angle scaled by 16384 ticks per degree (2000 deg/s MPU gyro integrated @ 1kHz).
 
-    int16_t xSquared, out;
-    if (x < 0) { x = -x; } // cosine is even
+    long xSquared, out;
     x = (x+PI) % (PI<<1) - PI;
     if (x < 0) { x = -x; } // cosine is even
     if (x > (PI>>1)) { // quadrants 2 and 3
-        x = (x - PI) >> 14;
+        x = (x - PI) >> 8;
         xSquared = x*x;
         out = -(PISQUARED - (xSquared<<2))/((PISQUARED + xSquared)>>COS_PREC);
     } else {
-        x = x >> 14; // quadrants 1 and 4
+        x = x >> 8; // quadrants 1 and 4
         xSquared = x*x;
         out = (PISQUARED - (xSquared<<2))/((PISQUARED + xSquared)>>COS_PREC);
     }

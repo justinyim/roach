@@ -33,7 +33,7 @@ def main():
 
     xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h', *thrustGains))
 
-    duration = 5000#15000
+    duration = 400#5000#15000
     rightFreq = 0
     leftFreq = 0
     phase = 0
@@ -142,7 +142,15 @@ def main():
         params.duration = params.duration - 8
         '''
 
+        '''
+        # Long run for calibrating gyro drift
+        arbitrary = [0]
+        xb_send(0, command.RESET_BODY_ANG, pack('h', *arbitrary))
+        time.sleep(0.01)
+        xb_send(0, command.GYRO_BIAS, pack('h', *arbitrary))
+        time.sleep(0.01)
 
+        '''
 
         '''
         # small step calibration for crank

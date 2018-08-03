@@ -116,12 +116,6 @@ void setOnboardMode(char mode, char flags){
 }
 
 void setAttitudeSetpoint(long yaw, long roll, long pitch){
-
-    if (onboardMode == 0b1000){ // use onboard control
-        yawSetpoint = yaw;
-        return;
-    }
-
     yawSetpoint = yaw;
     rollSetpoint = roll;
     pitchSetpoint = pitch;
@@ -139,19 +133,6 @@ void updateViconAngle(long* new_vicon_angle){
     int i;
 
     if (onboardMode & 0b1111){ // use only gyro integration
-        if (onboardMode == 0b1000){ // use onboard control
-            for (i=0; i<3; i++){
-                vel_des[i] = new_vicon_angle[i];
-            }
-            vel_des[0] = vel_des[0] > 3000 ? 3000 :
-                         vel_des[0] < -3000 ? -3000 :
-                         vel_des[0];
-            vel_des[1] = vel_des[1] > 3000 ? 3000 :
-                         vel_des[1] < -3000 ? -3000 :
-                         vel_des[1];
-            vel_des[0] = 000;
-            return;
-        }
         return;
     }
 
@@ -161,6 +142,22 @@ void updateViconAngle(long* new_vicon_angle){
         vicon_angle[i] = new_vicon_angle[i];
         body_angle[i] = 3*(body_angle[i] >> 2) + (new_vicon_angle[i] >> 2);
     }
+}
+
+void setVelocitySetpoint(int16_t* new_vel_des, long new_yaw) {
+    int i;
+
+    new_vel_des[0] = vel_des[0] > 3000 ? 3000 :
+                     vel_des[0] < -3000 ? -3000 :
+                     vel_des[0];
+    new_vel_des[1] = vel_des[1] > 3000 ? 3000 :
+                     vel_des[1] < -3000 ? -3000 :
+                     vel_des[1];
+
+    for (i=0; i<3; i++){
+        vel_des[i] = new_vel_des[i];
+    }
+    yawSetpoint = new_yaw;
 }
 
 void resetBodyAngle(){

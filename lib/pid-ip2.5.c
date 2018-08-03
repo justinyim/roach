@@ -373,7 +373,7 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
 
 /* update state variables including motor position and velocity */
 extern long body_angle[3];
-extern long body_vel_LP[3];
+extern long body_velocity[3];
 extern long tail_vel;
 extern EncObj motPos;
 long oldTailPos;
@@ -386,9 +386,9 @@ void pidGetState()
 
     //int gdata[3];
     //mpuGetGyro(gdata);
-    pidObjs[0].v_state = body_vel_LP[2]; // Pitch angle
-    pidObjs[2].v_state = body_vel_LP[1]; // Roll angle
-    pidObjs[3].v_state = body_vel_LP[0]; // Yaw angle
+    pidObjs[0].v_state = (pidObjs[0].v_state>>1) + (body_velocity[2]>>1); // Pitch angle
+    pidObjs[2].v_state = (pidObjs[2].v_state>>1) + (body_velocity[1]>>1); // Roll angle
+    pidObjs[3].v_state = (pidObjs[3].v_state>>1) + (body_velocity[0]>>1); // Yaw angle
 }
 
 

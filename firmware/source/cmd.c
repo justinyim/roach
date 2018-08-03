@@ -57,6 +57,7 @@ static unsigned char cmdCalibrateMotor(unsigned char type, unsigned char status,
 static unsigned char cmdOnboardMode(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdGyroBias(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdGVectAtt(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
+static unsigned char cmdSetVelocity(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 
 //Motor and PID functions
 static unsigned char cmdSetThrustOpenLoop(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
@@ -109,6 +110,7 @@ void cmdSetup(void) {
     cmd_func[CMD_ONBOARD_MODE] = &cmdOnboardMode;
     cmd_func[CMD_GYRO_BIAS] = &cmdGyroBias;
     cmd_func[CMD_G_VECT_ATT] = &cmdGVectAtt;
+    cmd_func[CMD_SET_VELOCITY] = &cmdSetVelocity;
 }
 
 void cmdPushFunc(MacPacket rx_packet) {
@@ -236,6 +238,20 @@ unsigned char cmdIntegratedVicon(unsigned char type, unsigned char status, unsig
     setAttitudeSetpoint(new_setpoints[0],new_setpoints[1],new_setpoints[2]);
     setLegSetpoint(leg_length);
     setPushoffCmd(pushoff);
+
+    return 1;
+}
+
+unsigned char cmdSetVelocity(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
+    // Set desired velocity to be tracked by onboard hopping control
+    int16_t new_vel_des[3];
+    long new_yaw;
+    int i;
+    for (i=0; i<3; i++){
+        new_vel_des[i] = (int16_t)frame[2*i] + ((int16_t)frame[2*i+1] << 8);
+    }
+    new_yaw = ((int16_t)frame[6] + ((int16_t)frame[7] << 8)) << 8;
+    setVelocitySetpoint(new_vel_des, new_yaw);
 
     return 1;
 }

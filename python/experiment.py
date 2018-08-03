@@ -143,6 +143,12 @@ def main():
         '''
 
 
+        #'''
+        # Testing commands
+        velocityTest = [0, 0, 0, 0]
+        xb_send(0, command.SET_VELOCITY, pack('4h', *velocityTest))
+        #'''
+
 
         '''
         # small step calibration for crank

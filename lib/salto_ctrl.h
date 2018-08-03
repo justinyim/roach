@@ -18,7 +18,7 @@
 #define PISQUARED   132710400 // bit shifted 16 bits down
 #define COS_PREC    15 // bits of precision in output of cosine
 
-#define ATT_CORRECTION_GAIN 16   // 8 is about equal to PI/180/2000 for 1 degree correction per 1 meter per second
+#define ATT_CORRECTION_GAIN 12   // 8 is about equal to PI/180/2000 for 1 degree correction per 1 meter per second
 
 void SetupTimer5();
 void tailCtrlSetup();
@@ -33,6 +33,7 @@ void updateViconAngle(long* new_vicon_angle);
 void setAttitudeSetpoint(long yaw, long roll, long pitch);
 void setLegSetpoint(long length);
 void setPushoffCmd(long cmd);
+void setVelocitySetpoint(int16_t* new_vel_des, long new_yaw);
 
 void expStart(uint8_t startSignal);
 void expStop(uint8_t stopSignal);

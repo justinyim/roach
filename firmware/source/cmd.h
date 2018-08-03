@@ -35,6 +35,7 @@
 #define CMD_ONBOARD_MODE            0xA3
 #define CMD_GYRO_BIAS               0xA4
 #define CMD_G_VECT_ATT              0xA5
+#define CMD_SET_VELOCITY            0xA6
 // Redefine
 
 void cmdSetup(void);

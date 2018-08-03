@@ -11,6 +11,8 @@ extern long TObody_vel_LP[3];
 extern unsigned char TOcompFlag;
 extern int16_t velocity[3];
 
+volatile extern int16_t stance_vel_des[3];
+volatile extern long att_correction[2];
 
 void takeoffEstimation(){
     //Calculate estimated velocities on takeoff
@@ -24,7 +26,7 @@ void takeoffEstimation(){
 
     // Compensate for CG offset
     TObody_vel_LP[2] -= 0.3*4/4*TOlegVel*0.469; // (2^15/2000*180/pi)/2000 = 0.4694
-    TObody_vel_LP[1] -= 0.2*4/4*TOlegVel*0.469;
+    TObody_vel_LP[1] -= 0.1*4/4*TOlegVel*0.469;
 
     // Body velocity rotation matrix
     int32_t vxw = (int32_t)TOleg*(int32_t)TObody_vel_LP[2]/30760;
@@ -47,6 +49,9 @@ void takeoffEstimation(){
         + ((TOsin_phi*vyw) >> COS_PREC)
         + ((((TOcos_theta*TOcos_phi) >> COS_PREC)*TOlegVel) >> COS_PREC);
     //Z1X2Y3 https://en.wikipedia.org/wiki/Euler_angles
+
+    att_correction[0] = -ATT_CORRECTION_GAIN*((long)(velocity[0] - stance_vel_des[0]));
+    att_correction[1] = ATT_CORRECTION_GAIN*((long)(velocity[1] - stance_vel_des[1]));
 
     TOcompFlag = 0;
 }

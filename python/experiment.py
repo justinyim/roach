@@ -33,7 +33,7 @@ def main():
 
     xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h', *thrustGains))
 
-    duration = 5000
+    duration = 100
     rightFreq = 0
     leftFreq = 0
     phase = 0
@@ -73,7 +73,7 @@ def main():
             startTelemetrySave(numSamples)
 
 
-        #'''
+        '''
         # basic leg extension test
         exp = [2]
         arbitrary = [0]
@@ -84,7 +84,7 @@ def main():
         time.sleep(0.01)
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
 
-        #'''
+        '''
 
 
         '''
@@ -145,7 +145,7 @@ def main():
 
         #'''
         # Testing commands
-        velocityTest = [0, 0, 0, 0]
+        velocityTest = [2000, 0, 0, 0] # vx, vy, vz, 2000 ticks per m/s, yaw in 3667 ticks per rad
         xb_send(0, command.SET_VELOCITY, pack('4h', *velocityTest))
         #'''
 

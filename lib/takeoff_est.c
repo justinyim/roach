@@ -29,8 +29,10 @@ void takeoffEstimation(){
     TObody_vel_LP[1] -= 0.1*4/4*TOlegVel*0.469;
 
     // Body velocity rotation matrix
-    int32_t vxw = (int32_t)TOleg*(int32_t)TObody_vel_LP[2]/30760;
-    int32_t vyw = -(int32_t)TOleg*(int32_t)TObody_vel_LP[1]/30760;
+    int32_t vxw = 14418*(int32_t)TObody_vel_LP[2]/30760; // locking TOleg at 0.22m
+    int32_t vyw = -14418*(int32_t)TObody_vel_LP[1]/30760;
+    //int32_t vxw = (int32_t)TOleg*(int32_t)TObody_vel_LP[2]/30760;
+    //int32_t vyw = -(int32_t)TOleg*(int32_t)TObody_vel_LP[1]/30760;
     // native units (body_vel_LP*leg: 2000/2^15 (deg/s)/tick * 1/2^16 m/ticks * pi/180 rad/deg
     // final units (legVel): 1/2000 (m/s)/tick
     // unit conversion: 1/30760.437 tick/tick

@@ -147,12 +147,12 @@ void updateViconAngle(long* new_vicon_angle){
 void setVelocitySetpoint(int16_t* new_vel_des, long new_yaw) {
     int i;
 
-    new_vel_des[0] = vel_des[0] > 3000 ? 3000 :
-                     vel_des[0] < -3000 ? -3000 :
-                     vel_des[0];
-    new_vel_des[1] = vel_des[1] > 3000 ? 3000 :
-                     vel_des[1] < -3000 ? -3000 :
-                     vel_des[1];
+    new_vel_des[0] = new_vel_des[0] > 3000 ? 3000 :
+                     new_vel_des[0] < -3000 ? -3000 :
+                     new_vel_des[0];
+    new_vel_des[1] = new_vel_des[1] > 3000 ? 3000 :
+                     new_vel_des[1] < -3000 ? -3000 :
+                     new_vel_des[1];
 
     for (i=0; i<3; i++){
         vel_des[i] = new_vel_des[i];

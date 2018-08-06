@@ -322,6 +322,9 @@ static volatile unsigned char telemetry_count = 0;
 extern volatile MacPacket uart_tx_packet;
 extern volatile unsigned char uart_tx_flag;
 
+unsigned char telemDecimateCount;
+#define TELEM_DECIMATE 1
+
 void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
     //int j,i;
     interrupt_count++;
@@ -329,7 +332,10 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
     //Telemetry save, at 1Khz
     //TODO: Break coupling between PID module and telemetry triggering
     if(interrupt_count == 3) {
-        telemSaveNow();
+        if (!telemDecimateCount){
+            telemSaveNow();
+        }
+        telemDecimateCount = (telemDecimateCount+1)%TELEM_DECIMATE;
     }
     //Update IMU
     //TODO: Break coupling between PID module and IMU update

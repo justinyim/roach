@@ -33,7 +33,7 @@ def main():
 
     xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h', *thrustGains))
 
-    duration = 100
+    duration = 4000#15000
     rightFreq = 0
     leftFreq = 0
     phase = 0
@@ -73,18 +73,17 @@ def main():
             startTelemetrySave(numSamples)
 
 
-        '''
+        #'''
         # basic leg extension test
         exp = [2]
         arbitrary = [0]
         xb_send(0, command.RESET_BODY_ANG, pack('h', *arbitrary))
         time.sleep(0.01)
-        viconTest = [0,0,0,0,0,0,65*256,80*256]#55*256,70*256]
+        viconTest = [0,0,0,0,0,0,70*256,80*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(0.01)
-        xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
-
-        '''
+        #xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
+        #'''
 
 
         '''
@@ -143,12 +142,6 @@ def main():
         '''
 
 
-        #'''
-        # Testing commands
-        velocityTest = [2000, 0, 0, 0] # vx, vy, vz, 2000 ticks per m/s, yaw in 3667 ticks per rad
-        xb_send(0, command.SET_VELOCITY, pack('4h', *velocityTest))
-        #'''
-
 
         '''
         # small step calibration for crank
@@ -159,8 +152,20 @@ def main():
             viconTest = [0,0,0,0,0,0, x*256, x*256]
             xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
             time.sleep(0.3)
+        '''
 
-        ''' 
+
+        '''
+        # small step calibration for crank 2
+        # leg extension test with variable motor gains
+        arbitrary = [0]
+        # motor deflection [radians * 256], P gain [65536 * duty cyle/rad], D gain [65536 * duty cyle/(rad/s)]
+        for x in np.hstack((np.linspace(0,90,19),np.linspace(85,0,18))):
+            legPosition = [x*256, 0.02*65536, 0.005*65536]
+            xb_send(0, command.SET_MOTOR_POS, pack('3h', *legPosition))
+            time.sleep(0.07)
+        '''
+
 
         '''
         # five leg extension points

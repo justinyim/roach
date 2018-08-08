@@ -372,7 +372,7 @@ void multiJumpFlow() {
 
         case MJ_GND:
             // Liftoff transition from ground to air
-            if (t1_ticks - transition_time > 50 && (footTakeoff() == 1 || calibPos(2) > FULL_EXTENSION)) {
+            if (t1_ticks - transition_time > 50 && footTakeoff() == 1) {
                 mj_state = MJ_AIR;
                 transition_time = t1_ticks;
             } else { // remain in ground state
@@ -427,17 +427,16 @@ void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint3
 extern packet_union_t* last_bldc_packet;
 extern uint8_t last_bldc_packet_is_new;
 
+char last_contact = 0;
 char footContact(void) {
-    int eps = 1000;
+    int eps = 2000;
     unsigned int mot;
     sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
     mot = (unsigned int)(sensor_data->position*motPos_to_femur_crank_units); //UNITFIX
-    if ( mot-BLDC_MOTOR_OFFSET>crank && (mot-BLDC_MOTOR_OFFSET - eps) > crank)
-    {
-        return 1;
-    } else {
-        return 0;
-    }
+    char this_contact = mot-BLDC_MOTOR_OFFSET>crank && (mot-BLDC_MOTOR_OFFSET - eps) > crank;
+    char contact = this_contact && last_contact;
+    last_contact = this_contact;
+    return contact;
 }
 
 char footTakeoff(void) {
@@ -445,11 +444,7 @@ char footTakeoff(void) {
     unsigned int mot;
     sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
     mot = (unsigned int)(sensor_data->position*motPos_to_femur_crank_units); //UNITFIX
-    if ( ((mot-BLDC_MOTOR_OFFSET + eps) < crank) ) {
-        return 1;
-    } else {
-        return 0;
-    }
+    return ((mot-BLDC_MOTOR_OFFSET + eps) < crank) || calibPos(2) > FULL_EXTENSION;
 }
 
 long calibPos(char idx){
@@ -551,11 +546,11 @@ void updateEuler(long* angs, long* vels, long time) {
     if (cos_phi == 0) { cos_phi = 1; }
 
     // Update Euler angles
-    temp_angle[2] += ((sin_phi*sin_theta*vels[1]/cos_phi
+    temp_angle[2] += (((sin_phi*sin_theta/cos_phi)*vels[1]
             + (vels[2] << COS_PREC)
-            - cos_theta*sin_phi*vels[0]/cos_phi)*time) >> COS_PREC;
+            - (cos_theta*sin_phi/cos_phi)*vels[0])*time) >> COS_PREC;
     temp_angle[1] += (cos_theta*vels[1] + sin_theta*vels[0])*time >> COS_PREC;
-    temp_angle[0] += (-sin_theta*vels[1]/cos_phi + cos_theta*vels[0]/cos_phi)*time;
+    temp_angle[0] += ((-sin_theta*vels[1])/cos_phi + (cos_theta*vels[0])/cos_phi)*time;
 
     // Wrap Euler angles around at +/-180 degrees
     for (i=0; i<3; i++) {
@@ -658,8 +653,8 @@ void updateVelocity(long time) {
                 cntr = cntr-1;
                 if (cntr < 0) {cntr = VEL_BUF_LEN - 1;}
             }
-            legVel += 500; // takeoff boost of 0.25 m/s?
-            TOlegVel += 500;
+            legVel += 700; // takeoff boost of 0.35 m/s
+            TOlegVel += 700;
 
             velocity[2] = -velocity[2]; // velocity estimate until real calculation is done
             TOcompFlag = 1; // tell the main loop to calculate the takeoff velocities

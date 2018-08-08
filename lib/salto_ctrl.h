@@ -18,7 +18,7 @@
 #define PISQUARED   132710400 // bit shifted 16 bits down
 #define COS_PREC    15 // bits of precision in output of cosine
 
-#define ATT_CORRECTION_GAIN 12   // 8 is about equal to PI/180/2000 for 1 degree correction per 1 meter per second
+#define ATT_CORRECTION_GAIN 6   // 8 is about equal to PI/180/2000 for 1 degree correction per 1 meter per second
 
 void SetupTimer5();
 void tailCtrlSetup();

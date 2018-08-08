@@ -322,8 +322,8 @@ static volatile unsigned char telemetry_count = 0;
 extern volatile MacPacket uart_tx_packet;
 extern volatile unsigned char uart_tx_flag;
 
-unsigned char telemDecimateCount;
-#define TELEM_DECIMATE 1
+unsigned char telemDecimateCount = 0;
+#define TELEM_DECIMATE 20
 
 void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
     //int j,i;

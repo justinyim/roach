@@ -25,14 +25,14 @@ void takeoffEstimation(){
     long TOsin_psi = cosApprox(TObody_angle[0]-PI/2);
 
     // Compensate for CG offset
-    TObody_vel_LP[2] -= 0.3*4/4*TOlegVel*0.469; // (2^15/2000*180/pi)/2000 = 0.4694
-    TObody_vel_LP[1] -= 0.1*4/4*TOlegVel*0.469;
+    TObody_vel_LP[2] -= 0.25*4/4*TOlegVel*0.469; // (2^15/2000*180/pi)/2000 = 0.4694
+    TObody_vel_LP[1] -= 0.2*4/4*TOlegVel*0.469;
 
     // Body velocity rotation matrix
-    int32_t vxw = 14418*(int32_t)TObody_vel_LP[2]/30760; // locking TOleg at 0.22m
-    int32_t vyw = -14418*(int32_t)TObody_vel_LP[1]/30760;
-    //int32_t vxw = (int32_t)TOleg*(int32_t)TObody_vel_LP[2]/30760;
-    //int32_t vyw = -(int32_t)TOleg*(int32_t)TObody_vel_LP[1]/30760;
+    //int32_t vxw = 14418*(int32_t)TObody_vel_LP[2]/30760; // locking TOleg at 0.22m
+    //int32_t vyw = -14418*(int32_t)TObody_vel_LP[1]/30760;
+    int32_t vxw = (int32_t)TOleg*(int32_t)TObody_vel_LP[2]/30760;
+    int32_t vyw = -(int32_t)TOleg*(int32_t)TObody_vel_LP[1]/30760;
     // native units (body_vel_LP*leg: 2000/2^15 (deg/s)/tick * 1/2^16 m/ticks * pi/180 rad/deg
     // final units (legVel): 1/2000 (m/s)/tick
     // unit conversion: 1/30760.437 tick/tick
@@ -52,8 +52,17 @@ void takeoffEstimation(){
         + ((((TOcos_theta*TOcos_phi) >> COS_PREC)*TOlegVel) >> COS_PREC);
     //Z1X2Y3 https://en.wikipedia.org/wiki/Euler_angles
 
+    velocity[1] = velocity[1]*0.8;
+
     att_correction[0] = -ATT_CORRECTION_GAIN*((long)(velocity[0] - stance_vel_des[0]));
     att_correction[1] = ATT_CORRECTION_GAIN*((long)(velocity[1] - stance_vel_des[1]));
+
+    att_correction[0] = att_correction[0] > 10000 ? 10000 :
+                        att_correction[0] < -10000 ? -10000 :
+                        att_correction[0];
+    att_correction[1] = att_correction[1] > 10000 ? 10000 :
+                        att_correction[1] < -10000 ? -10000 :
+                        att_correction[1];
 
     TOcompFlag = 0;
 }

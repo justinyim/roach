@@ -250,7 +250,7 @@ unsigned char cmdSetVelocity(unsigned char type, unsigned char status, unsigned 
     for (i=0; i<3; i++){
         new_vel_des[i] = (int16_t)frame[2*i] + ((int16_t)frame[2*i+1] << 8);
     }
-    new_yaw = ((int16_t)frame[6] + ((int16_t)frame[7] << 8)) << 8;
+    new_yaw = ((long)frame[6] + ((long)frame[7] << 8)) << 8;
     setVelocitySetpoint(new_vel_des, new_yaw);
 
     return 1;

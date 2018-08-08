@@ -75,6 +75,7 @@ int32_t force;      // Foot force [2^10 ticks/N]
 #define CTRL_CONVERT 1 // >> 1 is about 0.469 = PI/3.14159  * 1/(1000*2000) // from meters to radians
 #define INVERSE_LEG_LEN 5 // 5 = 1/0.2m
 long x_ctrl, y_ctrl;    // Onboard roll and pitch commands
+long z_ctrl, ext_ctrl;  // Onboard leg retraction and extension
 
 // Setpoints and commands
 char controlFlag = 0; // enable/disable attitude control
@@ -267,6 +268,8 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         } else if (onboardMode == 0b1000) { // onboard hopping control
             pitchSetpoint = x_ctrl;
             rollSetpoint = y_ctrl;
+            legSetpoint = z_ctrl;
+            pushoffCmd = ext_ctrl;
             if(att_correction[0] != 0 || att_correction[1] != 0) { // gyro anti-drift
                 body_angle[1] -= att_correction[1];
                 body_angle[2] -= att_correction[0];
@@ -704,6 +707,12 @@ void raibert() {
     y_ctrl = y_ctrl > PI/6 ? PI/6 :
              y_ctrl < -PI/6 ? -PI/6 :
              y_ctrl;
+
+    z_ctrl = -328*(long)vel_des[2] + (90*65536);
+    z_ctrl = z_ctrl > (70*65536) ? (70*65536) :
+             z_ctrl < (55*65536) ? (55*65536) :
+             z_ctrl;
+    ext_ctrl = (80*65536);
 }
 
 

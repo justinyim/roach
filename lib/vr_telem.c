@@ -41,10 +41,12 @@ extern int16_t leg;
 extern int32_t legVel;
 extern int16_t velocity[3];
 extern long body_vel_LP[3];
+extern int32_t robot_pos[3];
 
 extern long x_ctrl;
 extern long y_ctrl;
 extern int16_t vel_des[3];
+extern long att_correction[2];
 
 //void vrTelemGetData(unsigned char* ptr) {
 void vrTelemGetData(vrTelemStruct_t* ptr) {
@@ -156,7 +158,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->accelY = vel_des[1];
     ptr->accelZ = vel_des[2];
     */
-    //*
+    /*
     // leg and body velocity
     ptr->otherMode = 10;
     ptr->onboardMode = mj_state + (controlFlag <<7) + (onboardMode << 8);
@@ -168,7 +170,34 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->force = velocity[0];
     ptr->foot = velocity[1];
     ptr->footVel = velocity[2];
+    */
+    /*
+    // body velocity and attitude corrections
+    ptr->otherMode = 11;
+    ptr->onboardMode = mj_state + (controlFlag <<7) + (onboardMode << 8);
+    ptr->voltage = sensor_data->voltage;
+    ptr->crank = crank;
+    ptr->accelX = att_correction[0];
+    ptr->accelY = att_correction[1];
+    ptr->accelZ = legVel;
+    ptr->force = velocity[0];
+    ptr->foot = velocity[1];
+    ptr->footVel = velocity[2];
+    */
+    //*
+    // robot position
+    ptr->otherMode = 12;
+    ptr->onboardMode = mj_state + (controlFlag <<7) + (onboardMode << 8);
+    ptr->voltage = sensor_data->voltage;
+    ptr->crank = crank;
+    ptr->accelX = robot_pos[0]/100;
+    ptr->accelY = robot_pos[1]/100;
+    ptr->accelZ = robot_pos[2]/100;
+    ptr->force = velocity[0];
+    ptr->foot = velocity[1];
+    ptr->footVel = velocity[2];
     //*/
+
 
 }
 

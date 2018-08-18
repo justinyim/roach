@@ -36,7 +36,7 @@ extern unsigned long t1_ticks;
 
 // Orientation
 int gdata[3];           // raw gyro readings
-#define BVLP_ALPHA 64  // Low pass attitude angles (out ouf 256)
+#define BVLP_ALPHA 64   // Low pass attitude angles (out ouf 256)
 #define VICON_LAG 20    // Vicon comms lag in ImageProc control steps (one step per ms)
 long body_angle[3];     // Current body angle estimate (0 yaw, 1 roll, 2 pitch) [PI ticks/(pi rad)]
 long body_velocity[3];  // Current angular velocity estimate (0 yaw, 1 roll, 2 pitch) [2^15 ticks/(2000 deg/s)]
@@ -56,13 +56,14 @@ long sin_psi = 0;       // yaw angle
 long cos_psi = 1<<COS_PREC;
 
 // Robot position estimation states
-int16_t position[3];    // Esimated robot location in world frame (UNUSED)
+int32_t robot_pos[3];   // Esimated robot location in world frame [100,000 ticks/m]
 int16_t velocity[3];    // Estimated robot velocity in world frame (x, y, z) [2000 ticks/(m/s)]
 int16_t leg;            // Estimated stance phase leg length [2^16 ticks/m]
 int16_t legVel;         // Estimated stance phase leg extension velocity [2000 ticks/(m/s)]
 int16_t vel_des[3];     // Desired velocities [2000 ticks/(m/s)]
 int16_t stance_vel_des[3]; // Desired velocities at touchdown [2000 ticks/(m/s)]
 long att_correction[2]; // Stance attitude correction [PI ticks/(pi rad)]
+char ac_flag = 0;       // att_correction is populuated with a new correction
 
 int32_t crank;      // Crank angle [2^14 ticks/rad]
 int32_t foot;       // Foot distance [2^14 ticks/m]
@@ -71,9 +72,10 @@ int32_t spring;     // Spring torque [2^14 ticks/(Nm)]
 int32_t force;      // Foot force [2^10 ticks/N]
 
 #define T_STEP 70//70 // 70 ms
-#define K_RAIBERT 8//8 // 0.008 m/(m/s) = 8 ms
+#define K_RAIBERT 10//8 // 0.008 m/(m/s) = 8 ms
 #define CTRL_CONVERT 1 // >> 1 is about 0.469 = PI/3.14159  * 1/(1000*2000) // from meters to radians
 #define INVERSE_LEG_LEN 5 // 5 = 1/0.2m
+long ctrl_vect[3];
 long x_ctrl, y_ctrl;    // Onboard roll and pitch commands
 long z_ctrl, ext_ctrl;  // Onboard leg retraction and extension
 
@@ -90,6 +92,27 @@ volatile long pushoffCmd = 0;   // Ground leg command
 long tail_pos = 0; // in ticks
 long tail_prev = 0; // in ticks
 long tail_vel = 0; // in ticks / count
+
+
+// Pass these estimates to takeoff_est.c for velocity estimation on takeoff
+unsigned char TOcompFlag = 0;
+unsigned char g_accumulator = 0;
+int16_t TOleg;
+int16_t TOlegVel;
+long TObody_angle[3];
+long TObody_vel_LP[3];
+
+long TDbody_angle[3];
+int16_t TDvelocity[3];
+
+unsigned char last_state = MJ_IDLE;
+#define VEL_BUF_LEN 10  // Buffer to find peak velocity at takeoff
+unsigned char vel_ind = 0;
+int16_t legBuf[VEL_BUF_LEN*2];
+long angBuf[VEL_BUF_LEN*6];
+int32_t last_mot;
+
+#define GRAV_ACC 39 // -9.81 m/s * (2^2 ticks / m/s^2)
 
 
 #define P_AIR ((1*65536)/10) // leg proportional gain in the air (duty cycle/rad * 65536)
@@ -148,17 +171,42 @@ void updateViconAngle(long* new_vicon_angle){
 void setVelocitySetpoint(int16_t* new_vel_des, long new_yaw) {
     int i;
 
-    new_vel_des[0] = new_vel_des[0] > 3000 ? 3000 :
-                     new_vel_des[0] < -3000 ? -3000 :
+    //new_vel_des[0] += velocity[0];
+    //new_vel_des[1] += velocity[1];
+
+    /*
+    // Hacky position hold
+    vel_des[2] = 4905; // 2.452m/s: or 0.5s flight time
+    vel_des[0] = -robot_pos[0]/100;
+    vel_des[1] = -robot_pos[1]/100;
+    return;
+    // Hacky position hold
+    */
+
+    if (velocity[2] < 0) {
+        // Update only until apex
+        return;
+    }
+
+    new_vel_des[0] = new_vel_des[0] > 4000 ? 4000 :
+                     new_vel_des[0] < -4000 ? -4000 :
                      new_vel_des[0];
-    new_vel_des[1] = new_vel_des[1] > 3000 ? 3000 :
-                     new_vel_des[1] < -3000 ? -3000 :
+    new_vel_des[1] = new_vel_des[1] > 4000 ? 4000 :
+                     new_vel_des[1] < -4000 ? -4000 :
                      new_vel_des[1];
 
     for (i=0; i<3; i++){
         vel_des[i] = new_vel_des[i];
     }
     yawSetpoint = new_yaw;
+
+    while (yawSetpoint > PI) {
+        yawSetpoint -= 2*PI;
+    }
+    while (yawSetpoint < -PI) {
+        yawSetpoint += 2*PI;
+    }
+
 }
 
 void resetBodyAngle(){
@@ -169,8 +217,12 @@ void resetBodyAngle(){
 }
 
 void calibGyroBias(){
-    mpuRunCalib(0,5); //re-offset gyro, assumes stationary
-    // TODO this fucntion call is sometimes causing Salto to hang
+    DisableIntT1;
+    DisableIntT5;
+    mpuRunCalib(0,10); //re-offset gyro, assumes stationary
+    // TODO enableing and disabling interrupts is a little shady
+    EnableIntT1;
+    EnableIntT5;
 }
 
 void accZeroAtt(){
@@ -270,11 +322,10 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
             rollSetpoint = y_ctrl;
             legSetpoint = z_ctrl;
             pushoffCmd = ext_ctrl;
-            if(att_correction[0] != 0 || att_correction[1] != 0) { // gyro anti-drift
+            if(ac_flag) { // gyro anti-drift
                 body_angle[1] -= att_correction[1];
                 body_angle[2] -= att_correction[0];
-                att_correction[0] = 0;
-                att_correction[1] = 0;
+                ac_flag = 0;
             }
         }
 
@@ -284,11 +335,21 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
     }
 
     if(interrupt_count == 2) {
-        raibert(); // onboard velocity control
+        //raibert(); // onboard velocity control
+        //*
+        ext_ctrl = deadbeat(velocity, vel_des, ctrl_vect); // onboard velocity control
+        x_ctrl = ctrl_vect[0];
+        y_ctrl = ctrl_vect[1];
+        z_ctrl = ctrl_vect[2];
+        //*/
     }
 
     if(interrupt_count == 4) { // reset interrupt_count after 4 counts
         interrupt_count = 0;
+
+        // Update yaw angle approximations
+        cos_psi = cosApprox(body_angle[0]);
+        sin_psi = cosApprox(body_angle[0]-PI/2);
 
         if(controlFlag == 0){ // Control/motor off
             pidObjs[0].onoff = 0;
@@ -365,17 +426,13 @@ void multiJumpFlow() {
                 mj_state = MJ_GND;
                 transition_time = t1_ticks;
             } else { // remain in air state
-                if (onboardMode & 0b100) { // static standing on ground
-                    send_command_packet(&uart_tx_packet_global, legSetpoint, GAINS_STAND, 2);
-                } else { // normal operation
-                    send_command_packet(&uart_tx_packet_global, legSetpoint, GAINS_AIR, 2);
-                }
+                send_command_packet(&uart_tx_packet_global, legSetpoint, GAINS_AIR, 2);
             }
             break;
 
         case MJ_GND:
             // Liftoff transition from ground to air
-            if (t1_ticks - transition_time > 50 && footTakeoff() == 1) {
+            if (t1_ticks - transition_time > 50 && footTakeoff() == 1 && crank > 8192) {
                 mj_state = MJ_AIR;
                 transition_time = t1_ticks;
             } else { // remain in ground state
@@ -510,13 +567,13 @@ void orientImageProc(long* body_frame, int* ImageProc_frame) {
         // -55 degrees about roll
         // x axis right, y axis forwards, z axis up from ImageProc
         body_frame[0] = (147*((long)ImageProc_frame[2]) + 210*((long)ImageProc_frame[0]))>>8; //yaw
-        body_frame[1] = ImageProc_frame[1];
+        body_frame[1] = ImageProc_frame[1]; // roll
         body_frame[2] = (-147*((long)ImageProc_frame[0]) + 210*((long)ImageProc_frame[2]))>>8; //pitch
 #elif ROBOT_NAME == SALTO_1P_DASHER
-        // -55 degrees about x, follwed by 180 degrees about body z
-        body_frame[0] = (147*((long)ImageProc_frame[2]) - 210*((long)ImageProc_frame[0]))>>8; //yaw
-        body_frame[1] = -ImageProc_frame[1];
-        body_frame[2] = (147*((long)ImageProc_frame[0]) + 210*((long)ImageProc_frame[2]))>>8; //pitch
+        // -60 degrees about x, follwed by 180 degrees about body z
+        body_frame[0] = (128*((long)ImageProc_frame[2]) - 221*((long)ImageProc_frame[0]))>>8; //yaw
+        body_frame[1] = -ImageProc_frame[1]; // roll
+        body_frame[2] = (128*((long)ImageProc_frame[0]) + 221*((long)ImageProc_frame[2]))>>8; //pitch
 #elif ROBOT_NAME == SALTO_1P_SANTA
         // -45 degrees about pitch
         body_frame[0] = (((long)(ImageProc_frame[2] + ImageProc_frame[1]))*181)>>8; //yaw
@@ -569,23 +626,6 @@ void updateEuler(long* angs, long* vels, long time) {
     }
 }
 
-// Pass these estimates to takeoff_est.c for velocity estimation on takeoff
-unsigned char TOcompFlag = 0;
-unsigned char g_accumulator = 0;
-int16_t TOleg;
-int16_t TOlegVel;
-long TObody_angle[3];
-long TObody_vel_LP[3];
-
-unsigned char last_state = MJ_IDLE;
-#define VEL_BUF_LEN 10  // Buffer to find peak velocity at takeoff
-unsigned char vel_ind = 0;
-int16_t legBuf[VEL_BUF_LEN*2];
-long angBuf[VEL_BUF_LEN*6];
-int32_t last_mot;
-
-#define GRAV_ACC 39 // -9.81 m/s * (2^2 ticks / m/s^2)
-
 void updateVelocity(long time) {
     // Update the onboard leg velocity estiamtes
     unsigned char i, j;
@@ -618,6 +658,8 @@ void updateVelocity(long time) {
         if (last_state == MJ_AIR) { // The robot just touched down
             for (j=0; j<3; j++) {
                 stance_vel_des[j] = vel_des[j]; // Save the desired velocities
+                TDbody_angle[j] = body_angle[j]; // Save the touchdown body angles
+                TDvelocity[j] = velocity[j]; // Save the touchdown body velocities
             }
         }
 
@@ -672,6 +714,11 @@ void updateVelocity(long time) {
             g_accumulator = 0;
         }
 
+        // Integrate robot position
+        for (j=0; j<3; j++){
+            robot_pos[j] += velocity[j]*time/20;
+        }
+
     } else {
         leg = foot >> 2;
         legVel = 0;
@@ -708,13 +755,86 @@ void raibert() {
              y_ctrl < -PI/6 ? -PI/6 :
              y_ctrl;
 
-    z_ctrl = -328*(long)vel_des[2] + (90*65536);
-    z_ctrl = z_ctrl > (70*65536) ? (70*65536) :
+    z_ctrl = -328*(long)vel_des[2] + (93*65536);
+    z_ctrl = z_ctrl > (75*65536) ? (75*65536) :
              z_ctrl < (55*65536) ? (55*65536) :
              z_ctrl;
     ext_ctrl = (80*65536);
 }
 
+
+long deadbeat(int16_t* vi, int16_t* vo, long* ctrl) {
+    long ox = vo[0];
+    long oy = vo[1];
+    long oz = vo[2]-6600;
+
+    long ix = ((long)vi[0]*cos_psi + (long)vi[1]*sin_psi)>>COS_PREC;//vi[0];
+    long iy = (-(long)vi[0]*sin_psi + (long)vi[1]*cos_psi)>>COS_PREC;//vi[1];
+    long iz = (vi[2] > -2000 ? -2000 : vi[2]) + 6600;
+
+    long ixix = (ix*ix)>>11; // >> 11 is approximately divide by 2000
+    long iyiy = (iy*iy)>>11;
+    long iziz = (iz*iz)>>11;
+    long oxox = (ox*ox)>>11;
+    long oyoy = (oy*oy)>>11;
+    long ozoz = (oz*oz)>>11;
+
+    long ixiz = (iz*ix)>>11;
+    long iyiz = (iz*iy)>>11;
+    long oxiz = (iz*ox)>>11;
+    long oyiz = (iz*oy)>>11;
+    long ixoz = (oz*ox)>>11;
+    long iyoz = (oz*iy)>>11;
+    long oxoz = (oz*ox)>>11;
+    long oyoz = (oz*oy)>>11;
+
+    long ixixix = (ixix*ix)>>11;
+    long iyiyiy = (iyiy*iy)>>11;
+    long iziziz = (iziz*iz)>>11;
+    long oxoxox = (oxox*ox)>>11;
+    long oyoyoy = (oyoy*oy)>>11;
+    long ozozoz = (ozoz*oz)>>11;
+
+    long ixixiz = (ixix*iz)>>11;
+    long iyiyiz = (iyiy*iz)>>11;
+    long oxoxiz = (oxox*oz)>>11;
+    long oyoyiz = (oyoy*oz)>>11;
+    long ixixoz = (ixix*oz)>>11;
+    long iyiyoz = (iyiy*oz)>>11;
+    long oxoxoz = (oxox*oz)>>11;
+    long oyoyoz = (oyoy*oz)>>11;
+
+    long pit_ctrl = -98*ix +33*ox
+        -17*ixiz +11*oxiz -2*ixoz -19*oxoz
+        +1*ixixix -2*oxoxox; // Scaled by 469 approx = PI/(3.14159*2000)
+
+    long rol_ctrl = -(-98*iy +33*oy
+        -17*iyiz +11*oyiz -2*iyoz -19*oyoz
+        +1*iyiyiy -2*oyoyoy);
+
+   long leg_ctrl = (67*65536 -411*iz -419*oz
+        +31*(ixix+iyiy) -46*iziz -126*(oxox+oyoy) -71*ozoz
+        +27*iziziz -80*ozozoz
+        +8*(ixixiz+iyiyiz) -27*(oxoxiz+oyoyiz) -51*(ixixoz+iyiyoz) -42*(oxoxoz+oyoyoz));
+        // Scaled by 65536/2000
+
+    pit_ctrl = pit_ctrl > PI/6 ? PI/6 :
+              pit_ctrl < -PI/6 ? -PI/6 :
+              pit_ctrl;
+    rol_ctrl = rol_ctrl > PI/6 ? PI/6 :
+              rol_ctrl < -PI/6 ? -PI/6 :
+              rol_ctrl;
+    leg_ctrl = leg_ctrl > (75*65536) ? (75*65536) :
+              leg_ctrl < (55*65536) ? (55*65536) :
+              leg_ctrl;
+
+    ctrl[0] = pit_ctrl;
+    ctrl[1] = rol_ctrl;
+    ctrl[2] = leg_ctrl;
+
+    return (80*65536); // ext_ctrl
+
+}
 
 long cosApprox(long x) {
     // Cosine approximation by Bhaskara I's method:

@@ -24,6 +24,7 @@
 #include "ppool.h"
 #include "dfmem.h"
 #include "telem.h"
+#include "salto_ctrl.h"
 
 #include <stdlib.h> // for malloc
 #include "init.h"  // for Timer1
@@ -323,7 +324,7 @@ extern volatile MacPacket uart_tx_packet;
 extern volatile unsigned char uart_tx_flag;
 
 unsigned char telemDecimateCount = 0;
-#define TELEM_DECIMATE 20
+#define TELEM_DECIMATE 8
 
 void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
     //int j,i;
@@ -441,9 +442,9 @@ void checkSwapBuff(int j){
 }
 
 
-#define EULER_SCALED_PI 2949120
 #define TAIL_BRAKE 20
 #define BALANCE_FF 5
+#define ANTIDEADBAND 10 // for Dasher, 20 is too high
 // 180(deg) * 2^15(ticks)/2000(deg/s) * 1000(Hz)
 void pidSetControl()
 { int i,j;
@@ -457,10 +458,10 @@ void pidSetControl()
         pidObjs[j].p_error = pidObjs[j].p_input - pidObjs[j].p_state;
         pidObjs[j].v_error = - pidObjs[j].v_state;
         if (j==0 || j==2 || j==3) { // euler angle PIDs wrap around
-            if (pidObjs[j].p_error > EULER_SCALED_PI) {
-                pidObjs[j].p_error -= 2*EULER_SCALED_PI;
-            } else if (pidObjs[j].p_error < -EULER_SCALED_PI) {
-                pidObjs[j].p_error += 2*EULER_SCALED_PI;
+            if (pidObjs[j].p_error > PI) {
+                pidObjs[j].p_error -= 2*PI;
+            } else if (pidObjs[j].p_error < -PI) {
+                pidObjs[j].p_error += 2*PI;
             }
         }
         //Update values
@@ -518,6 +519,8 @@ void UpdatePID(pidPos *pid, int num)
         if(num==0){
             pid->preSat = -pid->preSat;
             pid->output = -pid->output;
+            pid->preSat += ANTIDEADBAND*(tail_vel >= 0 ? 1 : -1);
+            pid->output += ANTIDEADBAND*(tail_vel >= 0 ? 1 : -1);
             if (pid->preSat > MAXTHROT_TAIL) {
                 pid->output = MAXTHROT_TAIL;
                 pid->i_error = (long) pid->i_error +

@@ -18,7 +18,9 @@
 #define PISQUARED   132710400 // bit shifted 16 bits down
 #define COS_PREC    15 // bits of precision in output of cosine
 
-#define ATT_CORRECTION_GAIN 6   // 8 is about equal to PI/180/2000 for 1 degree correction per 1 meter per second
+#define ATT_CORRECTION_GAIN_X 9   // 8 is about equal to PI/180/2000 for 1 degree correction per 1 meter per second
+#define ATT_CORRECTION_GAIN_Y 5
+
 
 void SetupTimer5();
 void tailCtrlSetup();
@@ -52,5 +54,6 @@ long cosApprox(long x);
 
 void updateVelocity(long time);
 void raibert();
+long deadbeat(int16_t* vi, int16_t* vo, long* ctrl);
 
 #endif // __SALTO_CTRL_H

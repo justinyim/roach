@@ -24,12 +24,12 @@ def main():
     #    ----------LEFT----------        ---------_RIGHT----------
     #motorgains = [450,0,20,0,100, 0,0,0,0,0] #[600,0,20,0,0, 100,0,0,0,0]
     #thrustGains = [300,100,300,30,0,40]
-    motorgains = [160,0,30,0,0, 0,0,0,0,0]
-    thrustGains = [170,0,120, 170,0,120]
+    motorgains = [110,0,25,0,0, 0,0,0,0,0]
+    thrustGains = [160,0,190, 100,0,150]
     motorgains = [0,0,0,0,0, 0,0,0,0,0]# disable thrusters and tail
     thrustGains = [0,0,0, 0,0,0]
 
-    #thrustGains = [350,0,150, 50,0,100]
+    thrustGains = [250,0,170, 100,0,150]
 
     xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h', *thrustGains))
 
@@ -73,7 +73,7 @@ def main():
             startTelemetrySave(numSamples)
 
 
-        #'''
+        '''
         # basic leg extension test
         exp = [2]
         arbitrary = [0]
@@ -82,8 +82,8 @@ def main():
         viconTest = [0,0,0,0,0,0,70*256,80*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(0.01)
-        #xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
-        #'''
+        xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
+        '''
 
 
         '''
@@ -121,9 +121,11 @@ def main():
 
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
 
-        time.sleep(3.0)
-        motorgains = [350,0,30,0,0, 0,0,0,0,0]
+        time.sleep(2.0)
+        motorgains = [200,0,25,0,0, 0,0,0,0,0]
         xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
+
+        time.sleep(5.0)
         '''
         '''
         time.sleep(5.0)

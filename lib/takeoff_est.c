@@ -8,8 +8,12 @@ extern int16_t TOlegVel;
 extern long TObody_angle[3];
 extern long TObody_vel_LP[3];
 
+extern long TDbody_angle[3];
+extern int16_t TDvelocity[3];
+
 extern unsigned char TOcompFlag;
 extern int16_t velocity[3];
+extern char ac_flag;
 
 volatile extern int16_t stance_vel_des[3];
 volatile extern long att_correction[2];
@@ -25,8 +29,8 @@ void takeoffEstimation(){
     long TOsin_psi = cosApprox(TObody_angle[0]-PI/2);
 
     // Compensate for CG offset
-    TObody_vel_LP[2] -= 0.25*4/4*TOlegVel*0.469; // (2^15/2000*180/pi)/2000 = 0.4694
-    TObody_vel_LP[1] -= 0.2*4/4*TOlegVel*0.469;
+    TObody_vel_LP[2] -= 0.15*4/4*TOlegVel*0.469; // (2^15/2000*180/pi)/2000 = 0.4694
+    TObody_vel_LP[1] -= 0.25*4/4*TOlegVel*0.469;
 
     // Body velocity rotation matrix
     //int32_t vxw = 14418*(int32_t)TObody_vel_LP[2]/30760; // locking TOleg at 0.22m
@@ -52,17 +56,32 @@ void takeoffEstimation(){
         + ((((TOcos_theta*TOcos_phi) >> COS_PREC)*TOlegVel) >> COS_PREC);
     //Z1X2Y3 https://en.wikipedia.org/wiki/Euler_angles
 
-    velocity[1] = velocity[1]*0.8;
+    velocity[1] = velocity[1]*0.85;
 
-    att_correction[0] = -ATT_CORRECTION_GAIN*((long)(velocity[0] - stance_vel_des[0]));
-    att_correction[1] = ATT_CORRECTION_GAIN*((long)(velocity[1] - stance_vel_des[1]));
+    /*
+    // Deadbeat-based correction
+    long predicted_angles[3];
+    deadbeat(TDvelocity, velocity, predicted_angles);
+    att_correction[0] = (TDbody_angle[2] - predicted_angles[0])>>2;
+    att_correction[1] = (TDbody_angle[1] - predicted_angles[1])>>2;
+    */
 
-    att_correction[0] = att_correction[0] > 10000 ? 10000 :
-                        att_correction[0] < -10000 ? -10000 :
+    //*
+    // Velocity-based correction
+    long velocity_x = (velocity[0]*TOcos_psi + velocity[1]*TOsin_psi)>>COS_PREC;
+    long velocity_y = (-velocity[0]*TOsin_psi + velocity[1]*TOcos_psi)>>COS_PREC;
+
+    att_correction[0] = -ATT_CORRECTION_GAIN_X*(velocity_x - stance_vel_des[0]);
+    att_correction[1] = ATT_CORRECTION_GAIN_Y*(velocity_y - stance_vel_des[1]);
+    //*/
+
+    att_correction[0] = att_correction[0] > 15000 ? 15000 :
+                        att_correction[0] < -15000 ? -15000 :
                         att_correction[0];
-    att_correction[1] = att_correction[1] > 10000 ? 10000 :
-                        att_correction[1] < -10000 ? -10000 :
+    att_correction[1] = att_correction[1] > 15000 ? 15000 :
+                        att_correction[1] < -15000 ? -15000 :
                         att_correction[1];
+    ac_flag = 1;
 
     TOcompFlag = 0;
 }

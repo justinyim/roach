@@ -58,6 +58,7 @@ long cos_psi = 1<<COS_PREC;
 // Robot position estimation states
 int32_t robot_pos[3];   // Esimated robot location in world frame [100,000 ticks/m]
 int16_t velocity[3];    // Estimated robot velocity in world frame (x, y, z) [2000 ticks/(m/s)]
+int16_t vel_body[3];    // Estimated robot horizontal velocity in body frame (x, y) [2000 ticks/(m/s)]
 int16_t leg;            // Estimated stance phase leg length [2^16 ticks/m]
 int16_t legVel;         // Estimated stance phase leg extension velocity [2000 ticks/(m/s)]
 int16_t vel_des[3];     // Desired velocities [2000 ticks/(m/s)]
@@ -195,6 +196,13 @@ void setVelocitySetpoint(int16_t* new_vel_des, long new_yaw) {
                      new_vel_des[1] < -4000 ? -4000 :
                      new_vel_des[1];
 
+    new_vel_des[0] = new_vel_des[0] > vel_body[0]+3000 ? vel_body[0]+3000 :
+                     new_vel_des[0] < vel_body[0]-3000 ? vel_body[0]-3000 :
+                     new_vel_des[0];
+    new_vel_des[1] = new_vel_des[1] > vel_body[1]+1500 ? vel_body[1]+1500 :
+                     new_vel_des[1] < vel_body[1]-1500 ? vel_body[1]-1500 :
+                     new_vel_des[1];
+
     for (i=0; i<3; i++){
         vel_des[i] = new_vel_des[i];
     }
@@ -234,7 +242,7 @@ void accZeroAtt(){
     orientImageProc(body_acc, xldata);
 
     body_angle[1] = PI*body_acc[2]/(3.14159*body_acc[0]); // roll
-    body_angle[2] = -PI*body_acc[1]/(3.14159*body_acc[0]); // pitch
+    body_angle[2] = -PI*body_acc[1]/(3.14159*body_acc[0]) + PI*0.01; // pitch
 }
 
 void expStart(uint8_t startSignal) {
@@ -337,14 +345,19 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
     if(interrupt_count == 2) {
         //raibert(); // onboard velocity control
         //*
-        ext_ctrl = deadbeat(velocity, vel_des, ctrl_vect); // onboard velocity control
+        vel_body[0] = ((long)velocity[0]*cos_psi + (long)velocity[1]*sin_psi)>>COS_PREC;//vi[0];
+        vel_body[1] = (-(long)velocity[0]*sin_psi + (long)velocity[1]*cos_psi)>>COS_PREC;//vi[1];
+        vel_body[2] = velocity[2];
+    }
+    if(interrupt_count == 4) {
+        ext_ctrl = deadbeat(vel_body, vel_des, ctrl_vect); // onboard velocity control
         x_ctrl = ctrl_vect[0];
         y_ctrl = ctrl_vect[1];
         z_ctrl = ctrl_vect[2];
         //*/
     }
 
-    if(interrupt_count == 4) { // reset interrupt_count after 4 counts
+    if(interrupt_count == 8) { // reset interrupt_count after 4 counts
         interrupt_count = 0;
 
         // Update yaw angle approximations
@@ -768,8 +781,10 @@ long deadbeat(int16_t* vi, int16_t* vo, long* ctrl) {
     long oy = vo[1];
     long oz = vo[2]-6600;
 
-    long ix = ((long)vi[0]*cos_psi + (long)vi[1]*sin_psi)>>COS_PREC;//vi[0];
-    long iy = (-(long)vi[0]*sin_psi + (long)vi[1]*cos_psi)>>COS_PREC;//vi[1];
+    //long ix = ((long)vi[0]*cos_psi + (long)vi[1]*sin_psi)>>COS_PREC;//vi[0];
+    //long iy = (-(long)vi[0]*sin_psi + (long)vi[1]*cos_psi)>>COS_PREC;//vi[1];
+    long ix = vi[0];
+    long iy = vi[1];
     long iz = (vi[2] > -2000 ? -2000 : vi[2]) + 6600;
 
     long ixix = (ix*ix)>>11; // >> 11 is approximately divide by 2000
@@ -804,6 +819,8 @@ long deadbeat(int16_t* vi, int16_t* vo, long* ctrl) {
     long oxoxoz = (oxox*oz)>>11;
     long oyoyoz = (oyoy*oz)>>11;
 
+    //*
+    // Gains for 105g robot
     long pit_ctrl = -98*ix +33*ox
         -17*ixiz +11*oxiz -2*ixoz -19*oxoz
         +1*ixixix -2*oxoxox; // Scaled by 469 approx = PI/(3.14159*2000)
@@ -812,11 +829,29 @@ long deadbeat(int16_t* vi, int16_t* vo, long* ctrl) {
         -17*iyiz +11*oyiz -2*iyoz -19*oyoz
         +1*iyiyiy -2*oyoyoy);
 
-   long leg_ctrl = (67*65536 -411*iz -419*oz
+    long leg_ctrl = (67*65536 -411*iz -419*oz
         +31*(ixix+iyiy) -46*iziz -126*(oxox+oyoy) -71*ozoz
         +27*iziziz -80*ozozoz
         +8*(ixixiz+iyiyiz) -27*(oxoxiz+oyoyiz) -51*(ixixoz+iyiyoz) -42*(oxoxoz+oyoyoz));
         // Scaled by 65536/2000
+    //*/
+
+    /*
+    // Gains with shell: 108 g robot
+    long pit_ctrl = -100*ix +31*ox
+        -17*ixiz +11*oxiz -3*ixoz -19*oxoz
+        +1*ixixix -2*oxoxox; // Scaled by 469 approx = PI/(3.14159*2000)
+
+    long rol_ctrl = -(-100*iy +31*oy
+        -17*iyiz +11*oyiz -3*iyoz -19*oyoz
+        +1*iyiyiy -2*oyoyoy);
+
+    long leg_ctrl = (67*65536 -440*iz -324*oz
+        +27*(ixix+iyiy) -59*iziz -122*(oxox+oyoy) +165*ozoz
+        +38*iziziz +38*ozozoz
+        +13*(ixixiz+iyiyiz) -25*(oxoxiz+oyoyiz) -57*(ixixoz+iyiyoz) -31*(oxoxoz+oyoyoz));
+        // Scaled by 65536/2000
+    */
 
     pit_ctrl = pit_ctrl > PI/6 ? PI/6 :
               pit_ctrl < -PI/6 ? -PI/6 :

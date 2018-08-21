@@ -129,7 +129,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->foot = y_ctrl/90;
     ptr->footVel = velocity[2];
     */
-    /*
+    //*
     // onboard velocity control
     ptr->otherMode = 8;
     ptr->onboardMode = mj_state + (controlFlag <<7) + (onboardMode << 8);
@@ -144,7 +144,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     //ptr->accelX = vel_des[0];
     //ptr->accelY = vel_des[1];
     //ptr->accelZ = vel_des[2];
-    */
+    //*/
     /*
     // onboard velocity control
     ptr->otherMode = 9;
@@ -184,7 +184,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->foot = velocity[1];
     ptr->footVel = velocity[2];
     */
-    //*
+    /*
     // robot position
     ptr->otherMode = 12;
     ptr->onboardMode = mj_state + (controlFlag <<7) + (onboardMode << 8);
@@ -196,7 +196,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->force = velocity[0];
     ptr->foot = velocity[1];
     ptr->footVel = velocity[2];
-    //*/
+    */
 
 
 }

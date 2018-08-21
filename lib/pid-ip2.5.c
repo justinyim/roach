@@ -444,7 +444,7 @@ void checkSwapBuff(int j){
 
 #define TAIL_BRAKE 20
 #define BALANCE_FF 5
-#define ANTIDEADBAND 10 // for Dasher, 20 is too high
+#define ANTIDEADBAND 5 // for Dasher, 20 is too high
 // 180(deg) * 2^15(ticks)/2000(deg/s) * 1000(Hz)
 void pidSetControl()
 { int i,j;

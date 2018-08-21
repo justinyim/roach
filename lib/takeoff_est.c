@@ -75,6 +75,13 @@ void takeoffEstimation(){
     att_correction[1] = ATT_CORRECTION_GAIN_Y*(velocity_y - stance_vel_des[1]);
     //*/
 
+    /*
+    att_correction[0] = -(ATT_CORRECTION_GAIN_X*(velocity_x - stance_vel_des[0]) * 188) /
+        ((long)(-velocity[2] + TDvelocity[2]) >> 6);
+    att_correction[1] = (ATT_CORRECTION_GAIN_Y*(velocity_y - stance_vel_des[1]) * 188) /
+        ((long)(-velocity[2] + TDvelocity[2]) >> 6); // (3*2000 >> 6)*2 is about 188
+    */
+
     att_correction[0] = att_correction[0] > 15000 ? 15000 :
                         att_correction[0] < -15000 ? -15000 :
                         att_correction[0];

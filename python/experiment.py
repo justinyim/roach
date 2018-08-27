@@ -29,11 +29,11 @@ def main():
     motorgains = [0,0,0,0,0, 0,0,0,0,0]# disable thrusters and tail
     thrustGains = [0,0,0, 0,0,0]
 
-    thrustGains = [250,0,170, 100,0,150]
+    #thrustGains = [250,0,170, 100,0,150]
 
     xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h', *thrustGains))
 
-    duration = 4000#15000
+    duration = 8000#15000
     rightFreq = 0
     leftFreq = 0
     phase = 0
@@ -73,17 +73,23 @@ def main():
             startTelemetrySave(numSamples)
 
 
-        '''
+        #'''
         # basic leg extension test
         exp = [2]
         arbitrary = [0]
         xb_send(0, command.RESET_BODY_ANG, pack('h', *arbitrary))
-        time.sleep(0.01)
+        time.sleep(0.02)
+        
+        xb_send(0, command.GYRO_BIAS, pack('h', *arbitrary))
+        time.sleep(0.02)
+        xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
+        time.sleep(0.02)
+
         viconTest = [0,0,0,0,0,0,70*256,80*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        time.sleep(0.01)
-        xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
-        '''
+        time.sleep(0.02)
+        #xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
+        #'''
 
 
         '''

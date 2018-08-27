@@ -15,8 +15,8 @@
 
 // Parameters for cosApprox
 #define PI          2949120 // 180(deg) * 2^15(ticks)/2000(deg/s) * 1000(Hz)
-#define PISQUARED   132710400 // bit shifted 16 bits down
-#define COS_PREC    15 // bits of precision in output of cosine
+#define PISQUARED   32400 // bit shifted 28 bits down
+#define COS_PREC    8 // bits of precision in output of cosine
 
 #define ATT_CORRECTION_GAIN_X 9   // 8 is about equal to PI/180/2000 for 1 degree correction per 1 meter per second
 #define ATT_CORRECTION_GAIN_Y 5

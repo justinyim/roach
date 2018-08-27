@@ -92,7 +92,7 @@ volatile long pushoffCmd = 0;   // Ground leg command
 #define TAIL_ALPHA 25 // Low pass tail velocity out of 128
 long tail_pos = 0; // in ticks
 long tail_prev = 0; // in ticks
-long tail_vel = 0; // in ticks / count
+long tail_vel = 0; // in ticks / count: (2^16 ticks)/(2*pi*1000 rad/s)
 
 
 // Pass these estimates to takeoff_est.c for velocity estimation on takeoff
@@ -117,7 +117,7 @@ int32_t last_mot;
 
 
 #define P_AIR ((1*65536)/10) // leg proportional gain in the air (duty cycle/rad * 65536)
-#define D_AIR ((3*65536)/1000) // leg derivative gain in the air (duty cycle/[rad/s] * 65536)
+#define D_AIR ((2*65536)/1000) // leg derivative gain in the air (duty cycle/[rad/s] * 65536)
 #define P_GND ((5*65536)/10) // leg proportional gain on the ground
 #define D_GND ((1*65536)/1000)
 #define P_STAND ((5*65536)/1000) // leg proportional gain for standing
@@ -189,11 +189,11 @@ void setVelocitySetpoint(int16_t* new_vel_des, long new_yaw) {
         return;
     }
 
-    new_vel_des[0] = new_vel_des[0] > 4000 ? 4000 :
-                     new_vel_des[0] < -4000 ? -4000 :
+    new_vel_des[0] = new_vel_des[0] > 6000 ? 6000 :
+                     new_vel_des[0] < -6000 ? -6000 :
                      new_vel_des[0];
-    new_vel_des[1] = new_vel_des[1] > 4000 ? 4000 :
-                     new_vel_des[1] < -4000 ? -4000 :
+    new_vel_des[1] = new_vel_des[1] > 3000 ? 3000 :
+                     new_vel_des[1] < -3000 ? -3000 :
                      new_vel_des[1];
 
     new_vel_des[0] = new_vel_des[0] > vel_body[0]+3000 ? vel_body[0]+3000 :
@@ -304,7 +304,7 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         body_lag_log[BLL_ind][i] = body_velocity[i];
 
         // Sum the gyro readings from the most recent two cycles for updateEuler
-        body_vel_500[i] = body_velocity[i] + body_lag_log[BLL_ind_prev][i];
+        body_vel_500[i] = (body_velocity[i] + body_lag_log[BLL_ind_prev][i]);
     }
     BLL_ind_prev = BLL_ind;
     BLL_ind = (BLL_ind+1)%VICON_LAG; // Circular buffer index
@@ -583,10 +583,10 @@ void orientImageProc(long* body_frame, int* ImageProc_frame) {
         body_frame[1] = ImageProc_frame[1]; // roll
         body_frame[2] = (-147*((long)ImageProc_frame[0]) + 210*((long)ImageProc_frame[2]))>>8; //pitch
 #elif ROBOT_NAME == SALTO_1P_DASHER
-        // -60 degrees about x, follwed by 180 degrees about body z
-        body_frame[0] = (128*((long)ImageProc_frame[2]) - 221*((long)ImageProc_frame[0]))>>8; //yaw
+        // -50 degrees about x, follwed by 180 degrees about body z
+        body_frame[0] = (165*((long)ImageProc_frame[2]) - 196*((long)ImageProc_frame[0]))>>8; //yaw
         body_frame[1] = -ImageProc_frame[1]; // roll
-        body_frame[2] = (128*((long)ImageProc_frame[0]) + 221*((long)ImageProc_frame[2]))>>8; //pitch
+        body_frame[2] = (165*((long)ImageProc_frame[0]) + 196*((long)ImageProc_frame[2]))>>8; //pitch
 #elif ROBOT_NAME == SALTO_1P_SANTA
         // -45 degrees about pitch
         body_frame[0] = (((long)(ImageProc_frame[2] + ImageProc_frame[1]))*181)>>8; //yaw
@@ -819,7 +819,7 @@ long deadbeat(int16_t* vi, int16_t* vo, long* ctrl) {
     long oxoxoz = (oxox*oz)>>11;
     long oyoyoz = (oyoy*oz)>>11;
 
-    //*
+    /*
     // Gains for 105g robot
     long pit_ctrl = -98*ix +33*ox
         -17*ixiz +11*oxiz -2*ixoz -19*oxoz
@@ -834,9 +834,9 @@ long deadbeat(int16_t* vi, int16_t* vo, long* ctrl) {
         +27*iziziz -80*ozozoz
         +8*(ixixiz+iyiyiz) -27*(oxoxiz+oyoyiz) -51*(ixixoz+iyiyoz) -42*(oxoxoz+oyoyoz));
         // Scaled by 65536/2000
-    //*/
+    */
 
-    /*
+    //*
     // Gains with shell: 108 g robot
     long pit_ctrl = -100*ix +31*ox
         -17*ixiz +11*oxiz -3*ixoz -19*oxoz
@@ -851,7 +851,7 @@ long deadbeat(int16_t* vi, int16_t* vo, long* ctrl) {
         +38*iziziz +38*ozozoz
         +13*(ixixiz+iyiyiz) -25*(oxoxiz+oyoyiz) -57*(ixixoz+iyiyoz) -31*(oxoxoz+oyoyoz));
         // Scaled by 65536/2000
-    */
+    //*/
 
     pit_ctrl = pit_ctrl > PI/6 ? PI/6 :
               pit_ctrl < -PI/6 ? -PI/6 :
@@ -879,18 +879,19 @@ long cosApprox(long x) {
     // INPUTS:
     // x: angle scaled by 16384 ticks per degree (2000 deg/s MPU gyro integrated @ 1kHz).
 
-    long xSquared, out;
+    uint16_t xSquared;
+    int16_t out;
     if (x < 0) { x = -x; } // cosine is even
     x = (x+PI) % (PI<<1) - PI;
     if (x < 0) { x = -x; } // cosine is even
     if (x > (PI>>1)) { // quadrants 2 and 3
-        x = (x - PI) >> 8;
+        x = (x - PI) >> 14;
         xSquared = x*x;
-        out = -(PISQUARED - (xSquared<<2))/((PISQUARED + xSquared)>>COS_PREC);
+        out = -(int16_t)((PISQUARED - (xSquared<<2))/((PISQUARED + xSquared)>>COS_PREC));
     } else {
-        x = x >> 8; // quadrants 1 and 4
+        x = x >> 14; // quadrants 1 and 4
         xSquared = x*x;
         out = (PISQUARED - (xSquared<<2))/((PISQUARED + xSquared)>>COS_PREC);
     }
-    return out;
+    return (long)out;
 }

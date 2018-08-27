@@ -29,8 +29,8 @@ void takeoffEstimation(){
     long TOsin_psi = cosApprox(TObody_angle[0]-PI/2);
 
     // Compensate for CG offset
-    TObody_vel_LP[2] -= 0.15*4/4*TOlegVel*0.469; // (2^15/2000*180/pi)/2000 = 0.4694
-    TObody_vel_LP[1] -= 0.25*4/4*TOlegVel*0.469;
+    TObody_vel_LP[2] -= 0.20*4/4*TOlegVel*0.469; // (2^15/2000*180/pi)/2000 = 0.4694
+    TObody_vel_LP[1] -= -0.20*4/4*TOlegVel*0.469;
 
     // Body velocity rotation matrix
     //int32_t vxw = 14418*(int32_t)TObody_vel_LP[2]/30760; // locking TOleg at 0.22m

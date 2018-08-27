@@ -324,7 +324,7 @@ extern volatile MacPacket uart_tx_packet;
 extern volatile unsigned char uart_tx_flag;
 
 unsigned char telemDecimateCount = 0;
-#define TELEM_DECIMATE 8
+#define TELEM_DECIMATE 4
 
 void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
     //int j,i;
@@ -443,9 +443,12 @@ void checkSwapBuff(int j){
 
 
 #define TAIL_BRAKE 20
+#define TAIL_REVERSE 5 // out of 128
 #define BALANCE_FF 5
 #define ANTIDEADBAND 5 // for Dasher, 20 is too high
 // 180(deg) * 2^15(ticks)/2000(deg/s) * 1000(Hz)
+extern int16_t vel_des[3];
+extern long body_vel_LP[3];
 void pidSetControl()
 { int i,j;
 // 0 = right side
@@ -471,7 +474,9 @@ void pidSetControl()
         if (ROBOT_NAME == SALTO_1P_SANTA) {
             pidObjs[0].output = 0xFFF; // The tail is in braking mode (passive brake through low impedance)
         } else {
-            pidObjs[0].preSat = -TAIL_BRAKE*tail_vel; // Actively braking the tail
+            //pidObjs[0].preSat = -TAIL_BRAKE*(tail_vel + TAIL_REVERSE*(vel_des[0]>>7)); // Actively braking the tail
+            pidObjs[0].preSat = -TAIL_BRAKE*(tail_vel + TAIL_REVERSE*(body_vel_LP[2]>>7));
+                // TAIL_REVERSE attempts to pre-spin the tail backwards
             pidObjs[0].output = pidObjs[0].preSat;
             if (pidObjs[0].preSat > MAXTHROT_TAIL) {
                 pidObjs[0].output = MAXTHROT_TAIL;

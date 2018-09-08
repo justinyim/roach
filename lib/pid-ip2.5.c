@@ -324,7 +324,7 @@ extern volatile MacPacket uart_tx_packet;
 extern volatile unsigned char uart_tx_flag;
 
 unsigned char telemDecimateCount = 0;
-#define TELEM_DECIMATE 4
+#define TELEM_DECIMATE 10
 
 void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
     //int j,i;

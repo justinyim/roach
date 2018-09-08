@@ -33,7 +33,7 @@ def main():
 
     xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h', *thrustGains))
 
-    duration = 8000#15000
+    duration = 2000#15000
     rightFreq = 0
     leftFreq = 0
     phase = 0
@@ -73,7 +73,7 @@ def main():
             startTelemetrySave(numSamples)
 
 
-        #'''
+        '''
         # basic leg extension test
         exp = [2]
         arbitrary = [0]
@@ -88,8 +88,8 @@ def main():
         viconTest = [0,0,0,0,0,0,70*256,80*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(0.02)
-        #xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
-        #'''
+        xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
+        '''
 
 
         '''
@@ -163,15 +163,29 @@ def main():
         '''
 
 
-        '''
+        #'''
         # small step calibration for crank 2
         # leg extension test with variable motor gains
         arbitrary = [0]
         # motor deflection [radians * 256], P gain [65536 * duty cyle/rad], D gain [65536 * duty cyle/(rad/s)]
-        for x in np.hstack((np.linspace(0,90,19),np.linspace(85,0,18))):
-            legPosition = [x*256, 0.02*65536, 0.005*65536]
+        for x in np.hstack((np.linspace(0,90,46),np.linspace(88,0,45))):
+            legPosition = [x*256, 0.03*65536, 0.005*65536]
             xb_send(0, command.SET_MOTOR_POS, pack('3h', *legPosition))
-            time.sleep(0.07)
+            time.sleep(0.02)
+        #'''
+
+        '''
+        # Toe pull-ups
+        # leg extension test with variable motor gains
+        arbitrary = [0]
+        xb_send(0, command.RESET_BODY_ANG, pack('h', *arbitrary))
+        time.sleep(0.02)
+        # motor deflection [radians * 256], P gain [65536 * duty cyle/rad], D gain [65536 * duty cyle/(rad/s)]
+        # for x in np.hstack((np.linspace(80,20,31),np.linspace(22,80,30))):
+        for x in 50+30*np.cos(np.linspace(0,np.sqrt(4*2*3.14159),360)**2):#np.cos(np.linspace(0,6.2832,60)):
+            legPosition = [x*256, 0.03*65536, 0.001*65536]
+            xb_send(0, command.SET_MOTOR_POS, pack('3h', *legPosition))
+            time.sleep(0.01)
         '''
 
 

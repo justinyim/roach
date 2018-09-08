@@ -36,6 +36,7 @@
 #define CMD_GYRO_BIAS               0xA4
 #define CMD_G_VECT_ATT              0xA5
 #define CMD_SET_VELOCITY            0xA6
+#define CMD_ADJUST_BODY_ANG         0xA7
 // Redefine
 
 void cmdSetup(void);

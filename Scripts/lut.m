@@ -91,4 +91,13 @@ for ii = 1:numel(names)
     fprintf(fid, ' //Mechanical advantage is femur_MA_units N/Nm per 2^16.\n');
 end
 fprintf(fid, '#endif\n');
+
+% Cosine lookup table
+cosPrec = 8;
+lutcos = sprintf('%u,', round(2^cosPrec*cosd(linspace(0,90,256))'));
+lutcos = lutcos(1:(end-1));
+fprintf(fid, '\nstatic unsigned int lut_cos[256] = {');
+fprintf(fid, lutcos);
+fprintf(fid, '}; // cosine lookup table\n');
+
 fclose(fid);

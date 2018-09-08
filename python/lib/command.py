@@ -86,5 +86,6 @@ ONBOARD_MODE            =   0xA3
 GYRO_BIAS               =   0xA4
 G_VECT_ATT              =   0xA5
 SET_VELOCITY            =   0xA6
+ADJUST_BODY_ANG         =   0xA7
 
 # CMD values of 0xF0(240) - 0xFF(255) are reserved for future use

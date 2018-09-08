@@ -83,6 +83,11 @@ long z_ctrl, ext_ctrl;  // Onboard leg retraction and extension
 // Setpoints and commands
 char controlFlag = 0; // enable/disable attitude control
 char onboardMode = 0; // mode for onboard controllers & estimators
+// 1: disable gyro integration
+// 2: balance on toe
+// 4: use stand_gains leg gains
+// 8: use onboard control
+// 16: DON'T use attitude correction
 volatile long pitchSetpoint = 0;
 volatile long rollSetpoint = 0;
 volatile long yawSetpoint = 0;
@@ -104,6 +109,7 @@ long TObody_angle[3];
 long TObody_vel_LP[3];
 
 long TDbody_angle[3];
+long TDangle_setpoint[3];
 int16_t TDvelocity[3];
 
 unsigned char last_state = MJ_IDLE;
@@ -169,34 +175,51 @@ void updateViconAngle(long* new_vicon_angle){
     }
 }
 
+void adjustBodyAngle(long* body_adjust){
+    int i;
+
+    for (i=0; i<3; i++){
+        body_angle[i] += body_adjust[i];
+    }
+}
+
 void setVelocitySetpoint(int16_t* new_vel_des, long new_yaw) {
     int i;
 
     //new_vel_des[0] += velocity[0];
     //new_vel_des[1] += velocity[1];
 
-    /*
-    // Hacky position hold
-    vel_des[2] = 4905; // 2.452m/s: or 0.5s flight time
-    vel_des[0] = -robot_pos[0]/100;
-    vel_des[1] = -robot_pos[1]/100;
-    return;
-    // Hacky position hold
-    */
-
-    if (velocity[2] < 0) {
-        // Update only until apex
+    if (onboardMode & 0b10000) {
+        // Hacky position hold
+        vel_des[2] = 5000; // 2.5m/s
+        vel_des[0] = -robot_pos[0]/100;
+        vel_des[1] = -robot_pos[1]/100;
         return;
     }
 
-    new_vel_des[0] = new_vel_des[0] > 6000 ? 6000 :
-                     new_vel_des[0] < -6000 ? -6000 :
+    if (velocity[2] < -2000) {
+        // Update only until shortly after apex
+        return;
+    }
+
+    new_vel_des[2] = new_vel_des[2] < vel_body[0]<<1 ? vel_body[0]<<1 : // don't jump too low when going fast
+                     new_vel_des[2] < -vel_body[0]<<1 ? -vel_body[0]<<1 : 
+                     new_vel_des[2] < vel_body[1]<<1 ? vel_body[1]<<1 : 
+                     new_vel_des[2] < -vel_body[1]<<1 ? -vel_body[1]<<1 :
+                     new_vel_des[2];
+
+    new_vel_des[2] = new_vel_des[2] > 8000 ? 8000 : // max height
+                     new_vel_des[2] < 4000 ? 4000 : // min height
+                     new_vel_des[2];
+
+    new_vel_des[0] = new_vel_des[0] > new_vel_des[2]-2000 ? new_vel_des[2]-2000 : // limit speed by height
+                     new_vel_des[0] < -(new_vel_des[2]-2000) ? -(new_vel_des[2]-2000) :
                      new_vel_des[0];
-    new_vel_des[1] = new_vel_des[1] > 3000 ? 3000 :
-                     new_vel_des[1] < -3000 ? -3000 :
+    new_vel_des[1] = new_vel_des[1] > (new_vel_des[2]-2000)>>1 ? (new_vel_des[2]-2000)>>1 :
+                     new_vel_des[1] < -(new_vel_des[2]-2000)>>1 ? -(new_vel_des[2]-2000)>>1 :
                      new_vel_des[1];
 
-    new_vel_des[0] = new_vel_des[0] > vel_body[0]+3000 ? vel_body[0]+3000 :
+    new_vel_des[0] = new_vel_des[0] > vel_body[0]+3000 ? vel_body[0]+3000 : // limit velocity change
                      new_vel_des[0] < vel_body[0]-3000 ? vel_body[0]-3000 :
                      new_vel_des[0];
     new_vel_des[1] = new_vel_des[1] > vel_body[1]+1500 ? vel_body[1]+1500 :
@@ -279,9 +302,15 @@ void tailCtrlSetup(){
     delay_ms(10);
     send_command_packet(&uart_tx_packet_global, 0, BLDC_CALIB, 16);
     delay_ms(10);
+#ifdef FULL_POWER
+    send_command_packet(&uart_tx_packet_global, 0, (65536), 17); // set BLDC max PWM (65536=100%)
+    delay_ms(10);
+    send_command_packet(&uart_tx_packet_global, 0, (65536), 17);
+#else
     send_command_packet(&uart_tx_packet_global, 0, (3*65536/4), 17); // set BLDC max PWM (65536=100%)
     delay_ms(10);
     send_command_packet(&uart_tx_packet_global, 0, (3*65536/4), 17);
+#endif
 
 }
 
@@ -325,14 +354,16 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
             body_angle[1] += ((pidObjs[2].output>>7) + (pidObjs[3].output>>7))<<1;
             body_angle[2] += (pidObjs[0].output>>5) << 1;
             // << 1 because it updates at 500Hz instead of 1kHz now
-        } else if (onboardMode == 0b1000) { // onboard hopping control
+        } else if (onboardMode & 0b1000) { // onboard hopping control
             pitchSetpoint = x_ctrl;
             rollSetpoint = y_ctrl;
             legSetpoint = z_ctrl;
             pushoffCmd = ext_ctrl;
             if(ac_flag) { // gyro anti-drift
-                body_angle[1] -= att_correction[1];
-                body_angle[2] -= att_correction[0];
+                if (!(onboardMode & 0b100000)) {
+                    body_angle[1] -= att_correction[1];
+                    body_angle[2] -= att_correction[0];
+                }
                 ac_flag = 0;
             }
         }
@@ -539,9 +570,13 @@ long calibPos(char idx){
     }
 }
 
+
+int32_t last_femur;
+int32_t femur;//, femurInd, femurDelta;
+
+
 void femurLUTs(void) { 
     // calculate crank, foot, and MA
-    uint32_t femur;//, femurInd, femurDelta;
 
     /*
     // Linearly interpolate between lookup table entries
@@ -562,12 +597,20 @@ void femurLUTs(void) {
 
     //*
     // Round down to nearest lookup table entry
-    femur = calibPos(2) / 64; // Scale position to 8 bits
-    if(femur>255 || femur < 0){return;} // Femur reading is bad: out of physical range
+    femur = calibPos(2);
+    /*
+    if (femur - last_femur > 4000 || last_femur - femur > 4000) {
+        last_femur = femur;
+        return;
+    }
+    last_femur = femur;
+    */
+    uint32_t femur_index = femur/ 64; // Scale position to 8 bits
+    if(femur_index>255 || femur_index < 0){return;} // Femur reading is bad: out of physical range
 
-    crank = crank_femur_256lut[femur];
-    foot = leg_femur_256lut[femur];
-    MA = MA_femur_256lut[femur];
+    crank = crank_femur_256lut[femur_index];
+    foot = leg_femur_256lut[femur_index];
+    MA = MA_femur_256lut[femur_index];
     //*/
 }
 
@@ -624,6 +667,26 @@ void updateEuler(long* angs, long* vels, long time) {
             - (cos_theta*sin_phi/cos_phi)*vels[0])*time) >> COS_PREC;
     temp_angle[1] += (cos_theta*vels[1] + sin_theta*vels[0])*time >> COS_PREC;
     temp_angle[0] += ((-sin_theta*vels[1])/cos_phi + (cos_theta*vels[0])/cos_phi)*time;
+    /*
+    im1 = sin_phi*sin_theta;
+    im2 = (im1/cos_phi)*vels[1]; // pitch term 1
+    im2 += vels[2] << COS_PREC; // pitch term 2
+    im1 = cos_theta*sin_phi;
+    im2 += (im1/cos_phi)*vels[0]; // pitch term 3
+    temp_angle[2] += (im2*time)>>COS_PREC; // pitch update
+
+    im2 = cos_theta*vels[1]; // roll term 1
+    im1 = sin_theta*vels[0]; // roll term 2
+    im2 += im1;
+    temp_angle[1] += (im2*time) >> COS_PREC; // roll update
+
+    im1 = -sin_theta*vels[1];
+    im2 = im1/cos_phi; // yaw term 1
+    im1 = cos_theta*vels[0];
+    im2 += im1/cos_phi; //yaw term 2
+    temp_angle[0] += im2*time; // yaw update
+    */
+
 
     // Wrap Euler angles around at +/-180 degrees
     for (i=0; i<3; i++) {
@@ -674,6 +737,9 @@ void updateVelocity(long time) {
                 TDbody_angle[j] = body_angle[j]; // Save the touchdown body angles
                 TDvelocity[j] = velocity[j]; // Save the touchdown body velocities
             }
+            TDangle_setpoint[0] = yawSetpoint;
+            TDangle_setpoint[1] = rollSetpoint;
+            TDangle_setpoint[2] = pitchSetpoint;
         }
 
         legErr = (foot>>2) - leg;
@@ -688,6 +754,7 @@ void updateVelocity(long time) {
 
         velocity[0] = 0; // zero velocities; not really necessary
         velocity[1] = 0;
+        velocity[2] = 0; // also zeroing vertical velocity
     } else if (mj_state == MJ_AIR) { // Flight phase estimation
 
         if (last_state == MJ_GND) { // robot thinks it just took off
@@ -714,7 +781,7 @@ void updateVelocity(long time) {
             legVel += 700; // takeoff boost of 0.35 m/s
             TOlegVel += 700;
 
-            velocity[2] = -velocity[2]; // velocity estimate until real calculation is done
+            //velocity[2] = -velocity[2]; // velocity estimate until real calculation is done
             TOcompFlag = 1; // tell the main loop to calculate the takeoff velocities
         }
 
@@ -836,8 +903,8 @@ long deadbeat(int16_t* vi, int16_t* vo, long* ctrl) {
         // Scaled by 65536/2000
     */
 
-    //*
-    // Gains with shell: 108 g robot
+    /*
+    // Gains with shell: 108 g robot from runGridMotor16
     long pit_ctrl = -100*ix +31*ox
         -17*ixiz +11*oxiz -3*ixoz -19*oxoz
         +1*ixixix -2*oxoxox; // Scaled by 469 approx = PI/(3.14159*2000)
@@ -851,7 +918,40 @@ long deadbeat(int16_t* vi, int16_t* vo, long* ctrl) {
         +38*iziziz +38*ozozoz
         +13*(ixixiz+iyiyiz) -25*(oxoxiz+oyoyiz) -57*(ixixoz+iyiyoz) -31*(oxoxoz+oyoyoz));
         // Scaled by 65536/2000
-    //*/
+    */
+
+
+#ifdef FULL_POWER
+    // 100% gains from runGridMotor18
+    long pit_ctrl = -95*ix +40*ox
+        -17*ixiz +9*oxiz -4*ixoz -20*oxoz
+        +1*ixixix -2*oxoxox; // Scaled by 469 approx = PI/(3.14159*2000)
+
+    long rol_ctrl = -(-95*iy +40*oy
+        -17*iyiz +9*oyiz -4*iyoz -20*oyoz
+        +1*iyiyiy -2*oyoyoy);
+
+    long leg_ctrl = (77*65536 -542*iz -622*oz
+        +58*(ixix+iyiy) -33*iziz -117*(oxox+oyoy) -142*ozoz
+        +38*iziziz -82*ozozoz
+        +18*(ixixiz+iyiyiz) +10*(oxoxiz+oyoyiz) -9*(ixixoz+iyiyoz) +1*(oxoxoz+oyoyoz));
+        // Scaled by 65536/2000
+#else
+    // Gains with shell: 108 g robot from runGridMotor17
+    long pit_ctrl = -100*ix +31*ox // supposed to be 100 31
+        -17*ixiz +11*oxiz -3*ixoz -19*oxoz
+        +1*ixixix -2*oxoxox; // Scaled by 469 approx = PI/(3.14159*2000)
+
+    long rol_ctrl = -(-100*iy +31*oy
+        -17*iyiz +11*oyiz -3*iyoz -19*oyoz
+        +1*iyiyiy -2*oyoyoy);
+
+    long leg_ctrl = (67*65536 -437*iz -328*oz
+        +28*(ixix+iyiy) -58*iziz -121*(oxox+oyoy) +153*ozoz
+        +37*iziziz +32*ozozoz
+        +14*(ixixiz+iyiyiz) -25*(oxoxiz+oyoyiz) -55*(ixixoz+iyiyoz) -31*(oxoxoz+oyoyoz));
+        // Scaled by 65536/2000
+#endif
 
     pit_ctrl = pit_ctrl > PI/6 ? PI/6 :
               pit_ctrl < -PI/6 ? -PI/6 :
@@ -859,7 +959,7 @@ long deadbeat(int16_t* vi, int16_t* vo, long* ctrl) {
     rol_ctrl = rol_ctrl > PI/6 ? PI/6 :
               rol_ctrl < -PI/6 ? -PI/6 :
               rol_ctrl;
-    leg_ctrl = leg_ctrl > (75*65536) ? (75*65536) :
+    leg_ctrl = leg_ctrl > (80*65536) ? (80*65536) :
               leg_ctrl < (55*65536) ? (55*65536) :
               leg_ctrl;
 
@@ -867,8 +967,11 @@ long deadbeat(int16_t* vi, int16_t* vo, long* ctrl) {
     ctrl[1] = rol_ctrl;
     ctrl[2] = leg_ctrl;
 
+#ifdef FULL_POWER
+    return (90*65536); // ext_ctrl for 100% gains
+#else
     return (80*65536); // ext_ctrl
-
+#endif
 }
 
 long cosApprox(long x) {
@@ -879,6 +982,27 @@ long cosApprox(long x) {
     // INPUTS:
     // x: angle scaled by 16384 ticks per degree (2000 deg/s MPU gyro integrated @ 1kHz).
 
+    /*
+    if (x < 0) { x = -x; } // cosine is even
+    x = (x+PI) % (PI<<1) - PI;
+    if (x < 0) { x = -x; } // cosine is even
+
+    if (x > (PI>>1)) { // quadrants 2 and 3
+        x = (PI - x)/5760;
+        x = x > 255 ? 255 :
+            x < 0 ? 0 :
+            x;
+        return -(long)lut_cos[x];
+    } else {
+        x = x/5760; // quadrants 1 and 4
+        x = x > 255 ? 255 :
+            x < 0 ? 0 :
+            x;
+        return (long)lut_cos[x];
+    }
+    */
+
+    //*
     uint16_t xSquared;
     int16_t out;
     if (x < 0) { x = -x; } // cosine is even
@@ -894,4 +1018,5 @@ long cosApprox(long x) {
         out = (PISQUARED - (xSquared<<2))/((PISQUARED + xSquared)>>COS_PREC);
     }
     return (long)out;
+    //*/
 }

@@ -47,7 +47,7 @@ static unsigned char cmdGetAMSPos(unsigned char type, unsigned char status, unsi
 
 //Jumper functions
 static unsigned char cmdSetPitchSetpoint(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
-static unsigned char cmdresetBodyAngle(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
+static unsigned char cmdResetBodyAngle(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdSetMotorPos(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdStartExperiment(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdSetExperimentParams(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
@@ -58,6 +58,7 @@ static unsigned char cmdOnboardMode(unsigned char type, unsigned char status, un
 static unsigned char cmdGyroBias(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdGVectAtt(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdSetVelocity(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
+static unsigned char cmdAdjustBodyAngle(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 
 //Motor and PID functions
 static unsigned char cmdSetThrustOpenLoop(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
@@ -100,7 +101,7 @@ void cmdSetup(void) {
     cmd_func[CMD_PID_STOP_MOTORS] = &cmdPIDStopMotors;
 
     cmd_func[CMD_SET_PITCH_SET] = &cmdSetPitchSetpoint;
-    cmd_func[CMD_RESET_BODY_ANG] = &cmdresetBodyAngle;
+    cmd_func[CMD_RESET_BODY_ANG] = &cmdResetBodyAngle;
     cmd_func[CMD_SET_MOTOR_POS] = &cmdSetMotorPos;
     cmd_func[CMD_START_EXP] = &cmdStartExperiment;
     cmd_func[CMD_SET_EXP_PARAMS] = &cmdSetExperimentParams;
@@ -111,6 +112,7 @@ void cmdSetup(void) {
     cmd_func[CMD_GYRO_BIAS] = &cmdGyroBias;
     cmd_func[CMD_G_VECT_ATT] = &cmdGVectAtt;
     cmd_func[CMD_SET_VELOCITY] = &cmdSetVelocity;
+    cmd_func[CMD_ADJUST_BODY_ANG] = &cmdAdjustBodyAngle;
 }
 
 void cmdPushFunc(MacPacket rx_packet) {
@@ -256,6 +258,18 @@ unsigned char cmdSetVelocity(unsigned char type, unsigned char status, unsigned 
     return 1;
 }
 
+unsigned char cmdAdjustBodyAngle(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
+    // Set desired velocity to be tracked by onboard hopping control
+    long body_adjust[3];
+    int i;
+    for (i=0; i<3; i++){
+        body_adjust[i] = ((long)frame[2*i] + ((long)frame[2*i+1] << 8)) << 8;
+    }
+    adjustBodyAngle(body_adjust);
+
+    return 1;
+}
+
 unsigned char cmdStopExperiment(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
     // Stop PID and leg
     expStop((int)frame[0]);
@@ -303,7 +317,7 @@ unsigned char cmdGVectAtt(unsigned char type, unsigned char status, unsigned cha
     return 1;
 }
 
-unsigned char cmdresetBodyAngle(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
+unsigned char cmdResetBodyAngle(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
     resetBodyAngle();
     return 1;
 }

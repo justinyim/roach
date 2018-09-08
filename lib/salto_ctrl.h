@@ -18,8 +18,10 @@
 #define PISQUARED   32400 // bit shifted 28 bits down
 #define COS_PREC    8 // bits of precision in output of cosine
 
-#define ATT_CORRECTION_GAIN_X 9   // 8 is about equal to PI/180/2000 for 1 degree correction per 1 meter per second
-#define ATT_CORRECTION_GAIN_Y 5
+#define ATT_CORRECTION_GAIN_X 12   // 8 is about equal to PI/180/2000 for 1 degree correction per 1 meter per second
+#define ATT_CORRECTION_GAIN_Y 8
+
+//#define FULL_POWER
 
 
 void SetupTimer5();
@@ -31,6 +33,7 @@ void calibGyroBias();
 void accZeroAtt();
 void setOnboardMode(char mode, char flags); 
 void updateViconAngle(long* new_vicon_angle);
+void adjustBodyAngle(long* body_adjust);
 
 void setAttitudeSetpoint(long yaw, long roll, long pitch);
 void setLegSetpoint(long length);

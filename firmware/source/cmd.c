@@ -263,7 +263,8 @@ unsigned char cmdAdjustBodyAngle(unsigned char type, unsigned char status, unsig
     long body_adjust[3];
     int i;
     for (i=0; i<3; i++){
-        body_adjust[i] = ((long)frame[2*i] + ((long)frame[2*i+1] << 8)) << 8;
+        body_adjust[i] = (int16_t)frame[2*i] + ((int16_t)frame[2*i+1] << 8);
+        body_adjust[i] = body_adjust[i] << 8;
     }
     adjustBodyAngle(body_adjust);
 

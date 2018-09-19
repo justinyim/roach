@@ -134,6 +134,11 @@ uint32_t GAINS_GND = (P_GND<<16)+D_GND;
 uint32_t GAINS_STAND = (P_STAND<<16)+D_STAND;
 
 
+// Onboard trajectory
+unsigned long start_time = 0;
+unsigned long last_time = 0;
+
+
 void setControlFlag(char state){
     controlFlag = state;
 }
@@ -144,6 +149,7 @@ void setOnboardMode(char mode, char flags){
     // 1: use only onboard gyro integration and no vicon attitude updates
     LED_1 ^= 1;
     onboardMode = mode;
+    start_time = t1_ticks;
 }
 
 void setAttitudeSetpoint(long yaw, long roll, long pitch){
@@ -189,12 +195,72 @@ void setVelocitySetpoint(int16_t* new_vel_des, long new_yaw) {
     //new_vel_des[0] += velocity[0];
     //new_vel_des[1] += velocity[1];
 
+    //*
+    // Trajectory info
+    long cycle_time = 0;
+    long pos_des[2] = {0,0};
+    long traj_vel[3] = {0,0,5000};
+    //*/
+
     if (onboardMode & 0b10000) {
+        //*
         // Hacky position hold
         vel_des[2] = 5000; // 2.5m/s
         vel_des[0] = -robot_pos[0]/100;
         vel_des[1] = -robot_pos[1]/100;
         return;
+        //*/
+
+        /*
+        // Trajectory
+        cycle_time = (t1_ticks - start_time) % 20000;
+        if (cycle_time < 4000) {
+            traj_vel[0] = 0;
+            traj_vel[1] = 0;
+            pos_des[0] = 0;
+            pos_des[1] = 0;
+        }
+        if (cycle_time < 8000) {
+            // 1 m/s forwards for 2 seconds
+            traj_vel[0] = 1000;
+            traj_vel[1] = 0;
+            pos_des[0] = (cycle_time-4000)*traj_vel[0]/20;
+            pos_des[1] = 0;
+        } else if (cycle_time < 12000) {
+            // 0.5 m/s left for 2 seconds
+            traj_vel[0] = 0;
+            traj_vel[1] = 500;
+            pos_des[0] = 200000;
+            pos_des[1] = (cycle_time-8000)*traj_vel[1]/20;
+        } else if (cycle_time < 16000) {
+            // 1 m/s backwards for 2 seconds
+            traj_vel[0] = -1000;
+            traj_vel[1] = 0;
+            pos_des[0] = 200000 + (cycle_time-12000)*traj_vel[0]/20;
+            pos_des[1] = 100000;
+        } else {
+            // 0.5 m/s right for 2 seconds
+            traj_vel[0] = 0;
+            traj_vel[1] = -500;
+            pos_des[0] = 0;
+            pos_des[1] = 100000 + (cycle_time-16000)*traj_vel[1]/20;
+        }
+        */
+        /*
+        cycle_time = (t1_ticks - start_time) % 20000;
+        traj_vel[0] = cosApprox(cycle_time*295-PI/2)*4;
+        traj_vel[1] = cosApprox((cycle_time*590)%(2*PI))*3;
+        pos_des[0] = cosApprox(cycle_time*295-PI)*621;
+        pos_des[1] = cosApprox((cycle_time*590-PI/2)%(2*PI))*233;
+        */
+
+        // Note that these are in the world frame -- valid for yaw = 0
+        vel_des[0] = (pos_des[0]-robot_pos[0])/100 + traj_vel[0];
+        vel_des[1] = (pos_des[1]-robot_pos[1])/100 + traj_vel[1];
+        vel_des[2] = traj_vel[2];
+        return;
+        //*/
+
     }
 
     if (velocity[2] < -2000) {
@@ -270,6 +336,7 @@ void accZeroAtt(){
 
 void expStart(uint8_t startSignal) {
     mj_state = MJ_START;
+    start_time = t1_ticks;
 }
 
 void expStop(uint8_t stopSignal) {

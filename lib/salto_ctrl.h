@@ -10,6 +10,7 @@
 #define MJ_AIR          3
 #define MJ_GND          4
 #define MJ_STOPPED      5
+#define MJ_LAUNCH       6
 
 #define UART_PERIOD     10 // minimum UART period in ms (must be positive integer)
 

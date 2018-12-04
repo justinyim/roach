@@ -44,13 +44,13 @@
 // was 3976
 
 
-#if ROBOT_NAME == SALTO_1P_RUDOLPH
-#define MAXTHROT 3500
-#define MAXTHROT_TAIL 2000
-#else
+//#if ROBOT_NAME == SALTO_1P_RUDOLPH
+//#define MAXTHROT 3500
+//#define MAXTHROT_TAIL 2000
+//#else
 #define MAXTHROT 3800
 #define MAXTHROT_TAIL 3800
-#endif
+//#endif
 
 #define ABS(my_val) ((my_val) < 0) ? -(my_val) : (my_val)
 
@@ -324,7 +324,7 @@ extern volatile MacPacket uart_tx_packet;
 extern volatile unsigned char uart_tx_flag;
 
 unsigned char telemDecimateCount = 0;
-#define TELEM_DECIMATE 10
+#define TELEM_DECIMATE 2
 
 void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
     //int j,i;
@@ -444,7 +444,6 @@ void checkSwapBuff(int j){
 
 #define TAIL_BRAKE 20
 #define TAIL_REVERSE 5 // out of 128
-#define BALANCE_FF 5
 #define ANTIDEADBAND 5 // for Dasher, 20 is too high
 // 180(deg) * 2^15(ticks)/2000(deg/s) * 1000(Hz)
 extern int16_t vel_des[3];
@@ -486,7 +485,7 @@ void pidSetControl()
             }
         }
     } else if(pidObjs[0].mode == 2) { // balancing on toe
-        pidObjs[0].output += BALANCE_FF*tail_vel;
+        pidObjs[0].output += pidObjs[0].feedforward*tail_vel;
         if (pidObjs[0].output > MAXTHROT_TAIL) {
             pidObjs[0].output = MAXTHROT_TAIL;
         }
@@ -500,6 +499,7 @@ void pidSetControl()
     }
 }
 
+long lastTail = 0;
 
 void UpdatePID(pidPos *pid, int num)
 {
@@ -509,7 +509,7 @@ void UpdatePID(pidPos *pid, int num)
         pid->d=  (long)pid->Kd *  (long) pid->v_error;
         // better check scale factors
 
-        pid->preSat = (pid->feedforward * pid->extraVel) + pid->p +
+        pid->preSat = pid->p +
     		 ((pid->i ) >> 4) +  // divide by 16
     		  (pid->d >> 4); // divide by 16
     	pid->output = pid->preSat;
@@ -526,6 +526,11 @@ void UpdatePID(pidPos *pid, int num)
             pid->output = -pid->output;
             pid->preSat += ANTIDEADBAND*(tail_vel >= 0 ? 1 : -1);
             pid->output += ANTIDEADBAND*(tail_vel >= 0 ? 1 : -1);
+
+            // Hacky low pass tail output
+            pid->output = (pid->output >> 1) + 1*(lastTail >> 1);
+            lastTail = pid->output;
+
             if (pid->preSat > MAXTHROT_TAIL) {
                 pid->output = MAXTHROT_TAIL;
                 pid->i_error = (long) pid->i_error +
@@ -548,7 +553,7 @@ void UpdatePID(pidPos *pid, int num)
         pid->d=  (long)pid->Kd *  (long) pid->v_error;
         // better check scale factors
 
-        pid->preSat = (pid->feedforward * pid->extraVel) + pid->p +
+        pid->preSat = pid->p +
     		 ((pid->i ) >> 4) +  // divide by 16
     		  (pid->d >> 4); // divide by 16
     	pid->output = pid->preSat;
@@ -558,7 +563,6 @@ void UpdatePID(pidPos *pid, int num)
     	//pid-> i_error = (long)pid-> i_error + ((long)pid->p_error >> 4); // integrate error
      	//pid-> i_error = (long)pid-> i_error + ((long)pid->v_error); // integrate velocity error
         pid-> i_error = (long)pid-> i_error + ((long)pid->output >> 2); // integrate output
-            // TODO: change integration of output to use extraVel instead of taking over the i_error
 
 
         // pidObjs[2] is roll and pidObjs[3] is yaw
@@ -568,7 +572,7 @@ void UpdatePID(pidPos *pid, int num)
         yaw->d=  (long)yaw->Kd *  (long) yaw->v_error;
         // better check scale factors
 
-        yaw->preSat = (yaw->feedforward * yaw->extraVel) + yaw->p +
+        yaw->preSat = yaw->p +
              ((yaw->i ) >> 4) +  // divide by 16
               (yaw->d >> 4); // divide by 16
         yaw->output = yaw->preSat;

@@ -87,7 +87,8 @@ char onboardMode = 0; // mode for onboard controllers & estimators
 // 2: balance on toe
 // 4: use stand_gains leg gains
 // 8: use onboard control
-// 16: DON'T use attitude correction
+// 16: follow onboard trajectory
+// 32: DON'T use attitude correction
 volatile long pitchSetpoint = 0;
 volatile long rollSetpoint = 0;
 volatile long yawSetpoint = 0;
@@ -126,8 +127,8 @@ int32_t last_mot;
 #define D_AIR ((2*65536)/1000) // leg derivative gain in the air (duty cycle/[rad/s] * 65536)
 #define P_GND ((5*65536)/10) // leg proportional gain on the ground
 #define D_GND ((1*65536)/1000)
-#define P_STAND ((5*65536)/1000) // leg proportional gain for standing
-#define D_STAND ((4*65536)/1000)
+#define P_STAND ((4*65536)/100) // leg proportional gain for standing
+#define D_STAND ((3*65536)/10000)
 
 uint32_t GAINS_AIR = (P_AIR<<16)+D_AIR;
 uint32_t GAINS_GND = (P_GND<<16)+D_GND;
@@ -469,7 +470,13 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         } else { // Control pitch, roll, and yaw
             if (onboardMode & 0b110) { // standing on the ground
                 tiHChangeMode(1, TIH_MODE_COAST);
-                pidObjs[0].mode = 2;
+                if (mj_state == MJ_AIR) { // in the air
+                    pidObjs[0].mode = 0;
+                    pidObjs[0].p_input = pitchSetpoint;
+                } else {
+                    pidObjs[0].mode = 2;
+                    pidObjs[0].p_input = pitchSetpoint;
+                }
             } else { // normal jumping operation
                 if (mj_state == MJ_AIR) { // in the air
                     tiHChangeMode(1, TIH_MODE_COAST);
@@ -509,6 +516,12 @@ long transition_time = 0;
 void multiJumpFlow() {
     //int gdata[3];
     //mpuGetGyro(gdata);
+
+    // Hacky e-stop if the robot falls over
+    if ((mj_state != MJ_STOPPED) && (body_angle[1] > PI/4 || body_angle[1] < -PI/4)) {
+        mj_state = MJ_STOP;
+    } 
+
     switch(mj_state) {
         case MJ_START:
             pidObjs[0].timeFlag = 0;
@@ -517,7 +530,7 @@ void multiJumpFlow() {
             pidOn(2);
             pidOn(3);
 
-            mj_state = MJ_GND;
+            mj_state = MJ_LAUNCH;
             break;
 
         case MJ_STOP:
@@ -537,18 +550,54 @@ void multiJumpFlow() {
                 mj_state = MJ_GND;
                 transition_time = t1_ticks;
             } else { // remain in air state
-                send_command_packet(&uart_tx_packet_global, legSetpoint, GAINS_AIR, 2);
+                if (onboardMode & 0b100) {
+                    vel_des[0] = 0;
+                    vel_des[1] = 0;
+                    vel_des[2] = 0;
+                    pitchSetpoint = x_ctrl-PI/57/3;
+                    rollSetpoint = y_ctrl+PI/57/4;
+                    send_command_packet(&uart_tx_packet_global, legSetpoint, GAINS_STAND, 2);
+                } else { // normal operation
+                    send_command_packet(&uart_tx_packet_global, legSetpoint, GAINS_AIR, 2);
+                }
             }
             break;
 
         case MJ_GND:
             // Liftoff transition from ground to air
-            if (t1_ticks - transition_time > 50 && footTakeoff() == 1 && crank > 8192) {
+            if (t1_ticks - transition_time > 50 && footTakeoff() == 1 && crank > 8192
+                && !(onboardMode & 0b110)) { // stay in ground mode if we're trying to toe balance
                 mj_state = MJ_AIR;
                 transition_time = t1_ticks;
             } else { // remain in ground state
                 if (onboardMode & 0b100) { // static standing on ground
-                    send_command_packet(&uart_tx_packet_global, legSetpoint, GAINS_STAND, 2);
+                    pitchSetpoint = 0;
+                    rollSetpoint = 0;
+                    send_command_packet(&uart_tx_packet_global, 
+                        (100*(crank+BLDC_MOTOR_OFFSET)-100)/2 + (30*65536)/2
+                        , GAINS_STAND, 2);
+                } else { // normal operation
+                    send_command_packet(&uart_tx_packet_global, pushoffCmd, GAINS_GND, 2);
+                }
+            }
+            break;
+
+        case MJ_LAUNCH:
+            // Liftoff transition from launch to air
+            if (t1_ticks - transition_time > 50 && footTakeoff() == 1 && crank > 8192) {
+                mj_state = MJ_AIR;
+                transition_time = t1_ticks;
+            } else { // remain in launch state
+                if (onboardMode & 0b100) { // static standing on ground
+                    if (crank < 8192 && pushoffCmd < 40*65536) { // waiting for launch (phase 0)
+                        send_command_packet(&uart_tx_packet_global, legSetpoint, GAINS_STAND, 2);
+                    } else {
+                        if (crank < 8192) { // initiating launching (phase 1)
+                            send_command_packet(&uart_tx_packet_global, pushoffCmd, GAINS_GND, 2);
+                        } else { // slowing launching (phase 2)
+                            send_command_packet(&uart_tx_packet_global, legSetpoint, GAINS_GND, 2);
+                        }
+                    }
                 } else { // normal operation
                     send_command_packet(&uart_tx_packet_global, pushoffCmd, GAINS_GND, 2);
                 }
@@ -603,8 +652,8 @@ char footContact(void) {
     int eps = 2000;
     unsigned int mot;
     sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
-    mot = (unsigned int)(sensor_data->position*motPos_to_femur_crank_units); //UNITFIX
-    char this_contact = mot-BLDC_MOTOR_OFFSET>crank && (mot-BLDC_MOTOR_OFFSET - eps) > crank;
+    mot = (unsigned int)(sensor_data->position*motPos_to_femur_crank_units) - BLDC_MOTOR_OFFSET; //UNITFIX
+    char this_contact = mot>crank && (mot - eps) > crank;
     char contact = this_contact && last_contact;
     last_contact = this_contact;
     return contact;
@@ -614,8 +663,8 @@ char footTakeoff(void) {
     int eps = 1000;
     unsigned int mot;
     sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
-    mot = (unsigned int)(sensor_data->position*motPos_to_femur_crank_units); //UNITFIX
-    return ((mot-BLDC_MOTOR_OFFSET + eps) < crank) || calibPos(2) > FULL_EXTENSION;
+    mot = (unsigned int)(sensor_data->position*motPos_to_femur_crank_units) - BLDC_MOTOR_OFFSET; //UNITFIX
+    return ((mot + eps) < crank) || calibPos(2) > FULL_EXTENSION;
 }
 
 long calibPos(char idx){
@@ -689,9 +738,14 @@ void orientImageProc(long* body_frame, int* ImageProc_frame) {
 #if ROBOT_NAME == SALTO_1P_RUDOLPH
         // -55 degrees about roll
         // x axis right, y axis forwards, z axis up from ImageProc
+        body_frame[0] = (165*((long)ImageProc_frame[2]) - 196*((long)ImageProc_frame[0]))>>8; //yaw
+        body_frame[1] = -ImageProc_frame[1]; // roll
+        body_frame[2] = (165*((long)ImageProc_frame[0]) + 196*((long)ImageProc_frame[2]))>>8; //pitch
+        /*
         body_frame[0] = (147*((long)ImageProc_frame[2]) + 210*((long)ImageProc_frame[0]))>>8; //yaw
         body_frame[1] = ImageProc_frame[1]; // roll
         body_frame[2] = (-147*((long)ImageProc_frame[0]) + 210*((long)ImageProc_frame[2]))>>8; //pitch
+        */
 #elif ROBOT_NAME == SALTO_1P_DASHER
         // -50 degrees about x, follwed by 180 degrees about body z
         body_frame[0] = (165*((long)ImageProc_frame[2]) - 196*((long)ImageProc_frame[0]))>>8; //yaw
@@ -774,7 +828,7 @@ void updateVelocity(long time) {
     unsigned char i, j;
     char cntr;
     sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
-    int32_t mot = sensor_data->position*motPos_to_femur_crank_units; //UNITFIX
+    int32_t mot = sensor_data->position*motPos_to_femur_crank_units - BLDC_MOTOR_OFFSET; //UNITFIX
     if (mot - last_mot > 1<<14 || last_mot - mot > 1<<14) {
         mot = last_mot; // reject bad samples
     }
@@ -796,7 +850,7 @@ void updateVelocity(long time) {
 
     // Update leg and leg velocity estimates
     int32_t legErr;
-    if (mj_state == MJ_GND) { // Stance phase estimation
+    if (mj_state == MJ_GND || mj_state == MJ_LAUNCH) { // Stance phase estimation
 
         if (last_state == MJ_AIR) { // The robot just touched down
             for (j=0; j<3; j++) {
@@ -824,7 +878,7 @@ void updateVelocity(long time) {
         velocity[2] = 0; // also zeroing vertical velocity
     } else if (mj_state == MJ_AIR) { // Flight phase estimation
 
-        if (last_state == MJ_GND) { // robot thinks it just took off
+        if (last_state == MJ_GND || last_state == MJ_LAUNCH) { // robot thinks it just took off
             // save the pose and velocity states for calculating takeoff velocities
             // first, check if takeoff actually happened earlier
             cntr = vel_ind;

@@ -1,8 +1,8 @@
 
 #include "takeoff_est.h"
-#include "salto_ctrl.h"
+#include "salto1p.h"
 
-
+/*
 extern int16_t TOleg;
 extern int16_t TOlegVel;
 extern long TObody_angle[3];
@@ -71,29 +71,23 @@ void takeoffEstimation(){
         TDbody_angle[i] -= TDangle_setpoint[i]; // calculate angle error
     }
 
-    /*
     // Deadbeat-based correction
-    long predicted_angles[3];
-    deadbeat(TDvelocity, velocity, predicted_angles);
-    att_correction[0] = (TDbody_angle[2] - predicted_angles[0])>>2;
-    att_correction[1] = (TDbody_angle[1] - predicted_angles[1])>>2;
-    */
+    //long predicted_angles[3];
+    //deadbeat(TDvelocity, velocity, predicted_angles);
+    //att_correction[0] = (TDbody_angle[2] - predicted_angles[0])>>2;
+    //att_correction[1] = (TDbody_angle[1] - predicted_angles[1])>>2;
 
-    //*
     // Velocity-based correction
     long velocity_x = (velocity[0]*TOcos_psi + velocity[1]*TOsin_psi)>>COS_PREC;
     long velocity_y = (-velocity[0]*TOsin_psi + velocity[1]*TOcos_psi)>>COS_PREC;
 
     att_correction[0] = -(ATT_CORRECTION_GAIN_X*(velocity_x - stance_vel_des[0]) - (TDbody_angle[2]>>1));
     att_correction[1] = ATT_CORRECTION_GAIN_Y*(velocity_y - stance_vel_des[1]) + (TDbody_angle[1]>>1);
-    //*/
 
-    /*
-    att_correction[0] = -(ATT_CORRECTION_GAIN_X*(velocity_x - stance_vel_des[0]) * 188) /
-        ((long)(-velocity[2] + TDvelocity[2]) >> 6);
-    att_correction[1] = (ATT_CORRECTION_GAIN_Y*(velocity_y - stance_vel_des[1]) * 188) /
-        ((long)(-velocity[2] + TDvelocity[2]) >> 6); // (3*2000 >> 6)*2 is about 188
-    */
+    //att_correction[0] = -(ATT_CORRECTION_GAIN_X*(velocity_x - stance_vel_des[0]) * 188) /
+    //    ((long)(-velocity[2] + TDvelocity[2]) >> 6);
+    //att_correction[1] = (ATT_CORRECTION_GAIN_Y*(velocity_y - stance_vel_des[1]) * 188) /
+    //    ((long)(-velocity[2] + TDvelocity[2]) >> 6); // (3*2000 >> 6)*2 is about 188
 
     att_correction[0] = att_correction[0] > 15000 ? 15000 :
                         att_correction[0] < -15000 ? -15000 :
@@ -105,3 +99,4 @@ void takeoffEstimation(){
 
     TOcompFlag = 0;
 }
+*/

@@ -112,7 +112,9 @@ def main():
 
         # Evaulate accuracy of calibration --------------
         #'''
-        toSend = [135,int((2**11))] # reterminated motor 1
+        # This should be between 0 and 2^14/6 = 2730.7
+        # The calibration is good if the leg moves quickly outwards.
+        toSend = [467,int((2**11))] # reterminated motor 1
         #toSend = [2018,int(2**13)] # stock motor 1
         xb_send(0, command.CALIBRATE_MOTOR, pack('2h', *toSend))
         time.sleep(params.duration / 1000.0)

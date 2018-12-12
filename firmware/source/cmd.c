@@ -16,13 +16,12 @@
 #include "settings.h"
 #include "timer.h"
 #include "tih.h"
-#include "pid-ip2.5.h"
 #include "ams-enc.h"
 #include "carray.h"
 #include "telem.h"
 #include "uart_driver.h"
 #include "protocol.h"
-#include "salto_ctrl.h"
+#include "salto1p.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -31,7 +30,7 @@
 unsigned char (*cmd_func[MAX_CMD_FUNC])(unsigned char, unsigned char, unsigned char, unsigned char*, unsigned int);
 void cmdError(void);
 
-extern pidPos pidObjs[NUM_PIDS];
+//extern pidPos pidObjs[NUM_PIDS];
 extern EncObj encPos[NUM_ENC];
 extern EncObj motPos;
 extern volatile CircArray fun_queue;
@@ -150,6 +149,7 @@ unsigned char cmdWhoAmI(unsigned char type, unsigned char status, unsigned char 
 
 unsigned char cmdGetAMSPos(unsigned char type, unsigned char status,
         unsigned char length, unsigned char *frame, unsigned int src_addr) {
+    /*
     long motor_count[2];
     motor_count[0] = pidObjs[0].p_state;
     motor_count[1] = pidObjs[1].p_state;
@@ -159,6 +159,8 @@ unsigned char cmdGetAMSPos(unsigned char type, unsigned char status,
 
     radioSendData(src_addr, status, CMD_GET_AMS_POS,  //TODO: Robot should respond to source of query, not hardcoded address
             sizeof(motor_count), (unsigned char *)motor_count, 0);
+    */
+    // pid-ip2.5.c removed
     return 1;
 }
 // ==== Jumper Commands ==============================================================================
@@ -208,6 +210,7 @@ unsigned char cmdSetExperimentParams(unsigned char type, unsigned char status, u
 }
 
 unsigned char cmdSetPitchSetpoint(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
+    /*
     long pos = 0;
     int i;
     
@@ -217,6 +220,8 @@ unsigned char cmdSetPitchSetpoint(unsigned char type, unsigned char status, unsi
     }
     setControlFlag(1);
     setAttitudeSetpoint(0,0,pos);
+    */
+    // no longer used
     return 1;
 }
 
@@ -236,7 +241,7 @@ unsigned char cmdIntegratedVicon(unsigned char type, unsigned char status, unsig
     long leg_length = (int16_t)frame[12] + ((int16_t)frame[13] << 8);
     long pushoff = (int16_t)frame[14] + ((int16_t)frame[15] << 8);
 
-    updateViconAngle(new_vicon_angle);
+    updateBodyAngle(new_vicon_angle);
     setAttitudeSetpoint(new_setpoints[0],new_setpoints[1],new_setpoints[2]);
     setLegSetpoint(leg_length);
     setPushoffCmd(pushoff);
@@ -246,6 +251,7 @@ unsigned char cmdIntegratedVicon(unsigned char type, unsigned char status, unsig
 
 unsigned char cmdSetVelocity(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
     // Set desired velocity to be tracked by onboard hopping control
+    /*
     int16_t new_vel_des[3];
     long new_yaw;
     int i;
@@ -255,6 +261,8 @@ unsigned char cmdSetVelocity(unsigned char type, unsigned char status, unsigned 
     new_yaw = ((long)frame[6] + ((long)frame[7] << 8)) << 8;
     setVelocitySetpoint(new_vel_des, new_yaw);
 
+    */
+    //TODO
     return 1;
 }
 
@@ -319,7 +327,8 @@ unsigned char cmdGVectAtt(unsigned char type, unsigned char status, unsigned cha
 }
 
 unsigned char cmdResetBodyAngle(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
-    resetBodyAngle();
+    long body_angle[3] = {0,0,0};
+    setBodyAngle(body_angle);
     return 1;
 }
 
@@ -338,6 +347,7 @@ unsigned char cmdSetMotorPos(unsigned char type, unsigned char status, unsigned 
 // ==== Flash/Experiment Commands ==============================================================================
 // =============================================================================================================
 unsigned char cmdStartTimedRun(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
+    /*
     unsigned int run_time = frame[0] + (frame[1] << 8);
     int i;
     for (i = 0; i < NUM_PIDS; i++){
@@ -349,7 +359,8 @@ unsigned char cmdStartTimedRun(unsigned char type, unsigned char status, unsigne
     pidObjs[0].mode = 0;
     pidStartTimedTrial(run_time);
 
-
+    */
+    // pid-ip2.5.c removed
     return 1;
 }
 
@@ -381,6 +392,7 @@ unsigned char cmdFlashReadback(unsigned char type, unsigned char status, unsigne
 // =============================================================================================================
 
 unsigned char cmdSetThrustOpenLoop(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr) {
+    /*
     // int thrust1 = frame[0] + (frame[1] << 8);
     // int thrust2 = frame[2] + (frame[3] << 8);
     // unsigned int run_time_ms = frame[4] + (frame[5] << 8);
@@ -406,11 +418,13 @@ unsigned char cmdSetThrustOpenLoop(unsigned char type, unsigned char status, uns
     int Kdy = frame[10] + (frame[11] << 8);
     pidSetGains(2,Kpr,Kir,Kdr,0,0);
     pidSetGains(3,Kpy,Kiy,Kdy,0,0);
+    */
+    // pid-ip2.5.c removed
     return 1;
  } 
 
  unsigned char cmdSetMotorMode(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr) {
-
+    /*
     int thrust1 = frame[0] + (frame[1] << 8);
     int thrust2 = frame[2] + (frame[3] << 8);
 
@@ -418,34 +432,30 @@ unsigned char cmdSetThrustOpenLoop(unsigned char type, unsigned char status, uns
     pidObjs[1].pwmDes = thrust2;
 
     pidObjs[0].mode = 1;
+    */
+    // pid-ip2.5.c removed
     return 1;
  }
 
 unsigned char cmdSetPIDGains(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr) {
-    int Kp, Ki, Kd, Kaw, ff;
-    int idx = 0;
+    uint8_t i;
+    int16_t gains[10];
 
-    Kp = frame[idx] + (frame[idx+1] << 8); idx+=2;
-    Ki = frame[idx] + (frame[idx+1] << 8); idx+=2;
-    Kd = frame[idx] + (frame[idx+1] << 8); idx+=2;
-    Kaw = frame[idx] + (frame[idx+1] << 8); idx+=2;
-    ff = frame[idx] + (frame[idx+1] << 8); idx+=2;
-    pidSetGains(0,Kp,Ki,Kd,Kaw, ff);
-    Kp = frame[idx] + (frame[idx+1] << 8); idx+=2;
-    Ki = frame[idx] + (frame[idx+1] << 8); idx+=2;
-    Kd = frame[idx] + (frame[idx+1] << 8); idx+=2;
-    Kaw = frame[idx] + (frame[idx+1] << 8); idx+=2;
-    ff = frame[idx] + (frame[idx+1] << 8); idx+=2;
-    pidSetGains(1,Kp,Ki,Kd,Kaw, ff);
+    for (i=0; i<10; i++) {
+        gains[i] = frame[i*2] + (frame[i*2+1] << 8);
+    }
+    setGains(gains);
 
     radioSendData(src_addr, status, CMD_SET_PID_GAINS, 20, frame, 0); //TODO: Robot should respond to source of query, not hardcoded address
     //Send confirmation packet
     // WARNING: Will fail at high data throughput
     //radioConfirmationPacket(RADIO_DEST_ADDR, CMD_SET_PID_GAINS, status, 20, frame);
+    
     return 1; //success
 }
 
 unsigned char cmdSetVelProfile(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr) {
+    /*
     int interval[NUM_VELS], delta[NUM_VELS], vel[NUM_VELS], period, onceFlag;
     int idx = 0, i = 0;
     // Packet structure [Period, delta[NUM_VELS], FLAG, Period, delta[NUM_VELS], FLAG]
@@ -488,11 +498,13 @@ unsigned char cmdSetVelProfile(unsigned char type, unsigned char status, unsigne
 
     //Send confirmation packet
     // TODO : Send confirmation packet with packet index
+    */
+    // pid-ip2.5.c removed
     return 1; //success
 }
 
 unsigned char cmdPIDStartMotors(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr) {
-    
+    /*
     int i;
     for(i=0;i<NUM_PIDS;i++){  
     pidObjs[i].timeFlag = 0;
@@ -501,19 +513,24 @@ unsigned char cmdPIDStartMotors(unsigned char type, unsigned char status, unsign
     pidOn(i);
     }
     setControlFlag(1);
-
+    */
+    // pid-ip2.5.c removed
     return 1;
 }
 
 unsigned char cmdPIDStopMotors(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr) {
+    /*
     int i;
     for(i=0;i<NUM_PIDS;i++){  
         pidObjs[i].onoff = 0;
     }
+    */
+    // pid-ip2.5.c removed
     return 1;
 }
 
 unsigned char cmdZeroPos(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr) {
+    /*
     long motor_count[2];
     motor_count[0] = pidObjs[0].p_state;
     motor_count[1] = pidObjs[1].p_state;
@@ -522,12 +539,15 @@ unsigned char cmdZeroPos(unsigned char type, unsigned char status, unsigned char
         sizeof(motor_count), (unsigned char *)motor_count, 0);
     pidZeroPos(0);
     pidZeroPos(1);
+    */
+    // pid-ip2.5.c removed
     return 1;
 }
 
 void cmdError() {
     int i;
-    EmergencyStop();
+    // TODO make a real emergency stop
+    //EmergencyStop();
     for(i= 0; i < 10; i++) {
         LED_1 ^= 1;
         delay_ms(200);

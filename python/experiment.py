@@ -20,22 +20,9 @@ def main():
     # Send robot a WHO_AM_I command, verify communications
     queryRobot()
     #Motor gains format:
-    #  [ Kp , Ki , Kd , Kaw , Kff     ,  Kp , Ki , Kd , Kaw , Kff ]
-    #    ----------LEFT----------        ---------_RIGHT----------
-    #motorgains = [450,0,20,0,100, 0,0,0,0,0] #[600,0,20,0,0, 100,0,0,0,0]
-    #thrustGains = [300,100,300,30,0,40]
-    motorgains = [110,0,25,0,0, 0,0,0,0,0]
-    thrustGains = [160,0,190, 100,0,150]
-    motorgains = [0,0,0,0,0, 0,0,0,0,0]# disable thrusters and tail
-    thrustGains = [0,0,0, 0,0,0]
-
-    #motorgains = [150,0,13,0,5, 0,0,0,0,0]
-    thrustGains = [250,0,180, 0,50,50]
-
-    xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h', *thrustGains))
-    time.sleep(0.01)
-    xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h', *thrustGains))
-    time.sleep(0.01)
+    #  [ Kp , Kd , other , Kp , Kd , other , Kp , Kd , other , other ]
+    motorgains = [100,80,0, 150,120,0, 100,15,0,0]
+    motorgains = [0,0,0, 0,0,0, 0,0,0,0]
 
     duration = 5000#15000
     rightFreq = 0
@@ -49,7 +36,6 @@ def main():
     setMotorGains(motorgains)
 
     sj_params = sjParams(300, 800)
-    # wj_params = wjParams(-551287, -50000, 1000000, 4941297, 411774)
     wj_params = wjParams(-551287, -40000, 80000, 5353068, 411774)
     wjParams.set(wj_params)
 
@@ -77,7 +63,7 @@ def main():
             startTelemetrySave(numSamples)
 
 
-        '''
+        #'''
         # basic leg extension test
         exp = [2]
         arbitrary = [0]
@@ -89,11 +75,11 @@ def main():
         xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
         time.sleep(0.02)
 
-        viconTest = [0,0,0,0,0,0,60*256,80*256]#55*256,70*256]
+        viconTest = [0,0,0,0,0,0,70*256,90*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(0.02)
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
-        '''
+        #'''
 
 
         '''
@@ -105,7 +91,7 @@ def main():
         '''
 
 
-        #'''
+        '''
         # Balance on toe test
         #Start robot 0: wall jump, 1: single jump, 2: vicon jumps
         exp = [2]
@@ -144,12 +130,12 @@ def main():
             print 10-x
             time.sleep(1.0)
 
-        #'''
-        #'''
+        '''
+        '''
         #viconTest = [0,0,0,0,0,0,25*256,50*256]#55*256,70*256]
         viconTest = [0,0,0,0,0,0,60*256,90*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        #'''
+        '''
 
 
 
@@ -211,8 +197,8 @@ def main():
         '''
 
 
-        #time.sleep(params.duration / 1000.0)
-        time.sleep(0.5)
+        time.sleep(params.duration / 1000.0)
+        #time.sleep(0.5)
         
         #time.sleep(10)
         stopSignal = [0]

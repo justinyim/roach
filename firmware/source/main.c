@@ -67,29 +67,20 @@
 #include "mpu6000.h"
 #include "sclock.h"
 #include "spi_controller.h"
-#include "pid-ip2.5.h"
 #include "adc_pid.h"
 #include "cmd.h"
 #include "uart_driver.h"
 #include "ppool.h"
 #include "carray.h"
 #include "protocol.h"
-#include "salto_ctrl.h"
+#include "salto1p.h"
 #include "takeoff_est.h"
 
 static Payload rx_payload;
 static MacPacket rx_packet;
 static test_function rx_function;
 
-packet_union_t uart_tx_packet_Test;
-unsigned int uart_tx_count;
-unsigned int control_count;
-
 volatile CircArray fun_queue;
-
-#define TX_COUNT_MAX 285
-
-extern unsigned char TOcompFlag; // TODO: this is a bit of a hack
 
 int main() {
 
@@ -113,45 +104,23 @@ int main() {
     radioSetSrcAddr(RADIO_SRC_ADDR);
     radioSetSrcPanID(RADIO_PAN_ID);
 
-    // Create dummy UART TX packet
-    uart_tx_packet_Test.packet.header.start = PKT_START_CHAR;
-    uart_tx_packet_Test.packet.header.type = PKT_TYPE_COMMAND;
-    uart_tx_packet_Test.packet.header.length = sizeof(header_t) + sizeof(command_data_t) + 1;
-    uart_tx_packet_Test.packet.header.flags = 0;
-    command_data_t* command_data = (command_data_t*)&(uart_tx_packet_Test.packet.data_crc);
-    command_data->position_setpoint = 0x01;
-    command_data->current_setpoint = 0x89ABCDEF;
-
-    // UART communication to mbed BLDC controller
-    uart_tx_count = TX_COUNT_MAX; // number of main loops per control send
-    control_count = 0;
-    uartInit();
-
     // Need delay for encoders to be ready
     delay_ms(100);
     amsEncoderSetup();
-    
+
+    uartInit(); // UART communication to mbed BLDC controller
+
     mpuSetup();
     tiHSetup();
     dfmemSetup();
     telemSetup();
     adcSetup();
-    pidSetup();
 
-    tailCtrlSetup();
+    salto1pSetup(); // replacing pidSetup & tailCtrlSetup
     
     while(1){
         // Send outgoing radio packets
         radioProcess();
-
-//         Send outgoing UART packets at about 100Hz
-//        if(--uart_tx_count == 0) {
-//            uartSend(uart_tx_packet_Test.packet.header.length, (unsigned char*)&(uart_tx_packet_Test.raw));
-//            uart_tx_count = TX_COUNT_MAX;
-//            if(((++control_count) % 50) == 0) {
-//                LED_1 ^= 1;
-//            }
-//        }
 
         // move received packets to function queue
         while (!radioRxQueueEmpty()) {
@@ -178,9 +147,7 @@ int main() {
             }
         }
 
-        if (TOcompFlag) { // do long computation at the beginning of flight phase
-            takeoffEstimation();
-        }
+        salto1p_functions(); // TODO
     }
     return 0;
 }

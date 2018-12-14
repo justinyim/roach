@@ -21,7 +21,7 @@ def main():
     queryRobot()
     #Motor gains format:
     #  [ Kp , Kd , other , Kp , Kd , other , Kp , Kd , other , other ]
-    motorgains = [100,80,0, 150,120,0, 100,15,0,0]
+    motorgains = [100,80,0, 150,120,0, 120,15,0,0]
     motorgains = [0,0,0, 0,0,0, 0,0,0,0]
 
     duration = 5000#15000

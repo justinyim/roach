@@ -20,7 +20,7 @@
 #define PI_SQUARE   32400   // bit shifted down by 28 bits
 #define COS_PREC    8       // bits of precision in output of cosine
 
-#define MAX_THROT
+#define MAX_THROT 3800
 
 #define FULL_POWER
 
@@ -36,9 +36,9 @@ void setGains(int16_t* gains);
 void setAttitudeSetpoint(long yaw, long roll, long pitch);
 void setLegSetpoint(long length);
 void setPushoffCmd(long cmd);
-void setBodyAngle(long* q_set) ;
-void adjustBodyAngle(long* q_adjust);
-void updateBodyAngle(long* q_update);
+void setBodyAngle(long* qSet) ;
+void adjustBodyAngle(long* qAdjust);
+void updateBodyAngle(long* qUpdate);
 void accZeroAtt();
 void calibGyroBias();
 void expStart(uint8_t startSignal);

@@ -19,13 +19,15 @@
 extern packet_union_t* last_bldc_packet;
 extern uint8_t last_bldc_packet_is_new;
 
-extern long tail_vel;
+extern int32_t tail_pos;
+extern int32_t tail_vel;
 extern int16_t gdata[3];
 extern int16_t xldata[3];
 
 extern unsigned char mj_state;
 extern char running;
-char onboardMode = 0 ;
+char onboardMode = 0;
+extern int32_t femur;
 extern int32_t crank;
 extern int32_t foot;
 extern int32_t MA;
@@ -41,7 +43,8 @@ extern int16_t foreThruster;
 extern int16_t aftThruster;
 extern int16_t tailMotor;
 
-extern EncObj encPos[NUM_ENC];          // Encoder angle objects
+extern uint32_t ctrlCount;
+
 
 //extern long x_ctrl;
 //extern long y_ctrl;
@@ -55,8 +58,8 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     //tptr = (vrTelemStruct_t*) ptr;
 
     //Motion control
-    ptr->posTail = (long)(encPos[0].pos << 2) + (encPos[0].oticks << 16);
-    ptr->posFemur = -(((long)encPos[1].pos - (long)encPos[1].offset) << 2) - (encPos[1].oticks << 16);
+    ptr->posTail = tail_pos;
+    ptr->posFemur = femur;
     
     ptr->pitch = q[1];//pidObjs[0].p_state;
     ptr->roll = q[0];//pidObjs[2].p_state;
@@ -99,7 +102,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->voltage = sensor_data->voltage;
     ptr->crank = crank;
     ptr->force = force;
-    ptr->foot = leg;
+    ptr->foot = ctrlCount;//leg;
     ptr->footVel = legVel;
     //*/
     /*

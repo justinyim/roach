@@ -251,7 +251,6 @@ unsigned char cmdIntegratedVicon(unsigned char type, unsigned char status, unsig
 
 unsigned char cmdSetVelocity(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
     // Set desired velocity to be tracked by onboard hopping control
-    /*
     int16_t new_vel_des[3];
     long new_yaw;
     int i;
@@ -261,8 +260,6 @@ unsigned char cmdSetVelocity(unsigned char type, unsigned char status, unsigned 
     new_yaw = ((long)frame[6] + ((long)frame[7] << 8)) << 8;
     setVelocitySetpoint(new_vel_des, new_yaw);
 
-    */
-    //TODO
     return 1;
 }
 

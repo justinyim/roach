@@ -35,9 +35,9 @@ extern int32_t force;
 extern int16_t leg;
 extern int32_t legVel;
 extern int32_t q[3];
-int16_t v[3];
+extern int16_t v[3];
 extern int32_t w[3];
-int32_t p[3];
+extern int32_t p[3];
 
 extern int16_t foreThruster;
 extern int16_t aftThruster;
@@ -53,6 +53,8 @@ extern uint32_t ctrlCount;
 
 //void vrTelemGetData(unsigned char* ptr) {
 void vrTelemGetData(vrTelemStruct_t* ptr) {
+
+    uint8_t running = mj_state != MJ_STOP && mj_state != MJ_STOPPED && mj_state != MJ_IDLE;
     
     //vrTelemStruct_t* tptr;
     //tptr = (vrTelemStruct_t*) ptr;
@@ -95,26 +97,26 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     */
 
 
-    //*
+    /*
     // leg dynamics
     ptr->otherMode = 4;
     ptr->onboardMode = mj_state + (running <<7) + (onboardMode << 8);
     ptr->voltage = sensor_data->voltage;
     ptr->crank = crank;
     ptr->force = force;
-    ptr->foot = ctrlCount;//leg;
+    ptr->foot = leg;
     ptr->footVel = legVel;
-    //*/
-    /*
+    */
+    //*
     // body velocity
     ptr->otherMode = 5;
     ptr->onboardMode = mj_state + (running <<7) + (onboardMode << 8);
     ptr->voltage = sensor_data->voltage;
     ptr->crank = crank;
-    ptr->force = velocity[0];
-    ptr->foot = velocity[1];
-    ptr->footVel = velocity[2];
-    */
+    ptr->force = v[0];
+    ptr->foot = v[1];
+    ptr->footVel = v[2];
+    //*/
     /*
     // onboard velocity control
     ptr->otherMode = 7;
@@ -134,12 +136,12 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->force = x_ctrl/90;
     ptr->foot = y_ctrl/90;
     ptr->footVel = legVel;
-    ptr->accelX = velocity[0];
-    ptr->accelY = velocity[1];
-    ptr->accelZ = velocity[2];
-    //ptr->accelX = vel_des[0];
-    //ptr->accelY = vel_des[1];
-    //ptr->accelZ = vel_des[2];
+    ptr->accelX = v[0];
+    ptr->accelY = v[1];
+    ptr->accelZ = v[2];
+    //ptr->accelX = vCmd[0];
+    //ptr->accelY = vCmd[1];
+    //ptr->accelZ = vCmd[2];
     */
     /*
     // onboard velocity control

@@ -74,7 +74,6 @@
 #include "carray.h"
 #include "protocol.h"
 #include "salto1p.h"
-#include "takeoff_est.h"
 
 static Payload rx_payload;
 static MacPacket rx_packet;

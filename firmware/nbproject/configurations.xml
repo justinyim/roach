@@ -37,7 +37,6 @@
         <itemPath>../lib/tests.h</itemPath>
         <itemPath>../lib/vr_telem.h</itemPath>
         <itemPath>../lib/as5047.h</itemPath>
-        <itemPath>../lib/takeoff_est.h</itemPath>
         <itemPath>../lib/salto1p.h</itemPath>
       </logicalFolder>
       <logicalFolder name="f1" displayName="settings" projectFiles="true">
@@ -84,7 +83,6 @@
         <itemPath>../lib/vr_telem.c</itemPath>
         <itemPath>../lib/as5047.c</itemPath>
         <itemPath>../lib/lut.h</itemPath>
-        <itemPath>../lib/takeoff_est.c</itemPath>
         <itemPath>../lib/salto1p.c</itemPath>
       </logicalFolder>
       <itemPath>source/cmd.c</itemPath>

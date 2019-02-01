@@ -24,10 +24,8 @@
 
 #define MAX_THROT 3800
 
-#define FULL_POWER
-
 void salto1pSetup(void);
-//void SetupTimer5(void);
+void SetupTimer5(void);
 void salto1p_functions(void);
 
 // Jump and attitude estimation and control

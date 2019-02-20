@@ -20,24 +20,15 @@ def main():
     # Send robot a WHO_AM_I command, verify communications
     queryRobot()
     #Motor gains format:
-    #  [ Kp , Ki , Kd , Kaw , Kff     ,  Kp , Ki , Kd , Kaw , Kff ]
-    #    ----------LEFT----------        ---------_RIGHT----------
-    #motorgains = [450,0,20,0,100, 0,0,0,0,0] #[600,0,20,0,0, 100,0,0,0,0]
-    #thrustGains = [300,100,300,30,0,40]
-    motorgains = [110,0,25,0,0, 0,0,0,0,0]
-    thrustGains = [160,0,190, 100,0,150]
-    motorgains = [0,0,0,0,0, 0,0,0,0,0]# disable thrusters and tail
-    thrustGains = [0,0,0, 0,0,0]
+    #  [ Kp , Kd , other , Kp , Kd , other , Kp , Kd , other , other ]
+    motorgains = [100,80,0, 150,120,0, 120,15,0,0]
+    motorgains = [0,0,0, 0,0,0, 0,0,0,0]
 
-    thrustGains = [250,0,170, 100,0,150]
-
-    xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h', *thrustGains))
-
-    duration = 4000#15000
+    duration = 5000#15000
     rightFreq = 0
     leftFreq = 0
     phase = 0
-    telemetry = True#False
+    telemetry = True#False#
     repeat = False
 
     manParams = manueverParams(0, 0, 0, 0, 0, 0) # JY edits: added for compatibility
@@ -45,7 +36,6 @@ def main():
     setMotorGains(motorgains)
 
     sj_params = sjParams(300, 800)
-    # wj_params = wjParams(-551287, -50000, 1000000, 4941297, 411774)
     wj_params = wjParams(-551287, -40000, 80000, 5353068, 411774)
     wjParams.set(wj_params)
 
@@ -73,25 +63,37 @@ def main():
             startTelemetrySave(numSamples)
 
 
-        '''
+        #'''
         # basic leg extension test
         exp = [2]
         arbitrary = [0]
         xb_send(0, command.RESET_BODY_ANG, pack('h', *arbitrary))
-        time.sleep(0.01)
-        viconTest = [0,0,0,0,0,0,70*256,80*256]#55*256,70*256]
+        time.sleep(0.02)
+        
+        xb_send(0, command.GYRO_BIAS, pack('h', *arbitrary))
+        time.sleep(0.02)
+        xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
+        time.sleep(0.02)
+
+        viconTest = [0,0,0,0,0,0,50*256,70*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        time.sleep(0.01)
+        time.sleep(0.02)
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
-        '''
+
+        #time.sleep(0.02)
+        #for x in range(500):
+        #    xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+        #    time.sleep(0.01)
+
+        #'''
 
 
         '''
         # leg extension test with variable motor gains
         arbitrary = [0]
-        legPosition = [30*256, 0.1*65536, 0.002*65536]
-        # motor deflection [radians * 256], P gain [65536 * duty cyle/rad], D gain [65536 * duty cyle/(rad/s)]
-        xb_send(0, command.SET_MOTOR_POS, pack('3h', *legPosition))
+        legPosition = [30*256, 0.1*65535, 0.002*65535]
+        # motor deflection [radians * 256], P gain [65535 * duty cyle/rad], D gain [65535 * duty cyle/(rad/s)]
+        xb_send(0, command.SET_MOTOR_POS, pack('3H', *legPosition))
         '''
 
 
@@ -100,6 +102,10 @@ def main():
         #Start robot 0: wall jump, 1: single jump, 2: vicon jumps
         exp = [2]
         arbitrary = [0]
+
+        motorgains = [50,50,0, 350,180,0, 0,0,0,0]
+        xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
+        time.sleep(0.2)
 
         #viconTest = [0,0,0,0,0,0,60*256,80*256]#55*256,70*256]
         viconTest = [0,0,0,0,0,0,0*256,0*256]#55*256,70*256]
@@ -115,32 +121,31 @@ def main():
         xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
         time.sleep(0.01)
 
-        modeSignal = [3]
+        #modeSignal = [7]
+        modeSignal = [1]
         xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
         time.sleep(0.01)
 
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
+        time.sleep(0.1)
 
-        time.sleep(2.0)
-        motorgains = [200,0,25,0,0, 0,0,0,0,0]
+        time.sleep(3.0)
+        #motorgains = [200,0,22,0,0, 0,0,0,0,0]
+        #motorgains = [130,0,13,0,5, 0,0,0,0,0]
+        #motorgains = [110,0,12,0,5, 0,0,0,0,0]
+        motorgains = [0,100,0, 350,180,0, 200,12,0,12]
         xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
 
-        time.sleep(5.0)
+        #time.sleep(15.0)
+        for x in range(10):
+            print 10-x
+            time.sleep(1.0)
+
         '''
         '''
-        time.sleep(5.0)
-        viconTest = [0,0,0,0,0,0,58*256,58*256]#55*256,70*256]
+        #viconTest = [0,0,0,0,0,0,25*256,50*256]#55*256,70*256]
+        viconTest = [0,0,0,0,0,0,60*256,90*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-
-        time.sleep(0.4)
-        viconTest = [0,0,0,0,0,0,30*256,30*256]#55*256,70*256]
-        xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-
-        time.sleep(0.05)
-        modeSignal = [7]
-        xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
-
-        params.duration = params.duration - 8
         '''
 
 
@@ -162,10 +167,24 @@ def main():
         # leg extension test with variable motor gains
         arbitrary = [0]
         # motor deflection [radians * 256], P gain [65536 * duty cyle/rad], D gain [65536 * duty cyle/(rad/s)]
-        for x in np.hstack((np.linspace(0,90,19),np.linspace(85,0,18))):
-            legPosition = [x*256, 0.02*65536, 0.005*65536]
+        for x in np.hstack((np.linspace(0,90,46),np.linspace(88,0,45))):
+            legPosition = [x*256, 0.03*65536, 0.005*65536]
             xb_send(0, command.SET_MOTOR_POS, pack('3h', *legPosition))
-            time.sleep(0.07)
+            time.sleep(0.02)
+        '''
+
+        '''
+        # Toe pull-ups
+        # leg extension test with variable motor gains
+        arbitrary = [0]
+        xb_send(0, command.RESET_BODY_ANG, pack('h', *arbitrary))
+        time.sleep(0.02)
+        # motor deflection [radians * 256], P gain [65536 * duty cyle/rad], D gain [65536 * duty cyle/(rad/s)]
+        # for x in np.hstack((np.linspace(80,20,31),np.linspace(22,80,30))):
+        for x in 50+30*np.cos(np.linspace(0,np.sqrt(4*2*3.14159),360)**2):#np.cos(np.linspace(0,6.2832,60)):
+            legPosition = [x*256, 0.03*65536, 0.001*65536]
+            xb_send(0, command.SET_MOTOR_POS, pack('3h', *legPosition))
+            time.sleep(0.01)
         '''
 
 
@@ -190,6 +209,7 @@ def main():
 
 
         time.sleep(params.duration / 1000.0)
+        #time.sleep(0.5)
         
         #time.sleep(10)
         stopSignal = [0]

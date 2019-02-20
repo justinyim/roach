@@ -34,12 +34,10 @@
         <itemPath>../lib/init.h</itemPath>
         <itemPath>../lib/interrupts.h</itemPath>
         <itemPath>../lib/led.h</itemPath>
-        <itemPath>../lib/pid-ip2.5.h</itemPath>
         <itemPath>../lib/tests.h</itemPath>
         <itemPath>../lib/vr_telem.h</itemPath>
         <itemPath>../lib/as5047.h</itemPath>
-        <itemPath>../lib/salto_ctrl.h</itemPath>
-        <itemPath>../lib/takeoff_est.h</itemPath>
+        <itemPath>../lib/salto1p.h</itemPath>
       </logicalFolder>
       <logicalFolder name="f1" displayName="settings" projectFiles="true">
         <itemPath>../../imageproc-settings/settings.h</itemPath>
@@ -81,13 +79,11 @@
       <logicalFolder name="lib" displayName="lib" projectFiles="true">
         <itemPath>../lib/init.c</itemPath>
         <itemPath>../lib/interrupts.c</itemPath>
-        <itemPath>../lib/pid-ip2.5.c</itemPath>
         <itemPath>../lib/tests.c</itemPath>
         <itemPath>../lib/vr_telem.c</itemPath>
         <itemPath>../lib/as5047.c</itemPath>
         <itemPath>../lib/lut.h</itemPath>
-        <itemPath>../lib/salto_ctrl.c</itemPath>
-        <itemPath>../lib/takeoff_est.c</itemPath>
+        <itemPath>../lib/salto1p.c</itemPath>
       </logicalFolder>
       <itemPath>source/cmd.c</itemPath>
       <itemPath>source/main.c</itemPath>

@@ -12,78 +12,77 @@
 #include "mpu6000.h"
 #include "adc_pid.h"
 #include "tih.h"
-#include "pid-ip2.5.h"
+#include "salto1p.h"
 #include "protocol.h"
 #include "utils.h"
-
-// TODO (apullin) : Remove externs by adding getters to other modules
-//extern pidObj motor_pidObjs[NUM_MOTOR_PIDS];
-//extern int bemf[NUM_MOTOR_PIDS];
-
-//externs added back in for VR telem porting (pullin 10/9/14)
-extern int bemf[NUM_PIDS];
-extern pidPos pidObjs[NUM_PIDS];
 
 extern packet_union_t* last_bldc_packet;
 extern uint8_t last_bldc_packet_is_new;
 
-extern long tail_vel;
-extern int gdata[3];
+extern int32_t tail_pos;
+extern int32_t tail_vel;
+extern int16_t gdata[3];
+extern int16_t xldata[3];
 
 extern unsigned char mj_state;
-extern char controlFlag;
-extern char onboardMode;
+extern char running;
+extern uint8_t modeFlags;
+extern int32_t femur;
 extern int32_t crank;
 extern int32_t foot;
 extern int32_t MA;
 extern int32_t force;
 extern int16_t leg;
 extern int32_t legVel;
-extern int16_t velocity[3];
-extern long body_vel_LP[3];
-extern int32_t robot_pos[3];
+extern int32_t q[3];
+extern int16_t v[3];
+extern int32_t w[3];
+extern int32_t p[3];
 
-extern long x_ctrl;
-extern long y_ctrl;
-extern int16_t vel_des[3];
-extern long att_correction[2];
+extern int16_t foreThruster;
+extern int16_t aftThruster;
+extern int16_t tailMotor;
+
+extern uint32_t ctrlCount;
+extern uint32_t t1_ticks;
+
+
+//extern long x_ctrl;
+//extern long y_ctrl;
+//extern int16_t vel_des[3];
+//extern long att_correction[2];
 
 //void vrTelemGetData(unsigned char* ptr) {
 void vrTelemGetData(vrTelemStruct_t* ptr) {
+
+    uint8_t running = mj_state != MJ_STOP && mj_state != MJ_STOPPED && mj_state != MJ_IDLE;
     
     //vrTelemStruct_t* tptr;
     //tptr = (vrTelemStruct_t*) ptr;
 
-    //int gdata[3];   //gyrodata
-    int xldata[3];  // accelerometer data
-    /////// Get XL data
-    //mpuGetGyro(gdata); // this is read in salto_ctrl.c
-    mpuGetXl(xldata);
-
     //Motion control
-    ptr->posTail = (long)(encPos[0].pos << 2) + (encPos[0].oticks << 16);
-    ptr->posFemur = -(((long)encPos[1].pos - (long)encPos[1].offset) << 2) - (encPos[1].oticks << 16);
+    ptr->posTail = tail_pos;
+    ptr->posFemur = femur;
     
-    ptr->pitch = pidObjs[0].p_state;
-    ptr->roll = pidObjs[2].p_state;
-    ptr->yaw = pidObjs[3].p_state;
+    ptr->pitch = q[1];//pidObjs[0].p_state;
+    ptr->roll = q[0];//pidObjs[2].p_state;
+    ptr->yaw = q[2];//pidObjs[3].p_state;
     ptr->pitchSet = tail_vel;//pidObjs[0].p_input + pidObjs[0].interpolate;
-    ptr->dcTail = pidObjs[0].output; // left
+    ptr->dcTail = tailMotor;//pidObjs[0].output; // left
 
     sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
     ptr->posMotor = sensor_data->position;
     ptr->dcBLDC = sensor_data->current;
     last_bldc_packet_is_new = 0;
-    LED_3 = 0;
 
-    ptr->dcProp1 = pidObjs[2].output; // Rear
-    ptr->dcProp2 = pidObjs[3].output; // Fore
+    ptr->dcProp1 = foreThruster;//pidObjs[2].output; // Rear
+    ptr->dcProp2 = aftThruster;//pidObjs[3].output; // Fore
 
     //gyro and XL
     //*
-    ptr->gyroX = gdata[0];
-    ptr->gyroY = gdata[1];
-    ptr->gyroZ = gdata[2];
+    ptr->gyroX = w[0];//gdata[0];
+    ptr->gyroY = w[1];//gdata[1];
+    ptr->gyroZ = w[2];//gdata[2];
     ptr->accelX = xldata[0];
     ptr->accelY = xldata[1];
     ptr->accelZ = xldata[2];
@@ -102,27 +101,27 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     /*
     // leg dynamics
     ptr->otherMode = 4;
-    ptr->onboardMode = mj_state + (controlFlag <<7) + (onboardMode << 8);
+    ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
     ptr->voltage = sensor_data->voltage;
     ptr->crank = crank;
     ptr->force = force;
     ptr->foot = leg;
     ptr->footVel = legVel;
     */
-    /*
+    //*
     // body velocity
     ptr->otherMode = 5;
-    ptr->onboardMode = mj_state + (controlFlag <<7) + (onboardMode << 8);
+    ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
     ptr->voltage = sensor_data->voltage;
     ptr->crank = crank;
-    ptr->force = velocity[0];
-    ptr->foot = velocity[1];
-    ptr->footVel = velocity[2];
-    */
+    ptr->force = v[0];
+    ptr->foot = v[1];
+    ptr->footVel = v[2];
+    //*/
     /*
     // onboard velocity control
     ptr->otherMode = 7;
-    ptr->onboardMode = mj_state + (controlFlag <<7) + (onboardMode << 8);
+    ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
     ptr->voltage = sensor_data->voltage;
     ptr->crank = crank;
     ptr->force = x_ctrl/90;
@@ -132,23 +131,23 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     /*
     // onboard velocity control
     ptr->otherMode = 8;
-    ptr->onboardMode = mj_state + (controlFlag <<7) + (onboardMode << 8);
+    ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
     ptr->voltage = sensor_data->voltage;
     ptr->crank = crank;
     ptr->force = x_ctrl/90;
     ptr->foot = y_ctrl/90;
     ptr->footVel = legVel;
-    ptr->accelX = velocity[0];
-    ptr->accelY = velocity[1];
-    ptr->accelZ = velocity[2];
-    //ptr->accelX = vel_des[0];
-    //ptr->accelY = vel_des[1];
-    //ptr->accelZ = vel_des[2];
+    ptr->accelX = v[0];
+    ptr->accelY = v[1];
+    ptr->accelZ = v[2];
+    //ptr->accelX = vCmd[0];
+    //ptr->accelY = vCmd[1];
+    //ptr->accelZ = vCmd[2];
     */
     /*
     // onboard velocity control
     ptr->otherMode = 9;
-    ptr->onboardMode = mj_state + (controlFlag <<7) + (onboardMode << 8);
+    ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
     ptr->voltage = sensor_data->voltage;
     ptr->crank = crank;
     ptr->force = velocity[0];
@@ -161,7 +160,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     /*
     // leg and body velocity
     ptr->otherMode = 10;
-    ptr->onboardMode = mj_state + (controlFlag <<7) + (onboardMode << 8);
+    ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
     ptr->voltage = sensor_data->voltage;
     ptr->crank = crank;
     ptr->accelX = body_vel_LP[1];
@@ -174,7 +173,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     /*
     // body velocity and attitude corrections
     ptr->otherMode = 11;
-    ptr->onboardMode = mj_state + (controlFlag <<7) + (onboardMode << 8);
+    ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
     ptr->voltage = sensor_data->voltage;
     ptr->crank = crank;
     ptr->accelX = att_correction[0];
@@ -184,10 +183,10 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->foot = velocity[1];
     ptr->footVel = velocity[2];
     */
-    //*
+    /*
     // robot position
     ptr->otherMode = 12;
-    ptr->onboardMode = mj_state + (controlFlag <<7) + (onboardMode << 8);
+    ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
     ptr->voltage = sensor_data->voltage;
     ptr->crank = crank;
     ptr->accelX = robot_pos[0]/100;
@@ -196,7 +195,17 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->force = velocity[0];
     ptr->foot = velocity[1];
     ptr->footVel = velocity[2];
-    //*/
+    */
+    /*
+    // body velocity
+    ptr->otherMode = 13;
+    ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
+    ptr->voltage = force;
+    ptr->crank = crank;
+    ptr->force = velocity[0];
+    ptr->foot = velocity[1];
+    ptr->footVel = velocity[2];
+    */
 
 
 }

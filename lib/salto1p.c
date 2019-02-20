@@ -65,6 +65,18 @@ int32_t telemDecimateCount = 0;
 
 #define LAG_MS 20 // Vicon lag in milliseconds
 
+#define Q_SCALE 14
+#define W_SCALE 10
+#define EPSILON 0.005
+
+#define PI 3.1415 
+#define HALF_PI 3.1415/2
+#define PI_SQUARED 3.1415 * 3.1415
+#define PI_SC 51445  // precalculated value of PI scaled by Q_SCALE 
+#define HALF_PI_SC 25722
+#define PI_SQ_SC 80769
+
+
 // Global Variables -----------------------------------------------------------
 // Miscellaneous important variables
 uint16_t procFlags = 0;     // Which functions to process
@@ -78,7 +90,7 @@ uint32_t t1_ticks = 0;      // Time (1 tick per ms)
 uint8_t interrupt_count = 0;// How many processing cycles have passed
 
 // Continuous dynamics state variables
-int32_t q[3];               // ZXY Body Euler angles (x, y, z) [2*PI ticks/rev]
+int32_t q[4];               // XYZ quaternion
 int32_t w[3];               // Body ang vel (x, y, z) [2^15 ticks/(2000 deg/s)]
 int32_t p[3];               // Robot position (x, y, z) [100,000 ticks/m]
 int16_t v[3];               // Robot body vel (x, y, z) [1000 ticks/(m/s)]
@@ -93,7 +105,7 @@ int32_t aftThruster;        // Control output
 int32_t tailMotor;          // Control output
 
 // Commands
-int32_t qCmd[3];            // Attitude setpoint
+int32_t qCmd[4];            // Attitude setpoint
 int32_t legSetpoint = 0;    // Aerial leg motor angle command
 int32_t pushoffCmd = 0;     // Ground leg motor angle command
 
@@ -158,8 +170,6 @@ int32_t last_mot;
 
 #define ATT_CORRECTION_GAIN_X 12
 #define ATT_CORRECTION_GAIN_Y 8
-
-
 
 // Communications variables ---------------------------------------------------
 int16_t gdata[3];                       // Rate gyro data array
@@ -226,7 +236,8 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
         qLagInd = (qLagInd+1)%LAG_MS; // Circular buffer index
 
         // Estimation and control
-        eulerUpdate(q,gdataBody,STEP_MS); // attitude integration
+        // eulerUpdate(q,gdataBody,STEP_MS); // attitude integration
+        quatUpdate(q, gdataBody, STEP_MS);
         attitudeCtrl();
 
         /*
@@ -260,6 +271,7 @@ void salto1p_functions(void) {
     // Low priority processing to be run in the main loop
 
     // Update yaw angle approximations
+    // NOTE 2/20/18: This is invalid with quaternions
     cos_psi = cosApprox(q[0]);
     sin_psi = cosApprox(q[0]-PI/2);
 
@@ -321,6 +333,70 @@ void SetupTimer5(void) {
 }
 
 
+// Uses 2^14 for the scale factor of the quaternion
+// Uses 2^10 for the scale factor for the angular velocity
+// time in ms
+void quatUpdate(int32_t *quat, int32_t *vels, int8_t time) {
+    int32_t q2[4];
+    int32_t temp[4];
+    for (int i = 0; i < 4; i++) {
+        temp[i] = quat[i];
+    }
+    int32_t delta_t = ((int32_t) time << vel_scale) * 0.001; // convert time to seconds
+    // angular velocity and tail angular momentum
+    
+    
+    int32_t norm = fix_l2norm(vels, 3, W_SCALE);
+    if (norm < EPS_SCALED) {
+        norm = EPS_SCALED;
+    }
+
+    int32_t term = (int64_t)norm * (int64_t)delta_t/(2 << W_SCALE);
+    term = cvtScale(term, W_SCALE, Q_SCALE);
+    
+    int32_t sin_term = sin_approx(term);
+    sin_term = (int64_t)sin_term * (1 << Q_SCALE)/norm;
+
+    q2[0] = cos_approx(term);
+    
+    for (int i = 0; i < 3; i++) {
+        q2[i] = (int64_t)vels[i] * (int64_t)sin_term/(1 << W_SCALE); // keeps it in Q_SCALE
+    }
+    fix_qmult(temp, q2, quat);
+}
+
+// Assumes x is Q_SCALE 
+fixp_t cos_approx(int32_t x) {
+    if (x. < 0) {
+        x = -x;
+    }
+    x = (HALF_PI_SC) + x;
+    x = (x + PI_SC) % (PI_SC << 1) - PI_SC;
+    int32_t result1 = (int64_t)x * (int64_t)(PI_SC - x)/(1 << Q_SCALE);
+    return 16 * (int64_t)result1 * (1 << Q_SCALE) / (5 * PI_SQ_SC - 4 * result1);
+    
+}
+
+
+// Assumes x scale factor is Q_SCALE
+fixp_t sin_approx(int32_t x) {
+    int32_t new_x = x - HALF_PI_SC;  
+    return cos_approx(new_x);
+}
+
+// Assume scale remains same 
+int32_t fix_l2norm(int32_t *vector, int num_elements, int32_t scale) {
+    int32_t sum = 0; 
+    for (int i = 0; i < num_elements; i++) {
+        sum = sum + ((int64_t)vector[i] * (int64_t)vector[i]) / (1 << scale); 
+    }
+    return sum;
+}
+
+int32_t cvtScale(int32_t num, int32_t in_scale, int32_t out_scale) {
+    int32_t num = ((int64_t) num << out_scale) >> in_scale;
+    return num;
+}
 // Running functions ==========================================================
 void eulerUpdate(int32_t* angs, int32_t* vels, int8_t time) {
     // Update the Euler angle estimates (usually body_angle).
@@ -786,13 +862,15 @@ void attitudeCtrl(void) {
     // Attitude PD controllers
     int32_t qErr[3];
     for (i=0; i<3; i++) {
-        qErr[i] = q[i] - qCmd[i];
+        qErr[i] = q[i+1] - qCmd[i];  // i+1 in q is due to quaternion
+        /*  This is unnecessary with quaternions (?) 
         while (qErr[i] > PI) {
             qErr[i] -= 2*PI;
         }
         while (qErr[i] < -PI) {
             qErr[i] += 2*PI;
         }
+        */
     }
 
     int32_t yawPD = ((gainsPD[0] * qErr[2])>>12) + ((gainsPD[1] * w[2])>>4);
@@ -838,10 +916,18 @@ void setGains(int16_t* gains) {
     }
 }
 
+/*
 void setAttitudeSetpoint(long yaw, long roll, long pitch){
     qCmd[2] = yaw;
     qCmd[0] = roll;
     qCmd[1] = pitch;
+}
+*/ 
+void setAttitudeSetpoint(long q0, long qx, long qy, long qz) {
+    qCmd[0] = q0;
+    qCmd[1] = qx;
+    qCmd[2] = qy;
+    qCmd[3] = qz;
 }
 
 void setLegSetpoint(long length){

@@ -75,8 +75,10 @@ def main():
         xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
         time.sleep(0.02)
 
-        viconTest = [0,0,0,0,0,0,70*256,90*256]#55*256,70*256]
-        xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+        # Added an extra field(s) for quaternion
+        # including *(2**14) for fixed point consistency
+        viconTest = [1*(2**14),0,0,0,1*(2**14),0,0,0,70*256,90*256]#55*256,70*256]
+        xb_send(0, command.INTEGRATED_VICON, pack('10h', *viconTest))
         time.sleep(0.02)
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
         #'''

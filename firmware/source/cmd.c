@@ -226,23 +226,25 @@ unsigned char cmdSetPitchSetpoint(unsigned char type, unsigned char status, unsi
 }
 
 unsigned char cmdIntegratedVicon(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
-    // Receive Vicon-measured attitude (3), desired attitude (3), leg length (1), and push-off command (1)
-    long new_vicon_angle[3];
-    long new_setpoints[3];
+    // Receive Vicon-measured attitude (4), desired attitude (4), leg length (1), and push-off command (1)
+    long new_vicon_angle[4];
+    long new_setpoints[4];
     int i;
-    for (i=0; i<3; i++){
+    for (i=0; i<4; i++){
         new_vicon_angle[i] = (int16_t)frame[2*i] + ((int16_t)frame[2*i+1] << 8);
         new_vicon_angle[i] = new_vicon_angle[i] << 8;
     }
-    for (i=0; i<3; i++){
-        new_setpoints[i] = (int16_t)frame[2*i+6] + ((int16_t)frame[2*i+7] << 8);
+    for (i=0; i<4; i++){
+        new_setpoints[i] = (int16_t)frame[2*i+8] + ((int16_t)frame[2*i+7] << 8);
         new_setpoints[i] = new_setpoints[i] << 8;
     }
+    // add 2 chars to all of these 
+    // 16, 17, 18, 19
     long leg_length = (int16_t)frame[12] + ((int16_t)frame[13] << 8);
     long pushoff = (int16_t)frame[14] + ((int16_t)frame[15] << 8);
 
     updateBodyAngle(new_vicon_angle);
-    setAttitudeSetpoint(new_setpoints[0],new_setpoints[1],new_setpoints[2]);
+    setAttitudeSetpoint(new_setpoints[0],new_setpoints[1],new_setpoints[2], new_setpoints[3]);
     setLegSetpoint(leg_length);
     setPushoffCmd(pushoff);
 
@@ -263,11 +265,13 @@ unsigned char cmdSetVelocity(unsigned char type, unsigned char status, unsigned 
     return 1;
 }
 
+// adjusting for quaternions
+// NEED TO SEND PROPERLY ORDERED QUATERNIONS q0, qx, qy, qz
 unsigned char cmdAdjustBodyAngle(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
     // Set desired velocity to be tracked by onboard hopping control
-    long body_adjust[3];
+    long body_adjust[4];
     int i;
-    for (i=0; i<3; i++){
+    for (i=0; i<4; i++){
         body_adjust[i] = (int16_t)frame[2*i] + ((int16_t)frame[2*i+1] << 8);
         body_adjust[i] = body_adjust[i] << 8;
     }
@@ -324,7 +328,7 @@ unsigned char cmdGVectAtt(unsigned char type, unsigned char status, unsigned cha
 }
 
 unsigned char cmdResetBodyAngle(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
-    long body_angle[3] = {0,0,0};
+    long body_angle[4] = {1, 0,0,0};
     setBodyAngle(body_angle);
     return 1;
 }

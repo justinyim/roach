@@ -68,8 +68,8 @@ int32_t telemDecimateCount = 0;
 #define Q_SCALE 14
 #define W_SCALE 10
 #define EPSILON 0.005
+#define EPS_SCALED EPSILON * W_SCALE
 
-#define PI 3.1415 
 #define HALF_PI 3.1415/2
 #define PI_SQUARED 3.1415 * 3.1415
 #define PI_SC 51445  // precalculated value of PI scaled by Q_SCALE 
@@ -90,7 +90,7 @@ uint32_t t1_ticks = 0;      // Time (1 tick per ms)
 uint8_t interrupt_count = 0;// How many processing cycles have passed
 
 // Continuous dynamics state variables
-int32_t q[4];               // XYZ quaternion
+int32_t q[4];               // WXYZ quaternion
 int32_t w[3];               // Body ang vel (x, y, z) [2^15 ticks/(2000 deg/s)]
 int32_t p[3];               // Robot position (x, y, z) [100,000 ticks/m]
 int16_t v[3];               // Robot body vel (x, y, z) [1000 ticks/(m/s)]
@@ -222,9 +222,11 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
 
         // Sensing
         mpuGetGyro(gdata); // This should be the only call to mpuGetGyro(gdata)
+        
         mpuGetXl(xldata); // Similarly, this should only be called once
         orientImageproc(gdataBody, gdata); // orient gyro readings to body
-
+        // 2^15 ticks/(2000 degrees/s)
+        
         for (i=0; i<3; i++) {
             // Low pass the gyro signal
             w[i] = ((256-W_ALPHA)*w[i] + W_ALPHA*gdataBody[i])>>8;
@@ -332,17 +334,64 @@ void SetupTimer5(void) {
     OpenTimer5(T5CON1value, T5PERvalue);
 }
 
+// Assumes x is Q_SCALE 
+int32_t cos_approx(int32_t x) {
+    if (x < 0) {
+        x = -x;
+    }
+    x = (HALF_PI_SC) + x;
+    x = (x + PI_SC) % (PI_SC << 1) - PI_SC;
+    int32_t result1 = (int64_t)x * (int64_t)(PI_SC - x)/(1 << Q_SCALE);
+    return 16 * (int64_t)result1 * (1 << Q_SCALE) / (5 * PI_SQ_SC - 4 * result1);
+    
+}
+
+// Assumes x scale factor is Q_SCALE
+int32_t sin_approx(int32_t x) {
+    int32_t new_x = x - HALF_PI_SC;  
+    return cos_approx(new_x);
+}
+
+// Assume scale remains same 
+int32_t fix_l2norm(int32_t *vector, int num_elements, int32_t scale) {
+    int32_t sum = 0;
+    uint8_t i;
+    for (i = 0; i < num_elements; i++) {
+        sum = sum + ((int64_t)vector[i] * (int64_t)vector[i]) / (1 << scale); 
+    }
+    return sum;
+}
+
+int32_t cvtScale(int32_t num, int32_t in_scale, int32_t out_scale) {
+    int32_t out = ((int64_t) num << out_scale) >> in_scale;
+    return out;
+}
+void fix_qmult(int32_t *q1, int32_t *q2, int32_t *qout) {
+    qout[0] = ((int64_t)q1[0] * (int64_t)q2[0] - (int64_t)q1[1] * (int64_t)q2[1] - 
+                    (int64_t)q1[2] * (int64_t)q2[2] - (int64_t)q1[3] * (int64_t)q2[3]) >> Q_SCALE;
+
+    qout[1] = ((int64_t)q1[0] * (int64_t)q2[1] + (int64_t)q1[1] * (int64_t)q2[0] + 
+                    (int64_t)q1[2] * (int64_t)q2[3] - (int64_t)q1[3] * (int64_t)q2[2]) >> Q_SCALE;
+
+    qout[2] = ((int64_t)q1[0] * (int64_t)q2[2] - (int64_t)q1[1] * (int64_t)q2[3] + 
+                    (int64_t)q1[2] * (int64_t)q2[0] + (int64_t)q1[3] * (int64_t)q2[1]) >> Q_SCALE;
+
+    qout[3] = ((int64_t)q1[0] * (int64_t)q2[3] + (int64_t)q1[1] * (int64_t)q2[2] - 
+                    (int64_t)q1[2] * (int64_t)q2[1] + (int64_t)q1[3] * (int64_t)q2[0]) >> Q_SCALE;
+}
 
 // Uses 2^14 for the scale factor of the quaternion
 // Uses 2^10 for the scale factor for the angular velocity
 // time in ms
-void quatUpdate(int32_t *quat, int32_t *vels, int8_t time) {
+// need to renormalize at some point due to fixed point precision problems
+void quatUpdate(int32_t *quat, int32_t *vels, uint8_t time) {
     int32_t q2[4];
     int32_t temp[4];
-    for (int i = 0; i < 4; i++) {
+    uint8_t i;
+    for (i = 0; i < 4; i++) {
         temp[i] = quat[i];
     }
-    int32_t delta_t = ((int32_t) time << vel_scale) * 0.001; // convert time to seconds
+    int32_t delta_t = ((int32_t) time << W_SCALE) * 0.001; // convert time to seconds
     // angular velocity and tail angular momentum
     
     
@@ -359,44 +408,12 @@ void quatUpdate(int32_t *quat, int32_t *vels, int8_t time) {
 
     q2[0] = cos_approx(term);
     
-    for (int i = 0; i < 3; i++) {
+    for (i = 0; i < 3; i++) {
         q2[i] = (int64_t)vels[i] * (int64_t)sin_term/(1 << W_SCALE); // keeps it in Q_SCALE
     }
     fix_qmult(temp, q2, quat);
 }
 
-// Assumes x is Q_SCALE 
-fixp_t cos_approx(int32_t x) {
-    if (x. < 0) {
-        x = -x;
-    }
-    x = (HALF_PI_SC) + x;
-    x = (x + PI_SC) % (PI_SC << 1) - PI_SC;
-    int32_t result1 = (int64_t)x * (int64_t)(PI_SC - x)/(1 << Q_SCALE);
-    return 16 * (int64_t)result1 * (1 << Q_SCALE) / (5 * PI_SQ_SC - 4 * result1);
-    
-}
-
-
-// Assumes x scale factor is Q_SCALE
-fixp_t sin_approx(int32_t x) {
-    int32_t new_x = x - HALF_PI_SC;  
-    return cos_approx(new_x);
-}
-
-// Assume scale remains same 
-int32_t fix_l2norm(int32_t *vector, int num_elements, int32_t scale) {
-    int32_t sum = 0; 
-    for (int i = 0; i < num_elements; i++) {
-        sum = sum + ((int64_t)vector[i] * (int64_t)vector[i]) / (1 << scale); 
-    }
-    return sum;
-}
-
-int32_t cvtScale(int32_t num, int32_t in_scale, int32_t out_scale) {
-    int32_t num = ((int64_t) num << out_scale) >> in_scale;
-    return num;
-}
 // Running functions ==========================================================
 void eulerUpdate(int32_t* angs, int32_t* vels, int8_t time) {
     // Update the Euler angle estimates (usually body_angle).
@@ -862,7 +879,7 @@ void attitudeCtrl(void) {
     // Attitude PD controllers
     int32_t qErr[3];
     for (i=0; i<3; i++) {
-        qErr[i] = q[i+1] - qCmd[i];  // i+1 in q is due to quaternion
+        qErr[i] = q[i+1] - qCmd[i+1];  // i+1 in q is due to quaternion
         /*  This is unnecessary with quaternions (?) 
         while (qErr[i] > PI) {
             qErr[i] -= 2*PI;
@@ -938,21 +955,31 @@ void setPushoffCmd(long cmd){
     pushoffCmd = cmd << 8;
 }
 
+// change for quaternions
 void setBodyAngle(long* qSet) {
-    q[0] = qSet[1];
-    q[1] = qSet[2];
-    q[2] = qSet[0];
+    q[0] = qSet[0];
+    q[1] = qSet[1];
+    q[2] = qSet[2];
+    q[3] = qSet[3];
 }
 
+// use qmult for this
+// also assuming that qAdjust is in Q_SCALE fixed point
+// also change this for quaternions
 void adjustBodyAngle(long* qAdjust){
-    q[0] += qAdjust[1];
-    q[1] += qAdjust[2];
-    q[2] += qAdjust[0];
+    int32_t temp[4];
+    uint8_t i;
+    for (i = 0; i < 4; i++) {
+        temp[i] = q[i];
+    }
+    fix_qmult(temp, qAdjust, q);
 }
 
+
+// TODO: need to update this with quaternions
+// also what's going on here? 
 void updateBodyAngle(long* qUpdate){
     //eulerUpdate(q,qLagSum,1); // attempt to counter comms lag
-
     q[0] = 3*(q[0] >> 2) + (qUpdate[1] >> 2);
     q[1] = 3*(q[1] >> 2) + (qUpdate[2] >> 2);
     q[2] = 3*(q[2] >> 2) + (qUpdate[0] >> 2);

@@ -25,6 +25,7 @@
 #define MAX_THROT 3800
 
 #define FULL_POWER
+#define BLDC_CMD_OFFSET 0
 
 void salto1pSetup(void);
 //void SetupTimer5(void);
@@ -47,7 +48,7 @@ int32_t deadbeatVelCtrl(int16_t* vi, int16_t* vo, int32_t* ctrl);
 
 // Communication
 void setGains(int16_t* gains);
-void setAttitudeSetpoint(long yaw, long roll, long pitch);
+void setAttitudeSetpoint(long q0, long qx, long qy, long qz);
 void setLegSetpoint(long length);
 void setPushoffCmd(long cmd);
 void setBodyAngle(long* qSet) ;

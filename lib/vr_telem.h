@@ -8,10 +8,11 @@ typedef struct {
     int32_t posTail;
     int32_t posFemur;
     int32_t posMotor; // Hall angle position of BLDC
-
-    int32_t pitch; // estimated angles
-    int32_t roll;
-    int32_t yaw;
+    
+    int32_t q0; // estimated angles
+    int32_t qx; 
+    int32_t qy;
+    int32_t qz;
     int32_t pitchSet; // Commanded Hall angle position 
  
     int16_t dcBLDC;  // Current draw of BLDC

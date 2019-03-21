@@ -74,8 +74,8 @@ int32_t telemDecimateCount = 0;
 #define PI_SQUARED 3.1415 * 3.1415
 #define PI_SC 51445  // precalculated value of PI scaled by Q_SCALE 
 #define HALF_PI_SC 25722
-#define PI_SQ_SC 80769
-
+#define PI_SQ_SC 80769 
+#define TICKS_TO_RAD_SC (int32_t)(0.00106 * (1 << W_SCALE))
 
 // Global Variables -----------------------------------------------------------
 // Miscellaneous important variables
@@ -190,6 +190,96 @@ volatile uint8_t flags_last =0;
 // TODO remove these debugging things below
 uint32_t ctrlCount;
 
+// Quaternions Functions
+
+// Assumes x is Q_SCALE 
+int32_t cos_approx(int32_t x) {
+    if (x < 0) {
+        x = -x;
+    }
+    x = (HALF_PI_SC) + x;
+    x = (x + PI_SC) % (PI_SC << 1) - PI_SC;
+    int32_t result1 = (int64_t)x * (int64_t)(PI_SC - x)/(1 << Q_SCALE);
+    return 16 * (int64_t)result1 * (1 << Q_SCALE) / (5 * PI_SQ_SC - 4 * result1);
+    
+}
+
+// Assumes x scale factor is Q_SCALE
+int32_t sin_approx(int32_t x) {
+    int32_t new_x = x - HALF_PI_SC;  
+    return cos_approx(new_x);
+}
+
+int32_t sqrt_approx(int32_t num, int32_t scale) {
+    int32_t guess = num/2;  // don't need fixed point division
+    int32_t guess_prev = num;
+    while (guess - guess_prev > EPS_SCALED || guess_prev - guess > EPS_SCALED) {
+        guess_prev = guess;
+        guess = (guess + ((int64_t)num * (1 << scale))/guess)/2;
+    }
+    return guess;
+}
+
+// Assume scale remains same 
+int32_t fix_l2norm(int32_t *vector, int num_elements, int32_t scale) {
+    int32_t sum = 0;
+    uint8_t i;
+    for (i = 0; i < num_elements; i++) {
+        sum = sum + ((int64_t)vector[i] * (int64_t)vector[i]) / (1 << scale); 
+    }
+    return sqrt_approx(sum, scale);
+}
+
+int32_t cvtScale(int32_t num, int32_t in_scale, int32_t out_scale) {
+    int32_t out = ((int64_t) num << out_scale) >> in_scale;
+    return out;
+}
+void fix_qmult(int32_t *q1, int32_t *q2, int32_t *qout) {
+    qout[0] = ((int64_t)q1[0] * (int64_t)q2[0] - (int64_t)q1[1] * (int64_t)q2[1] - 
+                    (int64_t)q1[2] * (int64_t)q2[2] - (int64_t)q1[3] * (int64_t)q2[3]) >> Q_SCALE;
+
+    qout[1] = ((int64_t)q1[0] * (int64_t)q2[1] + (int64_t)q1[1] * (int64_t)q2[0] + 
+                    (int64_t)q1[2] * (int64_t)q2[3] - (int64_t)q1[3] * (int64_t)q2[2]) >> Q_SCALE;
+
+    qout[2] = ((int64_t)q1[0] * (int64_t)q2[2] - (int64_t)q1[1] * (int64_t)q2[3] + 
+                    (int64_t)q1[2] * (int64_t)q2[0] + (int64_t)q1[3] * (int64_t)q2[1]) >> Q_SCALE;
+
+    qout[3] = ((int64_t)q1[0] * (int64_t)q2[3] + (int64_t)q1[1] * (int64_t)q2[2] - 
+                    (int64_t)q1[2] * (int64_t)q2[1] + (int64_t)q1[3] * (int64_t)q2[0]) >> Q_SCALE;
+}
+
+// Uses 2^14 for the scale factor of the quaternion
+// Uses 2^10 for the scale factor for the angular velocity
+// time in ms
+// need to renormalize at some point due to fixed point precision problems
+void quatUpdate(int32_t *quat, int32_t *vels, uint8_t time) {
+    int32_t q2[4];
+    int32_t temp[4];
+    uint8_t i;
+    for (i = 0; i < 4; i++) {
+        temp[i] = quat[i];
+    }
+    int32_t delta_t = ((int32_t) time << W_SCALE) * 0.001; // convert time to seconds
+    // angular velocity and tail angular momentum
+    
+    
+    int32_t norm = fix_l2norm(vels, 3, W_SCALE);
+    if (norm < EPS_SCALED) {
+        norm = EPS_SCALED;
+    }
+
+    int32_t term = (int64_t)norm * (int64_t)delta_t/(2 << W_SCALE);
+    term = cvtScale(term, W_SCALE, Q_SCALE);
+    
+    int32_t sin_term = sin_approx(term)* (1 << W_SCALE)/norm;
+
+    q2[0] = cos_approx(term);
+    
+    for (i = 0; i < 3; i++) {
+        q2[i+1] = (int64_t)vels[i] * (int64_t)sin_term/(1 << W_SCALE); // keeps it in Q_SCALE
+    }
+    fix_qmult(temp, q2, quat);
+}
 
 // Interrupt running loop at 2 kHz ============================================
 void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
@@ -236,7 +326,10 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
             qLagLog[qLagInd][i] = gdataBody[i];
         }
         qLagInd = (qLagInd+1)%LAG_MS; // Circular buffer index
-
+        int32_t gdataBody_sc[3];
+        for (i = 0; i < 3; i++) {
+            gdataBody_sc[i] = gdataBody[i] * TICKS_TO_RAD_SC;  // converts it to fixed pt rad
+        }
         // Estimation and control
         // eulerUpdate(q,gdataBody,STEP_MS); // attitude integration
         quatUpdate(q, gdataBody, STEP_MS);
@@ -332,86 +425,6 @@ void SetupTimer5(void) {
     T5CON1value = T5_ON & T5_IDLE_CON & T5_GATE_OFF & T5_PS_1_8 & T5_INT_PRIOR_1 & T5_SOURCE_INT;
     T5PERvalue = 5000; //1Khz
     OpenTimer5(T5CON1value, T5PERvalue);
-}
-
-// Assumes x is Q_SCALE 
-int32_t cos_approx(int32_t x) {
-    if (x < 0) {
-        x = -x;
-    }
-    x = (HALF_PI_SC) + x;
-    x = (x + PI_SC) % (PI_SC << 1) - PI_SC;
-    int32_t result1 = (int64_t)x * (int64_t)(PI_SC - x)/(1 << Q_SCALE);
-    return 16 * (int64_t)result1 * (1 << Q_SCALE) / (5 * PI_SQ_SC - 4 * result1);
-    
-}
-
-// Assumes x scale factor is Q_SCALE
-int32_t sin_approx(int32_t x) {
-    int32_t new_x = x - HALF_PI_SC;  
-    return cos_approx(new_x);
-}
-
-// Assume scale remains same 
-int32_t fix_l2norm(int32_t *vector, int num_elements, int32_t scale) {
-    int32_t sum = 0;
-    uint8_t i;
-    for (i = 0; i < num_elements; i++) {
-        sum = sum + ((int64_t)vector[i] * (int64_t)vector[i]) / (1 << scale); 
-    }
-    return sum;
-}
-
-int32_t cvtScale(int32_t num, int32_t in_scale, int32_t out_scale) {
-    int32_t out = ((int64_t) num << out_scale) >> in_scale;
-    return out;
-}
-void fix_qmult(int32_t *q1, int32_t *q2, int32_t *qout) {
-    qout[0] = ((int64_t)q1[0] * (int64_t)q2[0] - (int64_t)q1[1] * (int64_t)q2[1] - 
-                    (int64_t)q1[2] * (int64_t)q2[2] - (int64_t)q1[3] * (int64_t)q2[3]) >> Q_SCALE;
-
-    qout[1] = ((int64_t)q1[0] * (int64_t)q2[1] + (int64_t)q1[1] * (int64_t)q2[0] + 
-                    (int64_t)q1[2] * (int64_t)q2[3] - (int64_t)q1[3] * (int64_t)q2[2]) >> Q_SCALE;
-
-    qout[2] = ((int64_t)q1[0] * (int64_t)q2[2] - (int64_t)q1[1] * (int64_t)q2[3] + 
-                    (int64_t)q1[2] * (int64_t)q2[0] + (int64_t)q1[3] * (int64_t)q2[1]) >> Q_SCALE;
-
-    qout[3] = ((int64_t)q1[0] * (int64_t)q2[3] + (int64_t)q1[1] * (int64_t)q2[2] - 
-                    (int64_t)q1[2] * (int64_t)q2[1] + (int64_t)q1[3] * (int64_t)q2[0]) >> Q_SCALE;
-}
-
-// Uses 2^14 for the scale factor of the quaternion
-// Uses 2^10 for the scale factor for the angular velocity
-// time in ms
-// need to renormalize at some point due to fixed point precision problems
-void quatUpdate(int32_t *quat, int32_t *vels, uint8_t time) {
-    int32_t q2[4];
-    int32_t temp[4];
-    uint8_t i;
-    for (i = 0; i < 4; i++) {
-        temp[i] = quat[i];
-    }
-    int32_t delta_t = ((int32_t) time << W_SCALE) * 0.001; // convert time to seconds
-    // angular velocity and tail angular momentum
-    
-    
-    int32_t norm = fix_l2norm(vels, 3, W_SCALE);
-    if (norm < EPS_SCALED) {
-        norm = EPS_SCALED;
-    }
-
-    int32_t term = (int64_t)norm * (int64_t)delta_t/(2 << W_SCALE);
-    term = cvtScale(term, W_SCALE, Q_SCALE);
-    
-    int32_t sin_term = sin_approx(term);
-    sin_term = (int64_t)sin_term * (1 << Q_SCALE)/norm;
-
-    q2[0] = cos_approx(term);
-    
-    for (i = 0; i < 3; i++) {
-        q2[i] = (int64_t)vels[i] * (int64_t)sin_term/(1 << W_SCALE); // keeps it in Q_SCALE
-    }
-    fix_qmult(temp, q2, quat);
 }
 
 // Running functions ==========================================================

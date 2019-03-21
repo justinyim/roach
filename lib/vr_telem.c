@@ -34,7 +34,7 @@ extern int32_t MA;
 extern int32_t force;
 extern int16_t leg;
 extern int32_t legVel;
-extern int32_t q[3];
+extern int32_t q[4];
 extern int16_t v[3];
 extern int32_t w[3];
 extern int32_t p[3];
@@ -63,9 +63,10 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->posTail = tail_pos;
     ptr->posFemur = femur;
     
-    ptr->pitch = q[1];//pidObjs[0].p_state;
-    ptr->roll = q[0];//pidObjs[2].p_state;
-    ptr->yaw = q[2];//pidObjs[3].p_state;
+    ptr->q0 = q[0]; //pidObjs[0].p_state;
+    ptr->qx = q[1]; //pidObjs[2].p_state;
+    ptr->qy = q[2]; //pidObjs[3].p_state;
+    ptr->qz = q[3];
     ptr->pitchSet = tail_vel;//pidObjs[0].p_input + pidObjs[0].interpolate;
     ptr->dcTail = tailMotor;//pidObjs[0].output; // left
 

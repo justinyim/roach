@@ -25,7 +25,6 @@
 #define MAX_THROT 3800
 
 #define FULL_POWER
-#define BLDC_CMD_OFFSET 0
 
 void salto1pSetup(void);
 //void SetupTimer5(void);

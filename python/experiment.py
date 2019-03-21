@@ -24,7 +24,7 @@ def main():
     motorgains = [100,80,0, 150,120,0, 120,15,0,0]
     motorgains = [0,0,0, 0,0,0, 0,0,0,0]
 
-    duration = 5000#15000
+    duration = 1000 #15000
     rightFreq = 0
     leftFreq = 0
     phase = 0

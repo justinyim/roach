@@ -332,7 +332,7 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
         }
         // Estimation and control
         // eulerUpdate(q,gdataBody,STEP_MS); // attitude integration
-        quatUpdate(q, gdataBody, STEP_MS);
+        quatUpdate(q, gdataBody_sc, STEP_MS);
         attitudeCtrl();
 
         /*

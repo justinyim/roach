@@ -30,10 +30,12 @@ def main():
     #standTailGains = [180,0,17,0,0, 0,0,0,0,0]
     #standThrusterGains = [250,0,180, 100,0,150]
 
+    zeroGains = [100,150,0, 230,190,0, 0,0,0,0]
+
     runTailGains = [90,100,0, 150,110,0, 90,13,0,0]
     runThrusterGains = [0,0,0, 0,0,0]
 
-    standTailGains = [80,80,0, 230,180,0, 300,20,0,7]
+    standTailGains = [80,80,0, 230,190,0, 150,9,0,9]
     standThrusterGains = [0,0,0, 0,0,0]
 
     duration = 1000#10000
@@ -105,7 +107,6 @@ def main():
     time.sleep(0.02)
 
     #zeroGains = [0,0,0,0,0, 0,0,0,0,0]
-    zeroGains = [100,150,0, 250,180,0, 0,0,0,0]
     xb_send(0, command.SET_PID_GAINS, pack('10h',*zeroGains))
     time.sleep(0.02)
 
@@ -121,6 +122,10 @@ def main():
     time.sleep(0.02)
 
     xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
+    time.sleep(0.02)
+
+    adjust = [0,128,-192]
+    xb_send(0, command.ADJUST_BODY_ANG, pack('3h', *adjust))
     time.sleep(0.02)
 
     modeSignal = [1]
@@ -154,7 +159,7 @@ def main():
     if not stopped:
         startTelemetrySave(numSamples)
 
-        modeSignal = [4]
+        modeSignal = [6]
         xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
         time.sleep(0.03)
         xb_send(0, command.SET_PID_GAINS, pack('10h',*runTailGains))

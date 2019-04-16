@@ -12,6 +12,7 @@ sys.path.append(os.path.dirname("../../imageproc-settings/"))
 sys.path.append(os.path.dirname("../imageproc-settings/"))      # Some projects have a single-directory structure
 import shared
 import pygame
+import csv
 
 from hall_helpers import *
 
@@ -23,13 +24,21 @@ def main():
     #Motor gains format:
     #  [ Kp , Ki , Kd , Kaw , Kff     ,  Kp , Ki , Kd , Kaw , Kff ]
     #    ----------LEFT----------        ---------_RIGHT----------
-    runTailGains = [160,0,30,0,0, 0,0,0,0,0]
-    runThrusterGains = [170,0,120, 170,0,120]
+    #runTailGains = [110,0,20,0,0, 0,0,0,0,0]
+    #runThrusterGains = [170,0,140, 100,0,140]
 
-    standTailGains = [200,0,25,0,0, 0,0,0,0,0]
-    standThrusterGains = [250,0,170, 100,0,150]
+    #standTailGains = [180,0,17,0,0, 0,0,0,0,0]
+    #standThrusterGains = [250,0,180, 100,0,150]
 
-    duration = 1000#15000
+    zeroGains = [90,40,0, 230,190,0, 0,0,0,0]
+
+    runTailGains = [90,40,0, 130,110,0, 90,13,0,0]
+    runThrusterGains = [0,0,0, 0,0,0]
+
+    standTailGains = [80,40,0, 230,190,0, 150,8,0,7]
+    standThrusterGains = [0,0,0, 0,0,0]
+
+    duration = 15000
     rightFreq = 0
     leftFreq = 0
     phase = 0
@@ -38,13 +47,6 @@ def main():
 
     manParams = manueverParams(0, 0, 0, 0, 0, 0) # JY edits: added for compatibility
     params = hallParams(runTailGains, duration, rightFreq, leftFreq, phase, telemetry, repeat)
-    xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h', *standThrusterGains))
-
-
-    sj_params = sjParams(300, 800)
-    # wj_params = wjParams(-551287, -50000, 1000000, 4941297, 411774)
-    wj_params = wjParams(-551287, -40000, 80000, 5353068, 411774)
-    wjParams.set(wj_params)
 
     # Joystick --------------------
     pygame.init()
@@ -52,14 +54,25 @@ def main():
     joy.init()
     joyNAxes = joy.get_numaxes() # should be 6
     joyNButtons = joy.get_numbuttons() # should be 11
-    joyAxes = [0]*joyNAxes
+    joyAxes = [0.0]*joyNAxes
     joyButtons = [0]*joyNButtons
-    joyYaw = 0
+    joyYaw = 0.0
 
     started = 0
     stopped = False
 
     AngleScaling = 3667; # rad to 15b 2000deg/s integrated 1000Hz
+
+    # Command writing -------------
+    path     = 'Data/'
+    name     = 'cmd'
+    datetime = time.localtime()
+    dt_str   = time.strftime('%Y-%m-%d_%H-%M-%S', datetime)
+    root     = path + dt_str + '_' + name
+    cmdFileName = root + '.txt'
+    f = open(cmdFileName,'w')
+    cmdwrite = csv.writer(f,delimiter=',')
+    start_time = time.time()
 
 
     if params.telemetry:
@@ -68,7 +81,7 @@ def main():
         path     = 'Data/'
         name     = 'trial'
         datetime = time.localtime()
-        dt_str   = time.strftime('%Y.%m.%d_%H.%M.%S', datetime)
+        dt_str   = time.strftime('%Y-%m-%d_%H-%M-%S', datetime)
         root     = path + dt_str + '_' + name
         shared.dataFileName = root + '_imudata.txt'
         print "Data file:  ", shared.dataFileName
@@ -85,44 +98,56 @@ def main():
 
         if joy.get_button(3):
             started = 1
-        time.sleep(0.01)
+        time.sleep(0.02)
 
-    startTelemetrySave(numSamples)
     print "START"
 
     exp = [2]
     arbitrary = [0]
 
+    modeSignal = [0]
+    xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+    time.sleep(0.02)
+
+    xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h', *standThrusterGains))
+    time.sleep(0.02)
+
+    #zeroGains = [0,0,0,0,0, 0,0,0,0,0]
+    xb_send(0, command.SET_PID_GAINS, pack('10h',*zeroGains))
+    time.sleep(0.02)
+
     #viconTest = [0,0,0,0,0,0,60*256,80*256]#55*256,70*256]
     viconTest = [0,0,0,0,0,0,0*256,0*256]#55*256,70*256]
     xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-    time.sleep(0.01)
+    time.sleep(0.02)
 
     xb_send(0, command.RESET_BODY_ANG, pack('h', *arbitrary))
-    time.sleep(0.01)
+    time.sleep(0.02)
 
     xb_send(0, command.GYRO_BIAS, pack('h', *arbitrary))
-    time.sleep(0.01)
+    time.sleep(0.02)
 
     xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
-    time.sleep(0.01)
+    time.sleep(0.02)
 
-    modeSignal = [3]
+    adjust = [0,192,-64]
+    xb_send(0, command.ADJUST_BODY_ANG, pack('3h', *adjust))
+    time.sleep(0.02)
+
+    modeSignal = [1]
     xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
-    
-    time.sleep(0.01)
+    time.sleep(0.02)
+
     xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
-
     time.sleep(3.0)
-    motorgains = [350,0,30,0,0, 0,0,0,0,0]
+    
     xb_send(0, command.SET_PID_GAINS, pack('10h',*standTailGains))
-
-    time.sleep(2.0)
+    time.sleep(0.5)
 
     # JUMP ---------------------------------
 
     print "Hit left trigger to jump"
-    while started==1:
+    while started==1 and stopped == 0:
         pygame.event.pump() # joystick
 
         if joy.get_button(4):
@@ -132,20 +157,20 @@ def main():
         if stopped:
             stopSignal = [0]
             xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
-            time.sleep(0.01)
+            time.sleep(0.02)
             xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
 
-        time.sleep(0.01)
+        time.sleep(0.02)
 
-    modeSignal = [8]
-    xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+    if not stopped:
+        startTelemetrySave(numSamples)
 
-    time.sleep(0.01)
-
-    xb_send(0, command.SET_PID_GAINS, pack('10h',*runTailGains))
-
-    time.sleep(0.01)
-    xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h',*runThrusterGains))
+        modeSignal = [6]
+        xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+        time.sleep(0.03)
+        xb_send(0, command.SET_PID_GAINS, pack('10h',*runTailGains))
+        time.sleep(0.03)
+        xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h',*runThrusterGains))
 
 
     while not stopped:
@@ -153,11 +178,11 @@ def main():
 
         for i in range(joyNAxes):
             joyAxes[i] = joy.get_axis(i)
-        joyYaw = joyYaw# -joyAxes[0]/100
+        joyYaw = joyYaw - joyAxes[0]/20.0
 
-        vx1 = int(-joyAxes[4]*2000)
-        vy1 = int(-joyAxes[3]*1000)
-        vz1 = int(-joyAxes[1]*2000+6000)
+        vz1 = int(np.sqrt(joyAxes[2]*1.4+2.4)*4000)
+        vx1 = int(-joyAxes[4]*6000*(vz1-2000)/6000)
+        vy1 = int(-joyAxes[3]*1500*(vz1-2000)/6000)
         Cyaw = int(joyYaw*AngleScaling)
 
         toSend = [vx1,vy1,vz1, Cyaw]
@@ -168,62 +193,16 @@ def main():
                 toSend[i] = -32767
         xb_send(0, command.SET_VELOCITY, pack('4h',*toSend))
 
-        stopped = joy.get_button(5)
 
-        time.sleep(0.01)
+        stopped = joy.get_button(5) or joy.get_hat(0) == (0,-1)
 
+        cmdwrite.writerow([time.time()-start_time, vx1, vy1, vz1, Cyaw])
 
-
-
-    '''
-    # Balance on toe test
-    #Start robot 0: wall jump, 1: single jump, 2: vicon jumps
-    exp = [2]
-    arbitrary = [0]
-
-    #viconTest = [0,0,0,0,0,0,60*256,80*256]#55*256,70*256]
-    viconTest = [0,0,0,0,0,0,0*256,0*256]#55*256,70*256]
-    xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-    time.sleep(0.01)
-
-    xb_send(0, command.RESET_BODY_ANG, pack('h', *arbitrary))
-    time.sleep(0.01)
-
-    xb_send(0, command.GYRO_BIAS, pack('h', *arbitrary))
-    time.sleep(0.01)
-
-    xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
-    time.sleep(0.01)
-
-    modeSignal = [3]
-    xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
-    time.sleep(0.01)
-
-    xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
-
-    time.sleep(3.0)
-    motorgains = [350,0,30,0,0, 0,0,0,0,0]
-    xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
-    '''
-    '''
-    time.sleep(5.0)
-    viconTest = [0,0,0,0,0,0,58*256,58*256]#55*256,70*256]
-    xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-
-    time.sleep(0.4)
-    viconTest = [0,0,0,0,0,0,30*256,30*256]#55*256,70*256]
-    xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-
-    time.sleep(0.05)
-    modeSignal = [7]
-    xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
-
-    params.duration = params.duration - 8
-    '''
+        time.sleep(0.04)
 
     stopSignal = [0]
     xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
-    time.sleep(0.01)
+    time.sleep(0.02)
     xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
 
     print("STOPPED")
@@ -232,6 +211,12 @@ def main():
         flashReadback(numSamples, params, manParams)
 
     print "Done"
+
+    raw_input("Press enter to exit")
+
+    shared.xb.halt()
+    shared.ser.close()
+    sys.exit()
     
     
 #Provide a try-except over the whole main function

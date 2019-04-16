@@ -12,6 +12,7 @@
 #define MJ_GND          4
 #define MJ_STOPPED      5
 #define MJ_LAUNCH       6
+#define MJ_STAND        7
 
 #define UART_PERIOD     10 // minimum UART period in ms (must be positive integer)
 
@@ -33,6 +34,7 @@ void eulerUpdate(int32_t* angs, int32_t* vels, int8_t time);
 void kinematicUpdate(void);
 void jumpModes(void);
 void attitudeCtrl(void);
+void swingUpCtrl(void);
 
 // Additional onboard estimation and control
 void modeEstimation(void);
@@ -40,8 +42,12 @@ void stanceUpdate(void);
 void flightUpdate(void);
 void flightStanceTrans(void);
 void stanceFlightTrans(void);
-void takeoffEstimation(void );
+void takeoffEstimation(void);
+void balanceOffsetEstimator(void);
 int32_t deadbeatVelCtrl(int16_t* vi, int16_t* vo, int32_t* ctrl);
+void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw);
+int32_t tailLinearization(int32_t* tail);
+int32_t thrusterLinearization(int32_t* thruster);
 
 // Communication
 void setGains(int16_t* gains);
@@ -63,6 +69,7 @@ void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint3
 void orientImageproc(int32_t* v_b, int16_t* v_ip);
 int32_t calibPos(uint8_t idx);
 int32_t cosApprox(int32_t x);
+
 
 
 

@@ -47,14 +47,12 @@ int32_t gainsPD[9];      // PD controller gains (yaw, rol, pit) (P, D, other)
 #define D_AIR ((0*65536)/1000) // leg derivative gain in the air (duty cycle/[rad/s] * 65536)
 #define P_GND ((5*65536)/10) // leg proportional gain on the ground
 #define D_GND ((1*65536)/1000)
-#define P_STAND ((4*65536)/100) // leg proportional gain for standing
-#define D_STAND ((3*65536)/10000)
+#define P_STAND ((2*65536)/100) // leg proportional gain for standing
+#define D_STAND ((4*65536)/10000)
 
 uint32_t GAINS_AIR = (P_AIR<<16)+D_AIR;
 uint32_t GAINS_GND = (P_GND<<16)+D_GND;
 uint32_t GAINS_STAND = (P_STAND<<16)+D_STAND;
-
-#define MAXTHROT 3800   // Maximum thruster & tail PWM
 
 // Communication and telemetry constants
 #define UART_PERIOD 10
@@ -74,6 +72,10 @@ uint8_t modeFlags = 0;     // Running modes
     // 2: balance offset estimation enabled (1) or disabled (0)
     // 4: use onboard velocity control (1) or accept offboard attitude cmd (0)
     // 8: use onboard trajectory (1) or accept offboard horz. velocity cmd (0)
+    // 16: static standing balance (1) or usual operation (0)
+    // 1 >> 5: swing-up controller
+    // 2 >> 5: 
+    // 3 >> 5: 
 uint32_t t1_ticks = 0;      // Time (1 tick per ms)
 uint8_t interrupt_count = 0;// How many processing cycles have passed
 
@@ -83,14 +85,18 @@ int32_t w[3];               // Body ang vel (x, y, z) [2^15 ticks/(2000 deg/s)]
 int32_t p[3];               // Robot position (x, y, z) [100,000 ticks/m]
 int16_t v[3];               // Robot body vel (x, y, z) [1000 ticks/(m/s)]
 
-int32_t tail_pos = 0;       // Tail angle [2^16 ticks/(2*pi rad)]
+int32_t tail_pos = 0;       // Tail angle [25/48*2^16 ticks/(2*pi rad)]
 int32_t tail_prev = 0;      // Previous tail angle for velocity estimation
-int32_t tail_vel = 0;       // Tail vel [(2^16 ticks)/(2*pi*1000 rad/s)]
+int32_t tail_vel = 0;       // Tail vel [(25/48*2^16 ticks)/(2*pi*1000 rad/s)]
 
 // Control output
-int32_t foreThruster;       // Control output
-int32_t aftThruster;        // Control output
-int32_t tailMotor;          // Control output
+int32_t foreCmd;       // Control output (linear in torque)
+int32_t aftCmd;        // Control output (linear in torque)
+int32_t tailCmd;       // Control output (linear in torque)
+
+int32_t foreThruster;       // Control output PWM (after linearization)
+int32_t aftThruster;        // Control output PWM (after linearization)
+int32_t tailMotor;          // Control output PWM (after linearization)
 
 // Commands
 int32_t qCmd[3];            // Attitude setpoint
@@ -130,6 +136,11 @@ int32_t force;              // Foot force [2^10 ticks/N]
 int16_t leg;                // Stance leg length [2^16 ticks/m]
 int16_t legVel;             // Stance leg velocity [2000 ticks/(m/s)]
 
+int32_t tauX = 0;           // Torque in stance (see balanceOffsetEstimator)
+int32_t tauY = 0;           // Torque in stance (see balanceOffsetEstimator)
+int32_t MxPrev = 0;         // Previous momentum (see balanceOffsetEstimator)
+int32_t MyPrev = 0;         // Previous momentum (see balanceOffsetEstimator)
+
 int32_t sin_theta = 0;      // pitch angle in COS_PREC bits
 int32_t cos_theta = 1<<COS_PREC;
 int32_t sin_phi = 0;        // roll angle
@@ -143,12 +154,19 @@ int32_t TOleg;
 int32_t TOlegVel;
 int32_t TOq[3];
 int32_t TOw[3];
+int32_t TOt;
+int16_t TOvz = 8000;
 int32_t TDq[3];
 int32_t TDqCmd[3];
 int16_t TDvCmd[3];
 int16_t TDv[3];
+int32_t TDt;
+
+int32_t start_time;
 
 int32_t att_correction[2];
+
+int16_t energy;
 
 #define VEL_BUF_LEN 10  // Buffer to find peak velocity at takeoff
 uint8_t vel_ind = 0;
@@ -160,8 +178,11 @@ int32_t last_mot;
 #define STEP_MS 2
 
 #define ATT_CORRECTION_GAIN_X 12
-#define ATT_CORRECTION_GAIN_Y 8
+//#define ATT_CORRECTION_GAIN_Y 8
+#define ATT_CORRECTION_GAIN_Y 10
 
+#define TAIL_BRAKE 20
+#define TAIL_REVERSE 7
 
 
 // Communications variables ---------------------------------------------------
@@ -215,12 +236,16 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         eulerUpdate(q,w500,1);
     }else {
         // Estimation and control at 500 Hz
-        kinematicUpdate();
-        modeEstimation();
-        jumpModes();
-    }
 
-    attitudeCtrl();
+        if (modeFlags < (1<<5)) {
+            kinematicUpdate();
+            modeEstimation();
+            jumpModes();
+            attitudeCtrl();
+        } else if (modeFlags == (1<<5)) {
+            swingUpCtrl();
+        }
+    }
 
     /*
     if (ROBOT_NAME == SALTO_1P_SANTA) {
@@ -269,6 +294,12 @@ void salto1p_functions(void) {
     vB[0] = ((int32_t)v[0]*cos_psi + (int32_t)v[1]*sin_psi)>>COS_PREC;//vi[0];
     vB[1] = (-(int32_t)v[0]*sin_psi + (int32_t)v[1]*cos_psi)>>COS_PREC;//vi[1];
     vB[2] = v[2];
+
+    
+    // Onboard trajectory
+    if (modeFlags & 0b1000) {
+
+    }
 
     // Onboard velocity control using flight phase attitude
     if (modeFlags & 0b100) {
@@ -381,7 +412,7 @@ void kinematicUpdate(void) {
 
     // Read the motor
     sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
-    mot = (sensor_data->position*motPos_to_femur_crank_units) - BLDC_MOTOR_OFFSET; //UNITFIX
+    mot = ((sensor_data->position - BLDC_MOTOR_OFFSET)*motPos_to_femur_crank_units); //UNITFIX
     if (mot - last_mot > 1<<14 || last_mot - mot > 1<<14) {
         mot = last_mot; // reject bad samples
     }
@@ -423,6 +454,7 @@ void jumpModes(void) {
     switch(mj_state) {
         case MJ_START:
             mj_state = MJ_LAUNCH;
+            tiHChangeMode(1, TIH_MODE_COAST);
             break;
 
         case MJ_STOP:
@@ -455,9 +487,17 @@ void jumpModes(void) {
             break;
 
         case MJ_LAUNCH:
-            // Liftoff transition from launch to air
-            if (t1_ticks - transition_time > 50 
+            // Liftoff transition to standing
+            if ((modeFlags & 0b10000)
                     && (spring < 500 || femur > FULL_EXTENSION)
+                    && crank > 8192) {
+                mj_state = MJ_STAND;
+                transition_time = t1_ticks;
+                // slow down the jump
+                send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_GND, 2);
+
+            // Liftoff transition from launch to air
+            } else if ((spring < 500 || femur > FULL_EXTENSION)
                     && crank > 8192) {
                 mj_state = MJ_AIR;
                 transition_time = t1_ticks;
@@ -465,6 +505,14 @@ void jumpModes(void) {
                 send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
             }
             break;
+
+        case MJ_STAND:
+            // No longer standing mode: jump!
+            if (!(modeFlags & 0b10000)) {
+                mj_state = MJ_LAUNCH;
+            } else {
+                send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_STAND, 2);
+            }
 
         case MJ_STOPPED:
             break;
@@ -562,6 +610,7 @@ void flightStanceTrans(void) {
         TDq[j] = q[j]; // Save the touchdown body angles
         TDv[j] = v[j]; // Save the touchdown body velocities
         TDqCmd[j] = qCmd[j];
+        TDt = t1_ticks;
     }
 }
 
@@ -584,6 +633,7 @@ void stanceFlightTrans(void) {
             for (j=0; j<3; j++) {
                 TOq[j] = angBuf[cntr*6+j];
                 TOw[j] = angBuf[cntr*6+3+j];
+                TOt = t1_ticks - i;
             }
         }
         cntr -= 1;
@@ -614,18 +664,25 @@ void takeoffEstimation(void) {
     int32_t TOcos_psi = cosApprox(TOq[2]);
     int32_t TOsin_psi = cosApprox(TOq[2]-PI/2);
 
+    // Hack for smoothing TOw
+#if ROBOT_NAME == SALTO_1P_DASHER
+    TOw[0] = (TOq[0] - TDq[0])/(TOt-TDt); // 16384 per degree
+    TOw[1] = (TOq[1] - TDq[1])/(TOt-TDt);
+#else
+    TOw[0] = (TOq[0] - TDq[0])/(TOt-TDt);
+    TOw[1] = (TOq[1] - TDq[1])/(TOt-TDt);
+#endif
+
     // Compensate for CG offset
-
-
 #if ROBOT_NAME == SALTO_1P_DASHER
     TOw[1] -= 0.25*0.469*TOlegVel; // in rad/s. (2^15/2000*180/pi)/2000 = 0.4694
-    TOw[0] += 0.10*0.469*TOlegVel;
+    TOw[0] += 0.0*0.469*TOlegVel;
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
     TOw[1] += 0.0*0.469*TOlegVel; // in rad/s. (2^15/2000*180/pi)/2000 = 0.4694
     TOw[0] += 0.0*0.469*TOlegVel;
 #else
-    TOw[1] += 0.0*0.469*TOlegVel; // in rad/s. (2^15/2000*180/pi)/2000 = 0.4694
-    TOw[0] += 0.0*0.469*TOlegVel;
+    TOw[1] += 0.1*0.469*TOlegVel; // in rad/s. (2^15/2000*180/pi)/2000 = 0.4694
+    TOw[0] += +0.2*0.469*TOlegVel;
 #endif
 
     // Body velocity rotation matrix
@@ -640,6 +697,7 @@ void takeoffEstimation(void) {
     vyw = 3*vyw/4;
     // Lateral oscillations complete 1.5 periods during stance and cause a gyro
     // measurement overshoot of somewhere around 50% at takeoff time.
+    vxw = 7*vxw/8;
     
     int32_t velX = (((((TOcos_psi*TOcos_theta) >> COS_PREC)
             - ((((TOsin_psi*TOsin_phi) >> COS_PREC)*TOsin_theta) >> COS_PREC))*vxw) >> COS_PREC)
@@ -661,6 +719,7 @@ void takeoffEstimation(void) {
     v[0] = velX;
     v[1] = velY;
     v[2] = velZ;
+    TOvz = velZ;
 
     //*
     int i;
@@ -678,13 +737,16 @@ void takeoffEstimation(void) {
     int32_t velocity_x = (v[0]*TOcos_psi + v[1]*TOsin_psi)>>COS_PREC;
     int32_t velocity_y = (-v[0]*TOsin_psi + v[1]*TOcos_psi)>>COS_PREC;
 
-    att_correction[0] = -(ATT_CORRECTION_GAIN_X*(velocity_x - TDvCmd[0]));// - (TDq[2]>>1));
-    att_correction[1] = ATT_CORRECTION_GAIN_Y*(velocity_y - TDvCmd[1]);// + (TDq[1]>>1);
+    att_correction[0] = -(ATT_CORRECTION_GAIN_X*(velocity_x - TDvCmd[0]) - (TDq[2]>>1));
+    att_correction[1] = ATT_CORRECTION_GAIN_Y*(velocity_y - TDvCmd[1]) + (TDq[1]>>1);
 
     //att_correction[0] = -(ATT_CORRECTION_GAIN_X*(velocity_x - stance_vel_des[0]) * 188) /
     //    ((int32_t)(-velocity[2] + TDvelocity[2]) >> 6);
     //att_correction[1] = (ATT_CORRECTION_GAIN_Y*(velocity_y - stance_vel_des[1]) * 188) /
     //    ((int32_t)(-velocity[2] + TDvelocity[2]) >> 6); // (3*2000 >> 6)*2 is about 188
+
+    att_correction[0] = att_correction[0] * 5000/velZ;
+    att_correction[1] = att_correction[1] * 5000/velZ;
 
     att_correction[0] = att_correction[0] > 15000 ? 15000 :
                         att_correction[0] < -15000 ? -15000 :
@@ -698,6 +760,76 @@ void takeoffEstimation(void) {
     procFlags &= ~0b1;
 }
 
+void balanceOffsetEstimator(void) {
+// Adjust the roll and pitch estimates for balancing on toe
+
+    // Old estimation using control values
+    // Should NOT use the linearizing models
+    //*
+    q[0] += ((foreCmd+aftCmd)>>7)*STEP_MS; // TODO: shouldn't this be post-sat instead?
+    q[1] += (tailCmd>>4)*STEP_MS;
+    //*/
+
+    /*
+    // Balance Offset Observer from Roy Featherstone's group
+    #define IY_CG 126  // moment of inertia about CG y axis (1.2E-4 N m^2)
+    #define IX_CG 98   // moment of inertia about CG x axis (9.3E-5 N m^2)
+    #define IY_TAIL 47 // tail moment of inertia (4.5E-5 N m^2)
+
+    int32_t I_cg = (FULL_MASS*((int32_t)(leg*leg) >> 8)) >> 12;
+    int32_t Iy = IY_CG + I_cg;
+    int32_t My = (int32_t)Iy*w[1] + IY_TAIL*173*tail_vel;
+    int32_t Ix = IX_CG + I_cg;
+    int32_t Mx = (int32_t)Ix*w[0];
+    // conversion from tail_vel to w is 173
+    // w is 2^15 ticks/(2000 deg/s) = 938.7 ticks/(rad/s)
+    // FULL_MASS is 2^8 ticks/kg
+    // leg is 2^16 ticks/m 
+    // Ix and Iy are 2^20 ticks/(kg m^2)
+    // Mx and My are in 938.7*2^20 ticks/(N m s)
+
+    int32_t mgc = leg*FULL_MASS*GRAV_ACC;
+    // FULL_MASS is 2^8 ticks/kg
+    // GRAV_ACC is 2^2 ticks/(m/s^2)
+    // leg is 2^16 ticks/m
+    // mgc is in 2^26 ticks/N m
+
+    int32_t q0offset = 94*((Mx-MxPrev)*68/STEP_MS - tauX)/(mgc);
+    int32_t q1offset = 94*((My-MyPrev)*68/STEP_MS - tauY)/(mgc);
+
+    // Saturate correction rate to 10 deg/s
+    q0offset = q0offset > 169*STEP_MS ? 169*STEP_MS :
+               q0offset < -169*STEP_MS ? -169*STEP_MS :
+               q0offset;
+    q1offset = q1offset > 169*STEP_MS ? 169*STEP_MS :
+               q1offset < -169*STEP_MS ? -169*STEP_MS :
+               q1offset;
+
+    q[0] -= q0offset;
+    if (gainsPD[6] || gainsPD[7]) {
+        q[1] -= q1offset;
+    }
+    // M_ and M_Prev are 938.7*2^20 ticks/(N m s)
+    // STEP_MS is 1000 tick/s
+    // tau_ are 2^26 ticks/(N m)
+    //      conversion ~ 68
+    // mgc is in 2^26 ticks/(N m)
+    // q are in 938734.0 ticks/rad
+    //      a gain of 1/2 per step makes this 469367; 1/10 is 93873
+
+    MxPrev = Mx;
+    MyPrev = My;
+
+    tauY = (mgc*cos_theta) >> COS_PREC;
+    tauX = ((mgc*cos_phi) >> COS_PREC) + 52*(foreCmd+aftCmd);
+    // FULL_MASS is 2^8 ticks/kg
+    // GRAV_ACC is 2^2 ticks/(m/s^2)
+    // leg is 2^16 ticks/m 
+    // tauX and tauY are 2^26 ticks/(N m)
+    // thrusters produce 0.039 N * 0.08 m torque each (conversion ~ 52)
+    */
+}
+
 int32_t deadbeatVelCtrl(int16_t* vi, int16_t* vo, int32_t* ctrl) {
     // TODO description
     long ox = vo[0];
@@ -708,7 +840,8 @@ int32_t deadbeatVelCtrl(int16_t* vi, int16_t* vo, int32_t* ctrl) {
     //long iy = (-(long)vi[0]*sin_psi + (long)vi[1]*cos_psi)>>COS_PREC;//vi[1];
     long ix = vi[0];
     long iy = vi[1];
-    long iz = (vi[2] > -2000 ? -2000 : vi[2]) + 6600;
+    //long iz = (vi[2] > -4000 ? -4000 : vi[2]) + 6600;
+    long iz = -TOvz + 6600; // TODO: this is a hack that works for flat ground
 
     long ixix = (ix*ix)>>11; // >> 11 is approximately divide by 2000
     long iyiy = (iy*iy)>>11;
@@ -746,7 +879,7 @@ int32_t deadbeatVelCtrl(int16_t* vi, int16_t* vo, int32_t* ctrl) {
 
 #ifdef FULL_POWER
     // 100% gains from runGridMotor18a
-    long pit_ctrl = -87*ix +32*ox // supposed to be 91, 36
+    long pit_ctrl = -84*ix +32*ox // supposed to be 91, 36
         -17*ixiz +10*oxiz -2*ixoz -19*oxoz;
         // Scaled by 469 approx = PI/(3.14159*2000)
 
@@ -813,10 +946,6 @@ int32_t deadbeatVelCtrl(int16_t* vi, int16_t* vo, int32_t* ctrl) {
 #endif
 }
 
-
-#define TAIL_BRAKE 20
-#define TAIL_REVERSE 4 // out of 128
-
 void attitudeCtrl(void) {
     // TODO description
     uint8_t i;
@@ -842,31 +971,112 @@ void attitudeCtrl(void) {
     int32_t rolPD = ((gainsPD[3] * qErr[0])>>12) + ((gainsPD[4] * w[0])>>4);
     int32_t pitPD = ((gainsPD[6] * qErr[1])>>12) + ((gainsPD[7] * w[1])>>4);
 
+    attitudeActuators(rolPD, pitPD, yawPD);
+}
+
+void swingUpCtrl(void) {
+    if (mj_state != MJ_STOP && mj_state != MJ_STOPPED && mj_state != MJ_IDLE) {
+        // Running
+        int i;
+
+        energy = 0.0000011*w[1]*w[1] + (147*cos_theta >> COS_PREC);
+        // 0.1*9.81*0.15*1000 = 147
+        // 0.5*0.002*0.0011 = 0.0000011
+        // Total I is about 0.002 kg m^2
+        // w in 2^15 ticks/(2000 deg/s) = (0.00106526443 rad/s)/tick
+        // E is in 0.001J/tick
+        // scale = 0.00107^2/0.001 = 0.0011449
+
+        // Attitude control
+        int32_t yawPD;
+        int32_t rolPD;
+        int32_t pitPD;
+        int32_t swingUpLeg;
+
+        int32_t qErr[3];
+        for (i=0; i<3; i++) {
+            qErr[i] = q[i] - qCmd[i];
+            while (qErr[i] > PI) {
+                qErr[i] -= 2*PI;
+            }
+            while (qErr[i] < -PI) {
+                qErr[i] += 2*PI;
+            }
+        }
+
+        yawPD = 0;//((gainsPD[0] * qErr[2])>>12) + ((gainsPD[1] * w[2])>>4);
+        rolPD = 0;//((gainsPD[3] * qErr[0])>>12) + ((gainsPD[4] * w[0])>>4);
+
+        if (energy < 132) {
+            // Swing-up
+            if (energy < -50) {
+                // Start swing-up by using the tail
+                if (tail_vel < 50 && tail_vel > -50 &&
+                    (q[1] > 17*PI/18 || q[1] < 17*PI/18) ) {
+                    // Start the tail with a kick if the robot is hanging
+                    pitPD = MAX_THROT;
+                } else {
+                    pitPD = -5*w[1]+1000;
+                }
+                swingUpLeg = 0;
+            } else {
+                // Pump with the leg to get more energy
+                pitPD = -10*tail_vel; // brake the tail during this phase
+                if ((w[1] > -500 && q[1] < 0) ||
+                    (w[1] < 500 && q[1] > 0) ||
+                    (q[1] < PI/6 && q[1] > -PI/6)) {
+                    swingUpLeg = 0;
+                } else {
+                    swingUpLeg = (int32_t)40<<16;
+                }
+            }
+        } else {
+            // Pendulum balance
+            pitPD = ((gainsPD[6] * qErr[1])>>12) + ((gainsPD[7] * w[1])>>4) 
+                + gainsPD[9]*tail_vel;
+            swingUpLeg = 0;
+        }
+
+        if (energy >= 132) {
+            modeFlags |= 0b1;
+        }
+
+        attitudeActuators(rolPD, pitPD, yawPD);
+        send_command_packet(&uart_tx_packet_global, swingUpLeg, GAINS_STAND, 2);
+
+    } else if (mj_state == MJ_STOP) {
+        // Stopping
+        send_command_packet(&uart_tx_packet_global, 0, 0, 0);
+        tiHSetDC(0+1, 0);
+        tiHSetDC(2+1, 0);
+        tiHSetDC(3+1, 0);
+        mj_state = MJ_STOPPED;
+    }
+}
+
+void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw){
+    // Attitude mixing, saturation, linearization, and PWM output
+    int i;
+
     // Attitude actuator mixing
-    foreThruster = rolPD - yawPD;
-    aftThruster = rolPD + yawPD;
-    tailMotor = pitPD;
+    foreCmd = roll - yaw;
+    aftCmd = roll + yaw;
+    tailCmd = pitch;
 
     if (modeFlags & 0b1) { // Balance on toe tail velocity feedback
-        tailMotor += gainsPD[9]*tail_vel;
+        tailCmd += gainsPD[9]*tail_vel;
     } else if (mj_state != MJ_AIR) { // Tail braking on the ground
-        tailMotor = -TAIL_BRAKE*(tail_vel + TAIL_REVERSE*(w[1]>>7));
+        tailCmd = -TAIL_BRAKE*(tail_vel + TAIL_REVERSE*(w[1]>>8));
     }
 
-    // Actuator saturation
-    foreThruster = foreThruster > MAX_THROT ? MAX_THROT :
-                   foreThruster < -MAX_THROT ? -MAX_THROT :
-                   foreThruster;
-    aftThruster = aftThruster > MAX_THROT ? MAX_THROT :
-                  aftThruster < -MAX_THROT ? -MAX_THROT :
-                  aftThruster;
-    tailMotor = tailMotor > MAX_THROT ? MAX_THROT :
-                tailMotor < -MAX_THROT ? -MAX_THROT :
-                tailMotor;
+    // Linearizing the actuator response
+    foreThruster = thrusterLinearization(&foreCmd);
+    aftThruster = thrusterLinearization(&aftCmd);
+    tailMotor = tailLinearization(&tailCmd);
 
-    if (modeFlags &0b1) { // Toe balance estimation update
-        q[0] += (rolPD>>7)*STEP_MS;
-        q[1] += (pitPD>>4)*STEP_MS;
+    // Toe balance estimation update
+    if (modeFlags & 0b1) {
+        balanceOffsetEstimator();
     }
 
     // Set motor PWM commands
@@ -877,8 +1087,74 @@ void attitudeCtrl(void) {
     } else {
         for (i=0; i<4; i++) {
             tiHSetDC(i+1, 0);
+            tiHChangeMode(1, TIH_MODE_BRAKE); // brake the tail
         }
     }
+}
+
+int32_t thrusterLinearization(int32_t* thruster){
+    // Linearize the thruster force by inverting the normalized Force vs. Volt
+    // calibratin curve
+    // INPUT: thruster should be in PWM ticks between -4000 and 4000
+    // OUTPUT: thrusterOut in PWM ticks between -4000 and 4000
+    // Updates thruster if thrusterOut saturates
+
+    int16_t thrusterOut;
+
+    if (*thruster <= -2800) {
+        *thruster = -2800;
+        thrusterOut = -4000;
+    } else if (*thruster <= -400) {
+        thrusterOut = 6*(*thruster+2800)/7 - 4000;
+    } else if (*thruster <= 400) {
+        thrusterOut = 3* *thruster;
+    } else if (*thruster <= 4000) {
+        thrusterOut = 7*(*thruster-400)/9 + 1200;
+    } else {
+        thrusterOut = 4000;
+        *thruster = 4000;
+    }
+    return thrusterOut;
+}
+
+int32_t tailLinearization(int32_t* tail){
+    // Linearize the tail motor torque with a simple motor and friction model
+    // INPUT: tail should be in PWM ticks between -4000 and 4000
+    // OUTPUT: tailOut in PWM ticks between -4000 and 4000
+    // Updates tail if tailOut saturates
+
+    // Free running speed ~ 120 rad/s (at tail, not the encoder) at 3800 PWM
+    // This should be about 5, but that makes it unstable
+
+    // Actuator saturation
+    *tail = *tail > MAX_THROT ? MAX_THROT :
+            *tail < -MAX_THROT ? -MAX_THROT :
+            *tail;
+
+#if ROBOT_NAME == SALTO_1P_DASHER
+    if (modeFlags & 0b1) {
+        *tail += 2*tail_vel; // more aggressive linearization for toe balancing
+    } else {
+        *tail += 1*tail_vel;
+    }
+
+    // Dasher friction is about 300 PWM out of 4000
+    if (tail_vel < -20) {
+        *tail -= 200;
+    } else if (tail_vel > 20) {
+        *tail += 200;
+    } else {
+        *tail += 10*tail_vel;
+    }
+#endif
+
+    int16_t tailOut = *tail > MAX_THROT ? MAX_THROT :
+                      *tail < -MAX_THROT ? -MAX_THROT :
+                      *tail;
+
+    *tail -= (*tail-tailOut);
+
+    return tailOut;
 }
 
 
@@ -905,12 +1181,14 @@ void setPushoffCmd(long cmd){
 }
 
 void setBodyAngle(long* qSet) {
+    // INPUT: long[3] {yaw, roll, pitch}
     q[0] = qSet[1];
     q[1] = qSet[2];
     q[2] = qSet[0];
 }
 
 void adjustBodyAngle(long* qAdjust){
+    // INPUT: long[3] {yaw adjustment, roll adjustment, pitch adjustment}
     q[0] += qAdjust[1];
     q[1] += qAdjust[2];
     q[2] += qAdjust[0];
@@ -945,7 +1223,7 @@ void calibGyroBias(){
 
 void expStart(uint8_t startSignal) {
     mj_state = MJ_START;
-    //start_time = t1_ticks;
+    start_time = t1_ticks;
 }
 
 void expStop(uint8_t stopSignal) {
@@ -959,44 +1237,90 @@ void setOnboardMode(uint8_t flags, uint8_t mode) {
 void setVelocitySetpoint(int16_t* newCmd, int32_t newYaw) {
     int i;
 
-    // don't jump too low when coming in fast
-    newCmd[2] = newCmd[2] < vB[0]<<1 ? vB[0]<<1 : 
-                newCmd[2] < -vB[0]<<1 ? -vB[0]<<1 : 
-                newCmd[2] < vB[1]<<1 ? vB[1]<<1 : 
-                newCmd[2] < -vB[1]<<1 ? -vB[1]<<1 :
-                newCmd[2];
+    // Onboard trajectory generation variables
+    int32_t tCycle = 0;
+    int32_t pCmd[2] = {0,0};
+    int32_t vTraj[3] = {0,0,5800}; // 2.9m/s takeoff vel
 
-    newCmd[2] = newCmd[2] > 8000 ? 8000 : // max height
-                newCmd[2] < 4000 ? 4000 : // min height
-                newCmd[2];
+    if (!(modeFlags & 0b1000)) {
+        // don't jump too low when coming in fast
+        newCmd[2] = newCmd[2] < vB[0]<<1 ? vB[0]<<1 : 
+                    newCmd[2] < -vB[0]<<1 ? -vB[0]<<1 : 
+                    newCmd[2] < vB[1]<<1 ? vB[1]<<1 : 
+                    newCmd[2] < -vB[1]<<1 ? -vB[1]<<1 :
+                    newCmd[2];
 
-    // don't go too fast when jumping low
-    newCmd[0] = newCmd[0] > newCmd[2]-2000 ? newCmd[2]-2000 : 
-                newCmd[0] < -(newCmd[2]-2000) ? -(newCmd[2]-2000) :
-                newCmd[0];
-    newCmd[1] = newCmd[1] > (newCmd[2]-2000)>>1 ? (newCmd[2]-2000)>>1 :
-                newCmd[1] < -(newCmd[2]-2000)>>1 ? -(newCmd[2]-2000)>>1 :
-                newCmd[1];
+        newCmd[2] = newCmd[2] > 8000 ? 8000 : // max height
+                    newCmd[2] < 4000 ? 4000 : // min height
+                    newCmd[2];
 
-    // limit horizontal velocity change
-    newCmd[0] = newCmd[0] > vB[0]+3000 ? vB[0]+3000 : 
-                newCmd[0] < vB[0]-3000 ? vB[0]-3000 :
-                newCmd[0];
-    newCmd[1] = newCmd[1] > vB[1]+1500 ? vB[1]+1500 :
-                newCmd[1] < vB[1]-1500 ? vB[1]-1500 :
-                newCmd[1];
+        // don't go too fast when jumping low
+        newCmd[0] = newCmd[0] > newCmd[2]-2000 ? newCmd[2]-2000 : 
+                    newCmd[0] < -(newCmd[2]-2000) ? -(newCmd[2]-2000) :
+                    newCmd[0];
+        newCmd[1] = newCmd[1] > (newCmd[2]-2000)>>1 ? (newCmd[2]-2000)>>1 :
+                    newCmd[1] < -(newCmd[2]-2000)>>1 ? -(newCmd[2]-2000)>>1 :
+                    newCmd[1];
 
-    for (i=0; i<3; i++){
-        vCmd[i] = newCmd[i];
+        // limit horizontal velocity change
+        newCmd[0] = newCmd[0] > vB[0]+4000 ? vB[0]+4000 : 
+                    newCmd[0] < vB[0]-4000 ? vB[0]-4000 :
+                    newCmd[0];
+        newCmd[1] = newCmd[1] > vB[1]+2000 ? vB[1]+2000 :
+                    newCmd[1] < vB[1]-2000 ? vB[1]-2000 :
+                    newCmd[1];
+
+        for (i=0; i<3; i++){
+            vCmd[i] = newCmd[i];
+        }
+        qCmd[2] = newYaw;
+
+        while (qCmd[2] > PI) {
+            qCmd[2] -= 2*PI;
+        }
+        while (qCmd[2] < -PI) {
+            qCmd[2] += 2*PI;
+        }
+    } else {
+        // Trajectory
+        tCycle = (t1_ticks - start_time) % 20000;
+        if (tCycle < 4000) {
+            vTraj[0] = 0;
+            vTraj[1] = 0;
+            pCmd[0] = 0;
+            pCmd[1] = 0;
+        }
+        if (tCycle < 8000) {
+            // 1 m/s forwards for 2 seconds
+            vTraj[0] = 1500;
+            vTraj[1] = 0;
+            pCmd[0] = (tCycle-4000)*vTraj[0]/20;
+            pCmd[1] = 0;
+        } else if (tCycle < 12000) {
+            // 0.5 m/s left for 2 seconds
+            vTraj[0] = 0;
+            vTraj[1] = 750;
+            pCmd[0] = 300000;
+            pCmd[1] = (tCycle-8000)*vTraj[1]/20;
+        } else if (tCycle < 16000) {
+            // 1 m/s backwards for 2 seconds
+            vTraj[0] = -1500;
+            vTraj[1] = 0;
+            pCmd[0] = 300000 + (tCycle-12000)*vTraj[0]/20;
+            pCmd[1] = 150000;
+        } else {
+            // 0.5 m/s right for 2 seconds
+            vTraj[0] = 0;
+            vTraj[1] = -750;
+            pCmd[0] = 0;
+            pCmd[1] = 150000 + (tCycle-16000)*vTraj[1]/20;
+        }
+
+        vCmd[0] = (pCmd[0]-p[0])/100 + vTraj[0];
+        vCmd[1] = (pCmd[1]-p[1])/100 + vTraj[1];
+        vCmd[2] = vTraj[2];
     }
-    qCmd[2] = newYaw;
 
-    while (qCmd[2] > PI) {
-        qCmd[2] -= 2*PI;
-    }
-    while (qCmd[2] < -PI) {
-        qCmd[2] += 2*PI;
-    }
 }
 
 void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint32_t current, uint8_t flags){
@@ -1090,13 +1414,35 @@ int32_t calibPos(uint8_t idx){
 }
 
 int32_t cosApprox(int32_t x) {
-    // Cosine approximation by Bhaskara I's method:
-    // https://en.wikipedia.org/wiki/Bhaskara_I%27s_sine_approximation_formula
+    // Cosine approximation
     //
     // OUTPUT: cosine(x) scaled to a value between -2^COS_PREC and 2^COS_PREC
     // INPUTS:
     // x: angle scaled according to the value of #define constant PI
 
+    /*
+    // Lookup Table
+    if (x < 0) { x = -x; } // cosine is even
+    x = (x+PI) % (PI<<1) - PI;
+    if (x < 0) { x = -x; } // cosine is even
+    if (x > (PI>>1)) { // quadrants 2 and 3
+        x = (PI - x)/5760;
+        x = x > 255 ? 255 :
+            x < 0 ? 0 :
+            x;
+        return -(long)lut_cos[x];
+    } else {
+        x = x/5760; // quadrants 1 and 4
+        x = x > 255 ? 255 :
+            x < 0 ? 0 :
+            x;
+        return (long)lut_cos[x];
+    }
+    */
+
+    //*
+    // Bhaskara I's method:
+    // https://en.wikipedia.org/wiki/Bhaskara_I%27s_sine_approximation_formula
     uint16_t xSq; // Intermediary value x squared and bit shifted down
     int16_t out; // Variable for return value
 
@@ -1114,4 +1460,5 @@ int32_t cosApprox(int32_t x) {
         out = (PI_SQUARE - (xSq<<2))/((PI_SQUARE + xSq)>>COS_PREC);
     }
     return (int16_t) out;
+    //*/
 }

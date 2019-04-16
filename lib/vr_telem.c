@@ -15,6 +15,7 @@
 #include "salto1p.h"
 #include "protocol.h"
 #include "utils.h"
+#include "settings.h"
 
 extern packet_union_t* last_bldc_packet;
 extern uint8_t last_bldc_packet_is_new;
@@ -51,6 +52,8 @@ extern uint32_t t1_ticks;
 //extern long y_ctrl;
 //extern int16_t vel_des[3];
 //extern long att_correction[2];
+extern int32_t qCmd[3];
+extern int32_t TOw[3];
 
 //void vrTelemGetData(unsigned char* ptr) {
 void vrTelemGetData(vrTelemStruct_t* ptr) {
@@ -71,7 +74,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->dcTail = tailMotor;//pidObjs[0].output; // left
 
     sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
-    ptr->posMotor = sensor_data->position;
+    ptr->posMotor = sensor_data->position - BLDC_MOTOR_OFFSET;
     ptr->dcBLDC = sensor_data->current;
     last_bldc_packet_is_new = 0;
 
@@ -108,7 +111,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->foot = leg;
     ptr->footVel = legVel;
     */
-    //*
+    /*
     // body velocity
     ptr->otherMode = 5;
     ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
@@ -117,7 +120,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->force = v[0];
     ptr->foot = v[1];
     ptr->footVel = v[2];
-    //*/
+    */
     /*
     // onboard velocity control
     ptr->otherMode = 7;
@@ -128,14 +131,14 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->foot = y_ctrl/90;
     ptr->footVel = velocity[2];
     */
-    /*
+    //*
     // onboard velocity control
     ptr->otherMode = 8;
     ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
     ptr->voltage = sensor_data->voltage;
     ptr->crank = crank;
-    ptr->force = x_ctrl/90;
-    ptr->foot = y_ctrl/90;
+    ptr->force = qCmd[1];
+    ptr->foot = qCmd[0];
     ptr->footVel = legVel;
     ptr->accelX = v[0];
     ptr->accelY = v[1];
@@ -143,7 +146,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     //ptr->accelX = vCmd[0];
     //ptr->accelY = vCmd[1];
     //ptr->accelZ = vCmd[2];
-    */
+    //*/
     /*
     // onboard velocity control
     ptr->otherMode = 9;
@@ -163,12 +166,12 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
     ptr->voltage = sensor_data->voltage;
     ptr->crank = crank;
-    ptr->accelX = body_vel_LP[1];
-    ptr->accelY = body_vel_LP[2];
+    ptr->accelX = TOw[0];
+    ptr->accelY = TOw[1];
     ptr->accelZ = legVel;
-    ptr->force = velocity[0];
-    ptr->foot = velocity[1];
-    ptr->footVel = velocity[2];
+    ptr->force = v[0];
+    ptr->foot = v[1];
+    ptr->footVel = v[2];
     */
     /*
     // body velocity and attitude corrections

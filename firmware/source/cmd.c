@@ -324,7 +324,8 @@ unsigned char cmdGVectAtt(unsigned char type, unsigned char status, unsigned cha
 }
 
 unsigned char cmdResetBodyAngle(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
-    long body_angle[3] = {0,0,0};
+    long pitch = ((int32_t)frame[0] + ((int32_t)frame[1] << 8))  << 8;
+    long body_angle[3] = {0, 0, pitch};
     setBodyAngle(body_angle);
     return 1;
 }

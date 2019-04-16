@@ -24,7 +24,7 @@ def main():
     motorgains = [100,80,0, 150,120,0, 120,15,0,0]
     motorgains = [0,0,0, 0,0,0, 0,0,0,0]
 
-    duration = 5000#15000
+    duration = 2000#15000
     rightFreq = 0
     leftFreq = 0
     phase = 0
@@ -63,7 +63,7 @@ def main():
             startTelemetrySave(numSamples)
 
 
-        #'''
+        '''
         # basic leg extension test
         exp = [2]
         arbitrary = [0]
@@ -85,7 +85,7 @@ def main():
         #    xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         #    time.sleep(0.01)
 
-        #'''
+        '''
 
 
         '''
@@ -98,17 +98,80 @@ def main():
 
 
         '''
+        # Swing-up pendulum test
+        exp = [2]
+        arbitrary = [0]
+
+        angle = [3667*3.14159]
+
+        #motorgains = [0,0,0, 0,0,0, 200,12,0,12]
+        motorgains = [0,0,0, 0,0,0, 200,12,0,12]
+        xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
+
+        viconTest = [0,0,0,0,0,0,0*256,0*256]#55*256,70*256]
+        xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+        time.sleep(0.01)
+
+        xb_send(0, command.RESET_BODY_ANG, pack('h', *angle))
+        time.sleep(0.01)
+
+        xb_send(0, command.GYRO_BIAS, pack('h', *arbitrary))
+        time.sleep(0.01)
+
+        #modeSignal = [7]
+        modeSignal = [32]
+        xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+        time.sleep(0.01)
+
+        xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
+        time.sleep(0.1)
+        '''
+
+
+        '''
+        # Hacky constant output
+        exp = [2]
+
+        motorgains = [0,0,0, 0,0,0, 300,0,0,0]
+        xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
+        time.sleep(0.2)
+
+        viconTest = [0,0,0,0,0,0,40*256,40*256]#55*256,70*256]
+        xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+        time.sleep(0.01)
+
+        angle = [3667/229]
+        xb_send(0, command.RESET_BODY_ANG, pack('h', *angle))
+        time.sleep(0.01)
+
+        xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
+        time.sleep(0.01)
+
+        for x in range(1000):
+            angle = [3667/229]
+            xb_send(0, command.RESET_BODY_ANG, pack('h', *angle))
+            time.sleep(0.01)
+
+        stopSignal = [0]
+        xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
+        time.sleep(0.01)
+        xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
+
+        '''
+
+
+        #'''
         # Balance on toe test
         #Start robot 0: wall jump, 1: single jump, 2: vicon jumps
         exp = [2]
         arbitrary = [0]
 
-        motorgains = [50,50,0, 350,180,0, 0,0,0,0]
+        motorgains = [50,25,0, 180,140,0, 0,0,0,0]
         xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
         time.sleep(0.2)
 
         #viconTest = [0,0,0,0,0,0,60*256,80*256]#55*256,70*256]
-        viconTest = [0,0,0,0,0,0,0*256,0*256]#55*256,70*256]
+        viconTest = [0,0,0,0,0,0,3*256,0*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(0.01)
 
@@ -121,8 +184,12 @@ def main():
         xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
         time.sleep(0.01)
 
-        #modeSignal = [7]
-        modeSignal = [1]
+        adjust = [0,128,-192] # 3667 ticks per radian
+        xb_send(0, command.ADJUST_BODY_ANG, pack('3h', *adjust))
+        time.sleep(0.01)
+
+        #modeSignal = [3]
+        modeSignal = [19]
         xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
         time.sleep(0.01)
 
@@ -133,19 +200,26 @@ def main():
         #motorgains = [200,0,22,0,0, 0,0,0,0,0]
         #motorgains = [130,0,13,0,5, 0,0,0,0,0]
         #motorgains = [110,0,12,0,5, 0,0,0,0,0]
-        motorgains = [0,100,0, 350,180,0, 200,12,0,12]
+        motorgains = [50,25,0, 180,140,0, 160,12,0,12]
         xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
 
         #time.sleep(15.0)
-        for x in range(10):
-            print 10-x
+        countDown = 4
+        for x in range(countDown):
+            print countDown-x
             time.sleep(1.0)
 
-        '''
+        #'''
         '''
         #viconTest = [0,0,0,0,0,0,25*256,50*256]#55*256,70*256]
-        viconTest = [0,0,0,0,0,0,60*256,90*256]
+        viconTest = [0,0,0,0,0,0,35*256,50*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+        time.sleep(0.1)
+
+        motorgains = [100,50,0, 350,170,0, 220,17,0,20]
+        xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
+
+        time.sleep(10.0)
         '''
 
 

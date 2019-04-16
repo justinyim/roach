@@ -30,15 +30,15 @@ def main():
     #standTailGains = [180,0,17,0,0, 0,0,0,0,0]
     #standThrusterGains = [250,0,180, 100,0,150]
 
-    zeroGains = [100,150,0, 230,190,0, 0,0,0,0]
+    zeroGains = [90,40,0, 230,190,0, 0,0,0,0]
 
-    runTailGains = [90,100,0, 150,110,0, 90,13,0,0]
+    runTailGains = [90,40,0, 130,110,0, 90,13,0,0]
     runThrusterGains = [0,0,0, 0,0,0]
 
-    standTailGains = [80,80,0, 230,190,0, 150,9,0,9]
+    standTailGains = [80,40,0, 230,190,0, 150,8,0,7]
     standThrusterGains = [0,0,0, 0,0,0]
 
-    duration = 1000#10000
+    duration = 15000
     rightFreq = 0
     leftFreq = 0
     phase = 0
@@ -64,7 +64,13 @@ def main():
     AngleScaling = 3667; # rad to 15b 2000deg/s integrated 1000Hz
 
     # Command writing -------------
-    f = open('cmd.txt','w')
+    path     = 'Data/'
+    name     = 'cmd'
+    datetime = time.localtime()
+    dt_str   = time.strftime('%Y-%m-%d_%H-%M-%S', datetime)
+    root     = path + dt_str + '_' + name
+    cmdFileName = root + '.txt'
+    f = open(cmdFileName,'w')
     cmdwrite = csv.writer(f,delimiter=',')
     start_time = time.time()
 
@@ -75,7 +81,7 @@ def main():
         path     = 'Data/'
         name     = 'trial'
         datetime = time.localtime()
-        dt_str   = time.strftime('%Y.%m.%d_%H.%M.%S', datetime)
+        dt_str   = time.strftime('%Y-%m-%d_%H-%M-%S', datetime)
         root     = path + dt_str + '_' + name
         shared.dataFileName = root + '_imudata.txt'
         print "Data file:  ", shared.dataFileName
@@ -124,7 +130,7 @@ def main():
     xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
     time.sleep(0.02)
 
-    adjust = [0,128,-192]
+    adjust = [0,192,-64]
     xb_send(0, command.ADJUST_BODY_ANG, pack('3h', *adjust))
     time.sleep(0.02)
 

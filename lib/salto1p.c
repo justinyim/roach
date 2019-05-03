@@ -65,17 +65,20 @@ int32_t telemDecimateCount = 0;
 
 #define LAG_MS 20 // Vicon lag in milliseconds
 
-#define Q_SCALE 14
-#define W_SCALE 10
+#define Q_SCALE 16
+#define W_SCALE 16
 #define EPSILON 0.005
-#define EPS_SCALED EPSILON * W_SCALE
+#define EPS_SCALED EPSILON * (1L << W_SCALE)
 
 #define HALF_PI 3.1415/2
 #define PI_SQUARED 3.1415 * 3.1415
-#define PI_SC 51445  // precalculated value of PI scaled by Q_SCALE 
-#define HALF_PI_SC 25722
-#define PI_SQ_SC 80769 
-#define TICKS_TO_RAD_SC (int32_t)(0.00106 * (1 << W_SCALE))
+// #define PI_SC 51471  // precalculated value of PI scaled by Q_SCALE 
+// #define HALF_PI_SC 25735
+// #define PI_SQ_SC 161703 
+#define PI_SC 205887
+#define HALF_PI_SC 102943
+#define PI_SQ_SC 646814
+#define TICKS_TO_RAD_SC (int32_t)(0.00106 * (1L << W_SCALE))
 
 // Global Variables -----------------------------------------------------------
 // Miscellaneous important variables
@@ -90,7 +93,7 @@ uint32_t t1_ticks = 0;      // Time (1 tick per ms)
 uint8_t interrupt_count = 0;// How many processing cycles have passed
 
 // Continuous dynamics state variables
-int32_t q[4];               // WXYZ quaternion
+int32_t q[4] = {1<<Q_SCALE, 0, 0, 0};               // WXYZ quaternion
 int32_t w[3];               // Body ang vel (x, y, z) [2^15 ticks/(2000 deg/s)]
 int32_t p[3];               // Robot position (x, y, z) [100,000 ticks/m]
 int16_t v[3];               // Robot body vel (x, y, z) [1000 ticks/(m/s)]
@@ -166,7 +169,7 @@ long angBuf[VEL_BUF_LEN*6];
 int32_t last_mot;
 
 // TODO move this somewhere else?
-#define STEP_MS 1
+#define STEP_MS 2
 
 #define ATT_CORRECTION_GAIN_X 12
 #define ATT_CORRECTION_GAIN_Y 8
@@ -194,13 +197,13 @@ uint32_t ctrlCount;
 
 // Assumes x is Q_SCALE 
 int32_t cos_approx(int32_t x) {
+    x = (HALF_PI_SC) + x;
     if (x < 0) {
         x = -x;
     }
-    x = (HALF_PI_SC) + x;
-    x = (x + PI_SC) % (PI_SC << 1) - PI_SC;
-    int32_t result1 = (int64_t)x * (int64_t)(PI_SC - x)/(1 << Q_SCALE);
-    return 16 * (int64_t)result1 * (1 << Q_SCALE) / (5 * PI_SQ_SC - 4 * result1);
+    // x = (x + PI_SC) % (PI_SC << 1) - PI_SC;
+    int32_t result1 = (int64_t)x * (PI_SC - (int64_t)x)/(1L << Q_SCALE);
+    return 16 * (int64_t)result1 * (1L << Q_SCALE) / (5 * PI_SQ_SC - 4 * (int64_t)result1);
     
 }
 
@@ -215,7 +218,7 @@ int32_t sqrt_approx(int32_t num, int32_t scale) {
     int32_t guess_prev = num;
     while (guess - guess_prev > EPS_SCALED || guess_prev - guess > EPS_SCALED) {
         guess_prev = guess;
-        guess = (guess + ((int64_t)num * (1 << scale))/guess)/2;
+        guess = (guess + ((int64_t)num * (1L << scale))/guess)/2;
     }
     return guess;
 }
@@ -225,7 +228,7 @@ int32_t fix_l2norm(int32_t *vector, int num_elements, int32_t scale) {
     int32_t sum = 0;
     uint8_t i;
     for (i = 0; i < num_elements; i++) {
-        sum = sum + ((int64_t)vector[i] * (int64_t)vector[i]) / (1 << scale); 
+        sum = sum + ((int64_t)vector[i] * (int64_t)vector[i]) / (1L << scale); 
     }
     return sqrt_approx(sum, scale);
 }
@@ -259,26 +262,34 @@ void quatUpdate(int32_t *quat, int32_t *vels, uint8_t time) {
     for (i = 0; i < 4; i++) {
         temp[i] = quat[i];
     }
-    int32_t delta_t = ((int32_t) time << W_SCALE) * 0.001; // convert time to seconds
+    int32_t delta_t = ((int32_t) time * (1L << W_SCALE) * 0.001); // convert time to seconds
     // angular velocity and tail angular momentum
-    
     
     int32_t norm = fix_l2norm(vels, 3, W_SCALE);
     if (norm < EPS_SCALED) {
         norm = EPS_SCALED;
     }
 
-    int32_t term = (int64_t)norm * (int64_t)delta_t/(2 << W_SCALE);
+    int32_t term = (int64_t)norm * (int64_t)delta_t/(2L << W_SCALE);
     term = cvtScale(term, W_SCALE, Q_SCALE);
     
-    int32_t sin_term = sin_approx(term)* (1 << W_SCALE)/norm;
+    int32_t sin_term = (int64_t)sin_approx(term)*(1L << W_SCALE)/norm;
 
     q2[0] = cos_approx(term);
     
     for (i = 0; i < 3; i++) {
-        q2[i+1] = (int64_t)vels[i] * (int64_t)sin_term/(1 << W_SCALE); // keeps it in Q_SCALE
+        q2[i+1] = (int64_t)vels[i] * (int64_t)sin_term/(1L << W_SCALE); // keeps it in Q_SCALE
     }
     fix_qmult(temp, q2, quat);
+    // quat[0] = q2[0];
+    // quat[1] = sin_term;
+    // quat[2] = delta_t;
+    // quat[3] = norm;
+    /*
+    for (i = 0; i < 4; i++) {
+        quat[i] = q2[i];
+    }
+    */
 }
 
 // Interrupt running loop at 2 kHz ============================================
@@ -989,13 +1000,16 @@ void adjustBodyAngle(long* qAdjust){
 }
 
 
-// TODO: need to update this with quaternions
-// also what's going on here? 
+// TODO: need to update this with quaternions 
 void updateBodyAngle(long* qUpdate){
     //eulerUpdate(q,qLagSum,1); // attempt to counter comms lag
-    q[0] = 3*(q[0] >> 2) + (qUpdate[1] >> 2);
-    q[1] = 3*(q[1] >> 2) + (qUpdate[2] >> 2);
-    q[2] = 3*(q[2] >> 2) + (qUpdate[0] >> 2);
+    // q[0] = 3*(q[0] >> 2) + (qUpdate[1] >> 2);
+    // q[1] = 3*(q[1] >> 2) + (qUpdate[2] >> 2);
+    // q[2] = 3*(q[2] >> 2) + (qUpdate[0] >> 2);
+    q[0] = qUpdate[0];
+    q[1] = qUpdate[1];
+    q[2] = qUpdate[2];
+    q[3] = qUpdate[3];
 }
 
 void accZeroAtt(){

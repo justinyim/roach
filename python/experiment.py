@@ -5,6 +5,7 @@ authors: stanbaek, apullin
 """
 from lib import command
 import time,sys,os,traceback
+from struct import pack
 import serial
 
 # Path to imageproc-settings repo must be added
@@ -54,8 +55,8 @@ def main():
             dt_str   = time.strftime('%Y.%m.%d_%H.%M.%S', datetime)
             root     = path + dt_str + '_' + name
             shared.dataFileName = root + '_imudata.txt'
-            print "Data file:  ", shared.dataFileName
-            print os.curdir
+            print ("Data file:  ", shared.dataFileName)
+            print (os.curdir)
 
             numSamples = int(ceil(1000 * (params.duration + shared.leadinTime + shared.leadoutTime) / 1000.0))
             eraseFlashMem(numSamples)
@@ -78,9 +79,10 @@ def main():
         time.sleep(0.02)
 
         # Added an extra field(s) for quaternion
-        # including *(2**14) for fixed point consistency
-        viconTest = [1*(2**14),0,0,0,1*(2**14),0,0,0,70*256,90*256]#55*256,70*256]
-        xb_send(0, command.INTEGRATED_VICON, pack('10h', *viconTest))
+        # including *(2**16) for fixed point consistency
+        scale_factor = 2**16
+        viconTest = [1*scale_factor,0,0,0,1*scale_factor,0,0,0,70*256,90*256]#55*256,70*256]
+        xb_send(0, command.INTEGRATED_VICON, pack('8i2h', *viconTest))
         time.sleep(0.02)
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
         #'''
@@ -223,7 +225,7 @@ def main():
 
         repeatMenu(params)
 
-    print "Done"
+    print("Done")
     
     
 #Provide a try-except over the whole main function
@@ -234,15 +236,15 @@ if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
-        print "\nRecieved Ctrl+C, exiting."
+        print("\nRecieved Ctrl+C, exiting.")
         shared.xb.halt()
         shared.ser.close()
     except Exception as args:
-        print "\nGeneral exception:",args
-        print "\n    ******    TRACEBACK    ******    "
+        print("\nGeneral exception:",args)
+        print("\n    ******    TRACEBACK    ******    ")
         traceback.print_stack()
-        print "    *****************************    \n"
-        print "Attempting to exit cleanly..."
+        print ("    *****************************    \n")
+        print ("Attempting to exit cleanly...")
         shared.xb.halt()
         shared.ser.close()
         sys.exit()

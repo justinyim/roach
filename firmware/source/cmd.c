@@ -231,19 +231,19 @@ unsigned char cmdIntegratedVicon(unsigned char type, unsigned char status, unsig
     long new_setpoints[4];
     int i;
     for (i=0; i<4; i++){
-        new_vicon_angle[i] = (int16_t)frame[2*i] + ((int16_t)frame[2*i+1] << 8);
-        new_vicon_angle[i] = new_vicon_angle[i] << 8;
+        new_vicon_angle[i] = (int32_t)frame[4*i] + ((int32_t)frame[4*i+1] << 8)+ ((int32_t)frame[4*i+2] << 16)+ ((int32_t)frame[4*i+3] << 24);
+        // new_vicon_angle[i] = new_vicon_angle[i] << 8;
     }
     for (i=0; i<4; i++){
         new_setpoints[i] = (int16_t)frame[2*i+8] + ((int16_t)frame[2*i+7] << 8);
-        new_setpoints[i] = new_setpoints[i] << 8;
+        // new_setpoints[i] = new_setpoints[i] << 8;
     }
     // add 2 chars to all of these 
     // 16, 17, 18, 19
     long leg_length = (int16_t)frame[12] + ((int16_t)frame[13] << 8);
     long pushoff = (int16_t)frame[14] + ((int16_t)frame[15] << 8);
 
-    updateBodyAngle(new_vicon_angle);
+    setBodyAngle(new_vicon_angle);
     setAttitudeSetpoint(new_setpoints[0],new_setpoints[1],new_setpoints[2], new_setpoints[3]);
     setLegSetpoint(leg_length);
     setPushoffCmd(pushoff);

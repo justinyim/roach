@@ -61,6 +61,8 @@ def main():
     started = 0
     stopped = False
 
+    screen = pygame.display.set_mode((500, 500))
+
     AngleScaling = 3667; # rad to 15b 2000deg/s integrated 1000Hz
 
     # Command writing -------------
@@ -181,9 +183,26 @@ def main():
         joyYaw = joyYaw - joyAxes[0]/20.0
 
         vz1 = int(np.sqrt(joyAxes[2]*1.4+2.4)*4000)
-        vx1 = int(-joyAxes[1]*6000*(vz1-2000)/6000) # was 4
-        vy1 = int(-joyAxes[3]*1500*(vz1-2000)/6000)
+        vx1 = int(-joyAxes[4]*6000*(vz1-2000)/6000)
+        vy1 = int(-joyAxes[3]*2000*(vz1-2000)/6000)
         Cyaw = int(joyYaw*AngleScaling)
+
+        if joy.get_button(0):
+            screen.fill((50,200,100))
+            key = pygame.key.get_pressed()
+            if key[pygame.K_LEFT]:
+                vy1 = 1000
+            elif key[pygame.K_RIGHT]:
+                vy1 = -1000
+            if key[pygame.K_UP]:
+                vx1 = 2000
+            elif key[pygame.K_DOWN]:
+                vx1 = -2000
+        else:
+            screen.fill((0,0,0))
+
+        pygame.draw.line(screen, (0,0,255), (250, 250), (250-vy1/20, 250-vx1/20), vz1/500)
+        pygame.display.flip()
 
         toSend = [vx1,vy1,vz1, Cyaw]
         for i in range(4):

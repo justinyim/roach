@@ -38,7 +38,7 @@ def main():
     standTailGains = [80,40,0, 230,190,0, 150,8,0,7]
     standThrusterGains = [0,0,0, 0,0,0]
 
-    duration = 15000
+    duration = 1000
     rightFreq = 0
     leftFreq = 0
     phase = 0
@@ -181,7 +181,7 @@ def main():
         joyYaw = joyYaw - joyAxes[0]/20.0
 
         vz1 = int(np.sqrt(joyAxes[2]*1.4+2.4)*4000)
-        vx1 = int(-joyAxes[4]*6000*(vz1-2000)/6000)
+        vx1 = int(-joyAxes[1]*6000*(vz1-2000)/6000) # was 4
         vy1 = int(-joyAxes[3]*1500*(vz1-2000)/6000)
         Cyaw = int(joyYaw*AngleScaling)
 

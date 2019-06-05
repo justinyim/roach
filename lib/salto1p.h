@@ -25,6 +25,7 @@
 
 #define MAX_THROT 3800
 
+// Setup
 void salto1pSetup(void);
 void SetupTimer5(void);
 void salto1p_functions(void);
@@ -49,7 +50,7 @@ void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw);
 int32_t tailLinearization(int32_t* tail);
 int32_t thrusterLinearization(int32_t* thruster);
 
-// Communication
+// Radio commands
 void setGains(int16_t* gains);
 void setAttitudeSetpoint(long yaw, long roll, long pitch);
 void setLegSetpoint(long length);
@@ -63,6 +64,8 @@ void expStart(uint8_t startSignal);
 void expStop(uint8_t stopSignal);
 void setOnboardMode(uint8_t flags, uint8_t mode);
 void setVelocitySetpoint(int16_t* newCmd, int32_t newYaw);
+
+// Other
 void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint32_t current, uint8_t flags);
 
 // Utility functions

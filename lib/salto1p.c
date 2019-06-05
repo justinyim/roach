@@ -73,9 +73,13 @@ uint8_t modeFlags = 0;     // Running modes
     // 4: use onboard velocity control (1) or accept offboard attitude cmd (0)
     // 8: use onboard trajectory (1) or accept offboard horz. velocity cmd (0)
     // 16: static standing balance (1) or usual operation (0)
-    // 1 >> 5: swing-up controller
-    // 2 >> 5: 
-    // 3 >> 5: 
+    // 1 << 5: swing-up controller
+    // 2 << 5: 
+    // 3 << 5: 
+    // 4 << 5: 
+    // 5 << 5: 
+    // 6 << 5: 
+    // 7 << 5: 
 uint32_t t1_ticks = 0;      // Time (1 tick per ms)
 uint8_t interrupt_count = 0;// How many processing cycles have passed
 
@@ -104,6 +108,7 @@ int32_t legSetpoint = 0;    // Aerial leg motor angle command
 int32_t pushoffCmd = 0;     // Ground leg motor angle command
 
 int16_t vCmd[3] = {0,0,5000};// Velocity command for takeoff [2000 ticks/(m/s)]
+int32_t pCmd[2] = {0,0};    // Position command [100,000 ticks/m]
 
 // Discrete mode variables
 uint8_t mj_state = MJ_IDLE; // Jump mode
@@ -166,7 +171,8 @@ int32_t start_time;
 
 int32_t att_correction[2];
 
-int16_t energy;
+int16_t energy = 0;
+int16_t des_energy = 1<<14;
 
 #define VEL_BUF_LEN 10  // Buffer to find peak velocity at takeoff
 uint8_t vel_ind = 0;
@@ -302,7 +308,19 @@ void salto1p_functions(void) {
     }
 
     // Onboard velocity control using flight phase attitude
-    if (modeFlags & 0b100) {
+    if (modeFlags & 0b10000) { // orient leg for landing (approximate hack)
+        if (mj_state == MJ_AIR) {
+            vCmd[0] = 0;
+            vCmd[1] = 0;
+            vCmd[2] = 0;
+            deadbeatVelCtrl(vB, vCmd, ctrl_vect);
+            qCmd[1] = ctrl_vect[0];
+            qCmd[0] = ctrl_vect[1];
+        } else if (mj_state == MJ_GND || mj_state == MJ_STAND) {
+            qCmd[1] = 0;
+            qCmd[0] = 0;
+        }
+    } else if (modeFlags & 0b100) {
         pushoffCmd = deadbeatVelCtrl(vB, vCmd, ctrl_vect); // onboard velocity control
         qCmd[1] = ctrl_vect[0];
         qCmd[0] = ctrl_vect[1];
@@ -467,7 +485,11 @@ void jumpModes(void) {
             // Ground contact transition out of air to ground
             if (t1_ticks - transition_time > 200 
                     && (spring > 1000)) {
-                mj_state = MJ_GND;
+                if (modeFlags & 0b10000) {
+                    mj_state = MJ_STAND;
+                } else {
+                    mj_state = MJ_GND;
+                }
                 transition_time = t1_ticks;
             } else { // remain in air state
                 send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_AIR, 2);
@@ -487,20 +509,18 @@ void jumpModes(void) {
             break;
 
         case MJ_LAUNCH:
-            // Liftoff transition to standing
-            if ((modeFlags & 0b10000)
-                    && (spring < 500 || femur > FULL_EXTENSION)
-                    && crank > 8192) {
-                mj_state = MJ_STAND;
-                transition_time = t1_ticks;
-                // slow down the jump
-                send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_GND, 2);
-
             // Liftoff transition from launch to air
-            } else if ((spring < 500 || femur > FULL_EXTENSION)
+            if ((spring < 500 || femur > FULL_EXTENSION)
                     && crank > 8192) {
                 mj_state = MJ_AIR;
                 transition_time = t1_ticks;
+            } else if (modeFlags & 0b10000) {
+                if (crank > 4096) {
+                    // slow down the jump
+                    send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_GND, 2);
+                } else {
+                    // send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
+                }
             } else { // remain in launch state
                 send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
             }
@@ -675,14 +695,14 @@ void takeoffEstimation(void) {
 
     // Compensate for CG offset
 #if ROBOT_NAME == SALTO_1P_DASHER
-    TOw[1] -= 0.25*0.469*TOlegVel; // in rad/s. (2^15/2000*180/pi)/2000 = 0.4694
-    TOw[0] += 0.0*0.469*TOlegVel;
+    TOw[1] -= 0.15*0.469*TOlegVel; // in rad/s. (2^15/2000*180/pi)/2000 = 0.4694
+    TOw[0] += 0.10*0.469*TOlegVel;
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
     TOw[1] += 0.0*0.469*TOlegVel; // in rad/s. (2^15/2000*180/pi)/2000 = 0.4694
     TOw[0] += 0.0*0.469*TOlegVel;
 #else
-    TOw[1] += 0.1*0.469*TOlegVel; // in rad/s. (2^15/2000*180/pi)/2000 = 0.4694
-    TOw[0] += +0.2*0.469*TOlegVel;
+    TOw[1] += 0.2*0.469*TOlegVel; // in rad/s. (2^15/2000*180/pi)/2000 = 0.4694
+    TOw[0] += 0.2*0.469*TOlegVel;
 #endif
 
     // Body velocity rotation matrix
@@ -950,11 +970,13 @@ void attitudeCtrl(void) {
     // TODO description
     uint8_t i;
 
+    /*
     if (modeFlags & 0b1) { // Balance on toe: TODO change this to tilt ctrl
         for (i=0; i<3; i++){
             qCmd[i] = 0;
         }
     }
+    */
 
     // Attitude PD controllers
     int32_t qErr[3];
@@ -1195,6 +1217,11 @@ void adjustBodyAngle(long* qAdjust){
 }
 
 void updateBodyAngle(long* qUpdate){
+    if (modeFlags && 0b10) {
+        // Don't accept offboard angle updates if onboard balance offset estimation is active
+        return;
+    }
+
     //eulerUpdate(q,qLagSum,1); // attempt to counter comms lag
 
     q[0] = 3*(q[0] >> 2) + (qUpdate[1] >> 2);
@@ -1239,7 +1266,6 @@ void setVelocitySetpoint(int16_t* newCmd, int32_t newYaw) {
 
     // Onboard trajectory generation variables
     int32_t tCycle = 0;
-    int32_t pCmd[2] = {0,0};
     int32_t vTraj[3] = {0,0,5800}; // 2.9m/s takeoff vel
 
     if (!(modeFlags & 0b1000)) {
@@ -1269,7 +1295,8 @@ void setVelocitySetpoint(int16_t* newCmd, int32_t newYaw) {
         newCmd[1] = newCmd[1] > vB[1]+2000 ? vB[1]+2000 :
                     newCmd[1] < vB[1]-2000 ? vB[1]-2000 :
                     newCmd[1];
-
+        /*
+        // Usual velocity command
         for (i=0; i<3; i++){
             vCmd[i] = newCmd[i];
         }
@@ -1281,6 +1308,21 @@ void setVelocitySetpoint(int16_t* newCmd, int32_t newYaw) {
         while (qCmd[2] < -PI) {
             qCmd[2] += 2*PI;
         }
+        */
+
+        //*
+        // Command positions
+        newCmd[0] = newCmd[0]/2; // make velocities less agressive
+        newCmd[1] = newCmd[1]/2;
+
+        pCmd[0] += newCmd[0]*1;//*50/25; // only integrate at 1/2 speed
+        pCmd[1] += newCmd[1]*1;//*50/25;
+        vCmd[2] = newCmd[2];
+        qCmd[2] = 0;
+
+        vCmd[0] = (pCmd[0]-p[0])/(50*2) + newCmd[0];
+        vCmd[1] = (pCmd[1]-p[1])/(50*2) + newCmd[1];
+        //*/
     } else {
         // Trajectory
         tCycle = (t1_ticks - start_time) % 20000;

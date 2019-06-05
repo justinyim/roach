@@ -24,7 +24,7 @@ def main():
     motorgains = [100,80,0, 150,120,0, 120,15,0,0]
     motorgains = [0,0,0, 0,0,0, 0,0,0,0]
 
-    duration = 2000#15000
+    duration = 5000#15000
     rightFreq = 0
     leftFreq = 0
     phase = 0
@@ -75,7 +75,7 @@ def main():
         xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
         time.sleep(0.02)
 
-        viconTest = [0,0,0,0,0,0,50*256,70*256]#55*256,70*256]
+        viconTest = [0,0,0,0,0,0,50*256,80*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(0.02)
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
@@ -166,7 +166,7 @@ def main():
         exp = [2]
         arbitrary = [0]
 
-        motorgains = [50,25,0, 180,140,0, 0,0,0,0]
+        motorgains = [50,25,0, 180,80,0, 0,0,0,0] #[50,25,0, 180,140,0, 0,0,0,0]
         xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
         time.sleep(0.2)
 
@@ -184,12 +184,12 @@ def main():
         xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
         time.sleep(0.01)
 
-        adjust = [0,128,-192] # 3667 ticks per radian
+        adjust = [0,192,-192] # 3667 ticks per radian
         xb_send(0, command.ADJUST_BODY_ANG, pack('3h', *adjust))
         time.sleep(0.01)
 
         #modeSignal = [3]
-        modeSignal = [19]
+        modeSignal = [23]#[19]
         xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
         time.sleep(0.01)
 
@@ -210,16 +210,49 @@ def main():
             time.sleep(1.0)
 
         #'''
+        #'''
+        # Foot buzzing
+        for x in range(50):
+            legPosition = [8*256, 0.03*65535, 0.00*65535]
+            xb_send(0, command.SET_MOTOR_POS, pack('3h', *legPosition))
+            time.sleep(0.01)
+            viconTest = [0,0,0, 0,0,-3667*0.02*3, 0*256,0*256]#55*256,70*256]
+            xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+            time.sleep(0.03)
+
+            legPosition = [0*256, 0.03*65535, 0.00*65535]
+            xb_send(0, command.SET_MOTOR_POS, pack('3h', *legPosition))
+            time.sleep(0.01)
+            viconTest = [0,0,0, 0,0,3667*0.02*3, 0*256,0*256]#55*256,70*256]
+            xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+            time.sleep(0.03)
+
+        viconTest = [0,0,0, 0,0,0, 0*256,0*256]#55*256,70*256]
+        xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+        time.sleep(0.01)
+
+        #'''
         '''
+        # Short jump
+        motorgains = [100,50,0, 350,170,0, 120,20,0,0]
+        xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
+        time.sleep(0.05)
+
         #viconTest = [0,0,0,0,0,0,25*256,50*256]#55*256,70*256]
-        viconTest = [0,0,0,0,0,0,35*256,50*256]
+        #viconTest = [0,0,0,0,0,0,35*256,50*256]
+        viconTest = [0,0,0,0,0,3667.0*3.14159/180.0*10.0, 0,0]
+        xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+        time.sleep(0.05)
+
+        #viconTest = [0,0,0,0,0,3667.0*3.14159/180.0*10.0, 35*256, 50*256]
+        viconTest = [0,0,0,0,0,3667.0*3.14159/180.0*10.0, 70*256, 70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(0.1)
 
-        motorgains = [100,50,0, 350,170,0, 220,17,0,20]
+        motorgains = [90,40,0, 130,110,0, 90,13,0,0]
         xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
 
-        time.sleep(10.0)
+        time.sleep(0.6)
         '''
 
 

@@ -24,6 +24,7 @@
 #define GRAV_ACC 39         // -9.81 m/s^2 * (2^2 ticks/(m/s^2))
 
 #define MAX_THROT 3800
+#define MAX_TAIL 4000
 
 // Setup
 void salto1pSetup(void);
@@ -44,11 +45,12 @@ void flightUpdate(void);
 void flightStanceTrans(void);
 void stanceFlightTrans(void);
 void takeoffEstimation(void);
+void balanceCtrl(void);
 void balanceOffsetEstimator(void);
 int32_t deadbeatVelCtrl(int16_t* vi, int16_t* vo, int32_t* ctrl);
 void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw);
 int32_t tailLinearization(int32_t* tail);
-int32_t thrusterLinearization(int32_t* thruster);
+int32_t thrusterLinearization(int32_t* thruster, int16_t velocity);
 
 // Radio commands
 void setGains(int16_t* gains);
@@ -64,6 +66,7 @@ void expStart(uint8_t startSignal);
 void expStop(uint8_t stopSignal);
 void setOnboardMode(uint8_t flags, uint8_t mode);
 void setVelocitySetpoint(int16_t* newCmd, int32_t newYaw);
+void setTilt(int16_t u_in, int16_t ud_in, int16_t udd_in);
 
 // Other
 void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint32_t current, uint8_t flags);
@@ -71,8 +74,9 @@ void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint3
 // Utility functions
 void orientImageproc(int32_t* v_b, int16_t* v_ip);
 int32_t calibPos(uint8_t idx);
+int16_t cmdLegLen(int16_t leg);
 int32_t cosApprox(int32_t x);
-
+uint16_t med3(uint16_t* arr);
 
 
 

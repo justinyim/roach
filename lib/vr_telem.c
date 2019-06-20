@@ -47,6 +47,11 @@ extern int16_t tailMotor;
 extern uint32_t ctrlCount;
 extern uint32_t t1_ticks;
 
+extern int16_t foreVel;
+extern int16_t aftVel;
+extern int32_t q0offset;
+extern int32_t q1offset;
+
 
 //extern long x_ctrl;
 //extern long y_ctrl;
@@ -131,7 +136,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->foot = y_ctrl/90;
     ptr->footVel = velocity[2];
     */
-    //*
+    /*
     // onboard velocity control
     ptr->otherMode = 8;
     ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
@@ -146,7 +151,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     //ptr->accelX = vCmd[0];
     //ptr->accelY = vCmd[1];
     //ptr->accelZ = vCmd[2];
-    //*/
+    */
     /*
     // onboard velocity control
     ptr->otherMode = 9;
@@ -209,8 +214,26 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->foot = velocity[1];
     ptr->footVel = velocity[2];
     */
-
-
+    /*
+    // BEMF on thrusters
+    ptr->otherMode = 14;
+    ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
+    ptr->voltage = sensor_data->voltage;
+    ptr->crank = crank;
+    ptr->force = foreVel;
+    ptr->foot = aftVel;
+    ptr->footVel = adcGetVbatt();
+    */
+    //*
+    // Balance offset correction
+    ptr->otherMode = 15;
+    ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
+    ptr->voltage = sensor_data->voltage;
+    ptr->crank = crank;
+    ptr->force = q0offset;
+    ptr->foot = q1offset;
+    ptr->footVel = tail_vel;
+    //*/
 }
 
 //This may be unneccesary, since the telemtry type isn't totally anonymous

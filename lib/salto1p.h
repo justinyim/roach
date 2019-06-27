@@ -74,8 +74,9 @@ void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint3
 // Utility functions
 void orientImageproc(int32_t* v_b, int16_t* v_ip);
 int32_t calibPos(uint8_t idx);
-int16_t cmdLegLen(int16_t leg);
+int32_t cmdLegLen(int16_t leg);
 int32_t cosApprox(int32_t x);
+int32_t sqrtApprox(int32_t n);
 uint16_t med3(uint16_t* arr);
 
 

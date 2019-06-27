@@ -116,7 +116,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->foot = leg;
     ptr->footVel = legVel;
     */
-    /*
+    //*
     // body velocity
     ptr->otherMode = 5;
     ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
@@ -125,7 +125,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->force = v[0];
     ptr->foot = v[1];
     ptr->footVel = v[2];
-    */
+    //*/
     /*
     // onboard velocity control
     ptr->otherMode = 7;
@@ -224,7 +224,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->foot = aftVel;
     ptr->footVel = adcGetVbatt();
     */
-    //*
+    /*
     // Balance offset correction
     ptr->otherMode = 15;
     ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
@@ -233,7 +233,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->force = q0offset;
     ptr->foot = q1offset;
     ptr->footVel = tail_vel;
-    //*/
+    */
 }
 
 //This may be unneccesary, since the telemtry type isn't totally anonymous

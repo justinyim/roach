@@ -443,8 +443,8 @@ void salto1p_functions(void) {
             vCmd[1] = 0;
             vCmd[2] = 0;
             deadbeatVelCtrl(vB, vCmd, ctrl_vect);
-            qCmd[1] = 3*ctrl_vect[0]/2-16384; // offset back by -1 degree
-            qCmd[0] = ctrl_vect[1]-4096; // offset by -1/4 degree
+            qCmd[1] = ctrl_vect[0]; // offset back by 0 deg (1<<13 ticks/deg), no scale fudge
+            qCmd[0] = 3*ctrl_vect[1]/4; // offset by 0 deg, 0.75 scale fudge factor
         } else if (mj_state == MJ_GND || mj_state == MJ_STAND) {
             qCmd[1] = 0;
             qCmd[0] = 0;
@@ -860,8 +860,8 @@ void takeoffEstimation(void) {
 
     // Compensate for CG offset
 #if ROBOT_NAME == SALTO_1P_DASHER
-    TOw[1] -= 0.15*0.469*TOlegVel; // in rad/s. (2^15/2000*180/pi)/2000 = 0.4694
-    TOw[0] += 0.10*0.469*TOlegVel;
+    TOw[1] -= 0.10*0.469*TOlegVel; // in rad/s. (2^15/2000*180/pi)/2000 = 0.4694
+    TOw[0] += 0.15*0.469*TOlegVel;
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
     TOw[1] += 0.0*0.469*TOlegVel; // in rad/s. (2^15/2000*180/pi)/2000 = 0.4694
     TOw[0] += 0.0*0.469*TOlegVel;
@@ -1306,18 +1306,41 @@ void attitudeCtrl(void) {
 }
 
 void swingUpCtrl(void) {
+    // Variables:
+    // q[3]: x,y,z (acutally Z,X,Y) Euler angles in 2^15/(2*pi/180) ticks/rad
+    // w[3]: x,y,z angular velocity in in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s)
+    // leg: CG height in 2^16 tick/m
+    // legVel: CG radial velocity in 2000 ticks/(m/s)
+    //
+    // Useful constants:
+    // PI: 3.14159 in the same units as q
+    // GRAV_ACC: 9.81 m/s^2 in 2^2 ticks/(m/s^2)
+    // FULL_MASS: 108 g in 2^8 ticks/kg
+    //
+    // Useful functions and variables to set:
+    // cmdLegLen(r): returns motor angle command for a desired leg length
+    // send_command_packet(...): commands a leg angle (only sent at about 100Hz)
+    // tailCmd: tail torque: Dasher ~4000/0.07, Rudolph ~4000/0.04 ticks/(Nm)
+    //      NOTE: must call tailMotor = tailLinearization(&tailCmd); and
+    //          tiHSetDC(0+1, tailMotor);
+    // balanceCtrl(): balance using the tail
+    // modeFlags: when bit 1 is set (modeFlags|=0b1), use balance offset estimation.
+    //      Stop using it when bit 1 is unset (modeFlags&=~0b1)
+
+
     if (mj_state != MJ_STOP && mj_state != MJ_STOPPED && mj_state != MJ_IDLE) {
         // Running
         int32_t r, wSquared;
 
-        uint32_t energy_gains = (2*655*65536)+(6*7);
-        uint32_t balance_gains = (1*655*65536)+(5*7);
+        uint32_t energy_gains = (2*655*65536)+(6*7); // leg control gains
+        uint32_t balance_gains = (1*655*65536)+(5*7); // leg control gains
 
         mj_state = MJ_STAND;
 
         #define GRAV_SQUARED 24636 // 96.2 in 2^8 ticks/(m^2/s^4)
         #define LEG_ADJUST 656
 
+        // State estimation
         kinematicUpdate();
         modeEstimation();
         leg = leg+LEG_ADJUST;
@@ -1329,7 +1352,7 @@ void swingUpCtrl(void) {
             send_command_packet(&uart_tx_packet_global, 0, balance_gains, 2);
 
             if (q[1] > PI/8 || q[1] < -PI/8) {
-                swingMode = 0; // use energy controller
+                swingMode = 0; // Switch to use energy controller
                 modeFlags |= 0b1; // use balance offset estimator
             }
         } else {
@@ -1389,11 +1412,11 @@ void swingUpCtrl(void) {
                 tailCmd = -TAIL_BRAKE*(tail_vel + TAIL_REVERSE*(w[1] > 0 ? -50 : 50));//(w[1]>>8));
                 tailMotor = tailLinearization(&tailCmd); // Linearizing the actuator response
             }
-            tiHSetDC(0+1, tailMotor);
+            tiHSetDC(0+1, tailMotor); // send tail command to H-bridge
 
             if ((q[1] < 49152 && q[1] > -196608 && w[1] < 3000 && w[1] > -1000) ||
                 (q[1] < 196608 && q[1] > -49152 && w[1] < 1000 && w[1] > -3000)) {
-                swingMode = 1; // use balance controller
+                swingMode = 1; // Switch to use balance controller
                 modeFlags &= ~0b1; // don't use balance offset estimator
             }
         }
@@ -1568,51 +1591,33 @@ int32_t tailLinearization(int32_t* tail){
     if (modeFlags & 0b1 &&
         (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND) ) {
         tailOut += 4*tail_vel; // more aggressive linearization for toe balancing
-
-        // Friction (stiction) compensation
-        if (tail_vel < -20) {
-            tailOut -= 80;
-        } else if (tail_vel > 20) {
-            tailOut += 80;
-        } else {
-            tailOut += 4*tail_vel;
-        }
     } else {
-        tailOut += 1*tail_vel;
+        tailOut += 2*tail_vel;
+    }
 
-        // Dasher friction is about 300 PWM out of 4000
-        if (tail_vel < -20) {
-            tailOut -= 100;
-        } else if (tail_vel > 20) {
-            tailOut += 100;
-        } else {
-            tailOut += 5*tail_vel;
-        }
+    // Friction (stiction) compensation
+    if (tail_vel < -20) {
+        tailOut -= 100;
+    } else if (tail_vel > 20) {
+        tailOut += 100;
+    } else {
+        tailOut += 5*tail_vel;
     }
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
     if (modeFlags & 0b1 &&
         (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND) ) {
         tailOut += 3*tail_vel; // more aggressive linearization for toe balancing
-
-        // Friction (stiction) compensation
-        if (tail_vel < -20) {
-            tailOut -= 60;
-        } else if (tail_vel > 20) {
-            tailOut += 60;
-        } else {
-            tailOut += 3*tail_vel;
-        }
     } else {
-        tailOut += 1*tail_vel;
+        tailOut += 2*tail_vel;
+    }
 
-        // Friction (stiction) compensation
-        if (tail_vel < -20) {
-            tailOut -= 60;
-        } else if (tail_vel > 20) {
-            tailOut += 60;
-        } else {
-            tailOut += 3*tail_vel;
-        }
+    // Friction (stiction) compensation
+    if (tail_vel < -20) {
+        tailOut -= 60;
+    } else if (tail_vel > 20) {
+        tailOut += 60;
+    } else {
+        tailOut += 3*tail_vel;
     }
 #endif
 
@@ -2008,12 +2013,12 @@ int32_t sqrtApprox(int32_t n) {
 
     uint16_t res = 0;
     uint16_t bit = 1 << 14; // The second-to-top bit is set: 1 << 30 for 32 bits
- 
+
     // "bit" starts at the highest power of four <= the argument.
     while (bit > n) {
         bit >>= 2;
     }
-        
+
     while (bit != 0) {
         if (n >= res + bit) {
             n -= res + bit;

@@ -51,6 +51,7 @@ extern int16_t foreVel;
 extern int16_t aftVel;
 extern int32_t q0offset;
 extern int32_t q1offset;
+extern int32_t r;
 
 
 //extern long x_ctrl;
@@ -224,16 +225,15 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->foot = aftVel;
     ptr->footVel = adcGetVbatt();
     */
-    /*
+    
     // Balance offset correction
     ptr->otherMode = 15;
     ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
     ptr->voltage = sensor_data->voltage;
     ptr->crank = crank;
-    ptr->force = q0offset;
-    ptr->foot = q1offset;
-    ptr->footVel = tail_vel;
-    */
+    ptr->force = r;
+    ptr->foot = leg;
+    ptr->footVel = t1_ticks;
 }
 
 //This may be unneccesary, since the telemtry type isn't totally anonymous

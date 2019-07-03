@@ -209,6 +209,8 @@ int32_t uCmd;
 #define CK1_UP 4 // command filter 1/((z+z)/(z*z))
 
 uint8_t swingMode = 1;      // swing-up mode
+uint32_t swingTime = 0;		// delay for swing-up calculation
+int32_t r;
 
 int32_t ctrl_vect[3];       // deadbeat controller commands
 int16_t g_accumulator;      // count steps to integrate v change due to gravity
@@ -391,6 +393,8 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         }
     }
     */
+	if (t1_ticks == T1_MAX) t1_ticks = 0;
+    t1_ticks++;
         
     _T5IF = 0;
 }
@@ -409,9 +413,6 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
         amsEncoderStartAsyncRead();
     } else if (interrupt_count == 5) {
         interrupt_count = 0;
-
-        if (t1_ticks == T1_MAX) t1_ticks = 0;
-            t1_ticks++;
     }
 
     _T1IF = 0;
@@ -459,6 +460,10 @@ void salto1p_functions(void) {
     if (procFlags & 0b1) {
         takeoffEstimation();
     }
+	if (procFlags & 0b100) {
+		swingUpEstimation();
+	}
+	
 }
 
 
@@ -836,6 +841,57 @@ void stanceFlightTrans(void) {
 
     //velocity[2] = -velocity[2]; // velocity estimate until real calculation is done
     procFlags |= 0b1; // tell the main loop to calculate the takeoff velocities
+}
+
+void swingUpEstimation(void) {
+	// Retract leg
+	int32_t rmin = 5898;
+    int32_t wSquared;
+	int32_t wAbs;
+	wSquared = ((int32_t)w[1]*(int32_t)w[1])/55076;
+	wAbs = w[1] > 0 ? w[1] : -w[1];
+	// w[1] is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s)
+	// wSquared is in 2^4 ticks/(rad/s)^2; conversion ~= 1/55076
+    #define GRAV_SQUARED 24636 // 96.2 in 2^8 ticks/(m^2/s^4)
+    #define LEG_ADJUST 0 //656 CCC
+
+	if ((w[1] > 0 && q[1] < 0) || (w[1] < 0 && q[1] > 0)){
+		if (0 && (q[1] < (-PI/2) || q[1] > (PI/2))) {
+			// Hanging down
+			// r is in 
+			r = ((sqrtApprox(
+			2*((int32_t)leg*(int32_t)leg>>20)*(wSquared*wSquared>>20)
+			+ ((GRAV_SQUARED*sin_theta*sin_theta)>>(2*COS_PREC+8))
+			+ 2*GRAV_ACC*((int32_t)leg*wSquared>>22) * ((-1<<COS_PREC) + cos_theta - sin_theta)>>(COS_PREC) ) << 20)
+			+ (GRAV_ACC*sin_theta>>(COS_PREC+2)) )
+			/ wSquared - LEG_ADJUST;
+			// sqrt argument is in 2^0 ticks/(m^2/s^4)
+			// leg is 2^16 ticks/m; max is 2^14
+			// w[1] is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s); max is 2^15
+			// wSquared is in 2^4 ticks/(rad/s)^2; max is 2^15
+		} else {
+			// Up
+			r = (sqrtApprox(2*(int32_t)leg*(
+				((int32_t)leg*wSquared>>18)
+				- (GRAV_ACC)
+				+ (GRAV_ACC*cos_theta>>(COS_PREC))) >> 10 ) << 16)
+				/ (wAbs/59) - LEG_ADJUST;
+				// sqrt argument is in 2^10 ticks/(m^2/s^2)
+				// leg is 2^16 ticks/m; max is 2^14
+				// w[1] is in 2^15/(2000*pi/180) ticks/(rad/s); max is 2^14
+				//      conversion to 2^4 ~= 1/58.7
+				// wSquared is in 2^4 ticks/(rad/s)^2; max is 2^15
+		}
+	} else {
+		r = (sqrtApprox((2*(-GRAV_ACC)*rmin*(cos_theta - (1 << COS_PREC))) >> (COS_PREC + 4)) << 13)
+			/ (wAbs/59) - LEG_ADJUST;
+	}
+	
+	r = r < 5898 ? 5898 :
+		r > 13107? 13107 :
+		r;
+	
+	procFlags &= ~0b100;
 }
 
 void takeoffEstimation(void) {
@@ -1330,15 +1386,11 @@ void swingUpCtrl(void) {
 
     if (mj_state != MJ_STOP && mj_state != MJ_STOPPED && mj_state != MJ_IDLE) {
         // Running
-        int32_t r, wSquared;
 
         uint32_t energy_gains = (2*655*65536)+(6*7); // leg control gains
-        uint32_t balance_gains = (1*655*65536)+(5*7); // leg control gains
+        uint32_t balance_gains = (1*655*65536)+(20*7); // leg control gains
 
         mj_state = MJ_STAND;
-
-        #define GRAV_SQUARED 24636 // 96.2 in 2^8 ticks/(m^2/s^4)
-        #define LEG_ADJUST 656
 
         // State estimation
         kinematicUpdate();
@@ -1349,76 +1401,40 @@ void swingUpCtrl(void) {
             // Balance on toe
             balanceCtrl();
 
-            send_command_packet(&uart_tx_packet_global, 0, balance_gains, 2);
+            send_command_packet(&uart_tx_packet_global, 10*65536, balance_gains, 2);
 
             if (q[1] > PI/8 || q[1] < -PI/8) {
                 swingMode = 0; // Switch to use energy controller
-                modeFlags |= 0b1; // use balance offset estimator
+                modeFlags &= ~0b1; // use balance offset estimator
             }
         } else {
-            // Leg pumping to add energy
-            if ((w[1] > 0 && q[1] < 0) || (w[1] < 0 && q[1] > 0)){
-                // Retract leg
-                wSquared = ((int32_t)w[1]*(int32_t)w[1])/55076;
-                // w[1] is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s)
-                // wSquared is in 2^4 ticks/(rad/s)^2; conversion ~= 1/55076
-                if (q[1] < (-PI/2) || q[1] > (PI/2)) {
-                    // Hanging down
-                    // r is in 
-                    r = ((sqrtApprox(
-                        2*((int32_t)leg*(int32_t)leg>>20)*(wSquared*wSquared>>20)
-                        + ((GRAV_SQUARED*cos_theta*cos_theta)>>(2*COS_PREC+8))
-                        - 2*GRAV_ACC*((int32_t)leg*wSquared>>22) ) << 20)
-                        + (GRAV_ACC*cos_theta>>(COS_PREC+2)) )
-                        / wSquared - LEG_ADJUST;
-                    // sqrt argument is in 2^0 ticks/(m^2/s^4)
-                    // leg is 2^16 ticks/m; max is 2^14
-                    // w[1] is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s); max is 2^15
-                    // wSquared is in 2^4 ticks/(rad/s)^2; max is 2^15
-                } else {
-                    // Up
-                    r = (sqrtApprox(2*(int32_t)leg*(
-                        ((int32_t)leg*wSquared>>18)
-                        - (GRAV_ACC)
-                        + (GRAV_ACC*cos_theta>>(COS_PREC))) >> 8 ) << 15)
-                        / (w[1]/59) - LEG_ADJUST;
-                    // sqrt argument is in 2^10 ticks/(m^2/s^2)
-                    // leg is 2^16 ticks/m; max is 2^14
-                    // w[1] is in 2^15/(2000*pi/180) ticks/(rad/s); max is 2^14
-                    //      conversion to 2^4 ~= 1/58.7
-                    // wSquared is in 2^4 ticks/(rad/s)^2; max is 2^15
-                }
+			if (t1_ticks - swingTime > 10) { // Reduce to 100 hz
+				swingTime = t1_ticks;
+				// Leg pumping to add energy
+				procFlags |= 0b100;
 
-            } else {
-                // Extend leg
-                r = 13107;
-            }
+				send_command_packet(&uart_tx_packet_global, cmdLegLen(r), energy_gains, 2);
 
-            r = r < 5898 ? 5898 :
-                r > 13107? 13107 :
-                r;
+				if ((q[1] > 7*PI/8 || q[1] < -7*PI/8) && w[1] < 2000 && w[1] > -2000) {
+					// Tail pumping
+					if (w[1] > -500 && q[1] > 0) {
+						tailCmd = -2000;
+					} else {
+						tailCmd = 2000;
+					}
+				} else {
+					// Tail braking
+					tailCmd = -TAIL_BRAKE*(tail_vel + TAIL_REVERSE*(w[1] > 0 ? 30 : -30));//(w[1]>>8)); //CCC took out multiply 
+					tailMotor = tailLinearization(&tailCmd); // Linearizing the actuator response
+				}
+				tiHSetDC(0+1, tailMotor); // send tail command to H-bridge
 
-            send_command_packet(&uart_tx_packet_global, cmdLegLen(r), energy_gains, 2);
-
-            if ((q[1] > 7*PI/8 || q[1] < -7*PI/8) && w[1] < 2000 && w[1] > -2000) {
-                // Tail pumping
-                if (w[1] > -500 && q[1] > 0) {
-                    tailCmd = -2000;
-                } else {
-                    tailCmd = 2000;
-                }
-            } else {
-                // Tail braking
-                tailCmd = -TAIL_BRAKE*(tail_vel + TAIL_REVERSE*(w[1] > 0 ? -50 : 50));//(w[1]>>8));
-                tailMotor = tailLinearization(&tailCmd); // Linearizing the actuator response
-            }
-            tiHSetDC(0+1, tailMotor); // send tail command to H-bridge
-
-            if ((q[1] < 49152 && q[1] > -196608 && w[1] < 3000 && w[1] > -1000) ||
-                (q[1] < 196608 && q[1] > -49152 && w[1] < 1000 && w[1] > -3000)) {
-                swingMode = 1; // Switch to use balance controller
-                modeFlags &= ~0b1; // don't use balance offset estimator
-            }
+				if ((q[1] < 49152 && q[1] > -196608 && w[1] < 3000 && w[1] > -1000) ||
+					(q[1] < 196608 && q[1] > -49152 && w[1] < 1000 && w[1] > -3000)) {
+					swingMode = 1; // Switch to use balance controller
+					modeFlags |= 0b1; // don't use balance offset estimator
+				}
+			}
         }
 
     } else if (mj_state == MJ_STOP) {

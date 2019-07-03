@@ -14,14 +14,14 @@ import shared
 
 from hall_helpers import *
 
-def main():    
+def main():  
     setupSerial()
 
     # Send robot a WHO_AM_I command, verify communications
     queryRobot()
     #Motor gains format:
     #  [ Kp , Kd , other , Kp , Kd , other , Kp , Kd , other , other ]
-    motorgains = [100,80,0, 150,120,0, 120,15,0,0]
+    motorgains = [100,80,0, 150,120,0, 120,15,0,0] #yaw roll pitch
     motorgains = [0,0,0, 0,0,0, 0,0,0,0]
 
     duration = 5000#15000
@@ -39,7 +39,7 @@ def main():
     wj_params = wjParams(-551287, -40000, 80000, 5353068, 411774)
     wjParams.set(wj_params)
 
-
+	
     while True:
 
         if not(params.repeat):
@@ -63,7 +63,7 @@ def main():
             startTelemetrySave(numSamples)
 
 
-        #'''
+        '''
         # basic leg extension test
         exp = [2]
         arbitrary = [0]
@@ -85,7 +85,7 @@ def main():
         #    xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         #    time.sleep(0.01)
 
-        #'''
+        '''
 
 
         '''
@@ -97,7 +97,7 @@ def main():
         '''
 
 
-        '''
+        #'''
         # Swing-up pendulum test
         exp = [2]
         arbitrary = [0]
@@ -137,7 +137,7 @@ def main():
 
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
         time.sleep(0.1)
-        '''
+        #'''
 
 
         '''
@@ -552,6 +552,7 @@ def main():
 #TODO: provide a more informative exit here; stack trace, exception type, etc
 if __name__ == '__main__':
     try:
+        print "Before main"
         main()
     except KeyboardInterrupt:
         print "\nRecieved Ctrl+C, exiting."

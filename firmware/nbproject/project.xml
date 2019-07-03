@@ -12,6 +12,22 @@
             <sourceEncoding>ISO-8859-1</sourceEncoding>
             <asminc-extensions/>
             <make-dep-projects/>
+            <sourceRootList>
+                <sourceRootElem>.</sourceRootElem>
+                <sourceRootElem>../lib</sourceRootElem>
+                <sourceRootElem>../../mbed_BLDC_driver_KL25Z</sourceRootElem>
+                <sourceRootElem>../../imageproc-lib</sourceRootElem>
+                <sourceRootElem>../../imageproc-settings</sourceRootElem>
+            </sourceRootList>
+            <confList>
+                <confElem>
+                    <name>default</name>
+                    <type>2</type>
+                </confElem>
+            </confList>
+            <formatting>
+                <project-formatting-style>false</project-formatting-style>
+            </formatting>
         </data>
     </configuration>
 </project>

@@ -139,7 +139,9 @@ def settingsMenu(params, sj_params, wj_params):
     print "Proceed: Space Bar"
     while True:
         print '>',
+        sys.stdout.flush()
         keypress = getch()
+        sys.stdout.flush()
         if keypress == ' ':
             break
         elif keypress == 't':
@@ -232,6 +234,7 @@ def settingsMenu(params, sj_params, wj_params):
             shared.xb.halt()
             shared.ser.close()
             sys.exit(0)
+        sys.stdout.flush()
 
 def repeatMenu(params):
     print "SPACE: Repeat with same settings  |q:quit"

@@ -845,7 +845,7 @@ void stanceFlightTrans(void) {
 
 void swingUpEstimation(void) {
 	// Retract leg
-	int32_t rmin = 5898;
+	int32_t rmin = 6553;//5898;
     int32_t wSquared;
 	int32_t wAbs;
 	wSquared = ((int32_t)w[1]*(int32_t)w[1])/55076;
@@ -858,12 +858,12 @@ void swingUpEstimation(void) {
 	if ((w[1] > 0 && q[1] < 0) || (w[1] < 0 && q[1] > 0)){
 		if (0 && (q[1] < (-PI/2) || q[1] > (PI/2))) {
 			// Hanging down
-			// r is in 
+			// r is in
 			r = ((sqrtApprox(
-			2*((int32_t)leg*(int32_t)leg>>20)*(wSquared*wSquared>>20)
+			2*(((int32_t)leg*(int32_t)leg>>22)*(wSquared*wSquared>>6)>>12)
 			+ ((GRAV_SQUARED*sin_theta*sin_theta)>>(2*COS_PREC+8))
-			+ 2*GRAV_ACC*((int32_t)leg*wSquared>>22) * ((-1<<COS_PREC) + cos_theta - sin_theta)>>(COS_PREC) ) << 20)
-			+ (GRAV_ACC*sin_theta>>(COS_PREC+2)) )
+			+ (2*GRAV_ACC*(int32_t)leg*wSquared>>22) * ((-1<<COS_PREC) + cos_theta - sin_theta)>>(COS_PREC) ) << 20)
+			+ (GRAV_ACC*sin_theta<<(20-COS_PREC-2)) )
 			/ wSquared - LEG_ADJUST;
 			// sqrt argument is in 2^0 ticks/(m^2/s^4)
 			// leg is 2^16 ticks/m; max is 2^14
@@ -874,7 +874,7 @@ void swingUpEstimation(void) {
 			r = (sqrtApprox(2*(int32_t)leg*(
 				((int32_t)leg*wSquared>>18)
 				- (GRAV_ACC)
-				+ (GRAV_ACC*cos_theta>>(COS_PREC))) >> 10 ) << 16)
+				+ (GRAV_ACC*cos_theta>>(COS_PREC))) >> 8 ) << 15)
 				/ (wAbs/59) - LEG_ADJUST;
 				// sqrt argument is in 2^10 ticks/(m^2/s^2)
 				// leg is 2^16 ticks/m; max is 2^14
@@ -883,13 +883,12 @@ void swingUpEstimation(void) {
 				// wSquared is in 2^4 ticks/(rad/s)^2; max is 2^15
 		}
 	} else {
+		/*
 		r = (sqrtApprox((2*(-GRAV_ACC)*rmin*(cos_theta - (1 << COS_PREC))) >> (COS_PREC + 4)) << 13)
 			/ (wAbs/59) - LEG_ADJUST;
+			*/
+		r = 11141;
 	}
-	
-	r = r < 5898 ? 5898 :
-		r > 13107? 13107 :
-		r;
 	
 	procFlags &= ~0b100;
 }
@@ -1176,7 +1175,7 @@ void balanceOffsetEstimator(void) {
     if (q[0] < PI/6 && q[0] > -PI/6) {
         q[0] += q0offset;
         q[1] += q1offset;
-    } else if (q[0] > 5*PI/6 || q[9] < -5*PI/6) {
+    } else if (q[0] > 5*PI/6 || q[0] < -5*PI/6) {
         // Robot is hangin upside down
         q[0] -= q0offset;
         q[1] -= q1offset;
@@ -1405,7 +1404,7 @@ void swingUpCtrl(void) {
 
             if (q[1] > PI/8 || q[1] < -PI/8) {
                 swingMode = 0; // Switch to use energy controller
-                modeFlags &= ~0b1; // use balance offset estimator
+                //modeFlags &= ~0b1; // use balance offset estimator //CCC
             }
         } else {
 			if (t1_ticks - swingTime > 10) { // Reduce to 100 hz
@@ -1413,6 +1412,9 @@ void swingUpCtrl(void) {
 				// Leg pumping to add energy
 				procFlags |= 0b100;
 
+				r = r < 5898 ? 5898 :
+					r > 13107 ? 13107 :
+					r;
 				send_command_packet(&uart_tx_packet_global, cmdLegLen(r), energy_gains, 2);
 
 				if ((q[1] > 7*PI/8 || q[1] < -7*PI/8) && w[1] < 2000 && w[1] > -2000) {

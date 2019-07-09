@@ -170,8 +170,15 @@ def main():
         xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
 
         '''
-
-
+		
+        '''
+        arbitrary = [0]
+        xb_send(0, command.GYRO_BIAS, pack('h', *arbitrary))
+        time.sleep(0.05)
+        xb_send(0, command.RESET_BODY_ANG, pack('h', *arbitrary))
+        time.sleep(0.01)
+        '''
+		
         '''
         # Balance on toe test
         #Start robot 0: wall jump, 1: single jump, 2: vicon jumps

@@ -266,6 +266,8 @@ volatile uint8_t flags_last =0;
 // TODO remove these debugging things below
 uint32_t ctrlCount;
 
+int32_t returnable;
+
 
 // Interrupt running loop at 1 kHz ============================================
 void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
@@ -875,7 +877,7 @@ void swingUpEstimation(void) {
 			// Up
 			r = (sqrtApprox(2*(int32_t)leg*(
 				((int32_t)leg*wSquared>>18)
-				- (GRAV_ACC) // dividing (11/16)
+				- (GRAV_ACC*7>>3) // dividing (11/16)
 				+ (GRAV_ACC*cos_theta>>(COS_PREC))) >> 8 ) << 15)
 				/ (wAbs/59) - LEG_ADJUST;
 				// sqrt argument is in 2^10 ticks/(m^2/s^2)
@@ -889,11 +891,11 @@ void swingUpEstimation(void) {
 		r = (sqrtApprox((2*(-GRAV_ACC)*rmin*(cos_theta - (1 << COS_PREC))) >> (COS_PREC + 4)) << 13)
 			/ (wAbs/59) - LEG_ADJUST;
 			*/
-		r = 13107; //11141
+		r = 11141; //13107
 	}
 	
 	r = r < 5898 ? 5898 :
-		r > 13107 ? 13107 :
+		r > 11141 ? 11141 : // 13107
 		r; // May take out if contradiction in interrupt CCC
 	
 	leg = leg - LEG_ADJUST;
@@ -1394,7 +1396,7 @@ void swingUpCtrl(void) {
     if (mj_state != MJ_STOP && mj_state != MJ_STOPPED && mj_state != MJ_IDLE) {
         // Running
 
-        uint32_t energy_gains = (5*655*65536)+(20*7); // leg control gains 10 20
+        uint32_t energy_gains = (10*655*65536)+(20*7); // leg control gains 5 20
         uint32_t balance_gains = (1*655*65536)+(20*7); // leg control gains
 
         mj_state = MJ_STAND;
@@ -1409,10 +1411,10 @@ void swingUpCtrl(void) {
             balanceCtrl();
 
 			r = r < 5898 ? 5898 :
-				r > 13107 ? 13107 :
-				r;			
+				r > 11141 ? 11141 :
+				r;
             //send_command_packet(&uart_tx_packet_global, 10*65536, balance_gains, 2);
-			send_command_packet(&uart_tx_packet_global, 9175, balance_gains, 2);
+			send_command_packet(&uart_tx_packet_global, cmdLegLen(5898), balance_gains, 2);
 			
             if (q[1] > PI/8 || q[1] < -PI/8) {
                 swingMode = 0; // Switch to use energy controller
@@ -1421,7 +1423,7 @@ void swingUpCtrl(void) {
         } else {
 			procFlags |= 0b100;
 			r = r < 5898 ? 5898 :
-				r > 13107 ? 13107 :
+				r > 11141 ? 11141 : // 13107
 				r;
 
 				// Leg pumping to add energy
@@ -1436,7 +1438,7 @@ void swingUpCtrl(void) {
 				}
 			} else {
 				// Tail braking
-				tailCmd = -TAIL_BRAKE*(tail_vel + TAIL_REVERSE*(w[1] > 0 ? 30 : -30));//(w[1]>>8)); //CCC took out multiply 
+				tailCmd = -TAIL_BRAKE*(tail_vel + 0*TAIL_REVERSE*(w[1] > 0 ? 30 : -30));//(w[1]>>8)); //CCC took out multiply 
 				tailMotor = tailLinearization(&tailCmd); // Linearizing the actuator response
 			}
 
@@ -1935,6 +1937,19 @@ int32_t calibPos(uint8_t idx){
     else {
         return -1;
     }
+}
+
+int32_t forceControl(int16_t length, int16_t p, int16_t d){
+	// p in 2^0 tick per N/m maximum 2^9 ticks (2^9 N/m)
+	// d in 2^2 tick per Ns/m maximum 2^8 ticks (2^6 Ns/m)
+	int16_t k = 5; // k in 2^4 ticks per N/m
+	int16_t femurInd = femur/64 < 0 ? 0: femur/64 > 255 ? 255: femur/64;
+	int16_t legError = length - leg >> 6;
+	legError = legError > 64 ? 64: legError < -64 ? -64: legError;
+	int16_t motorAngle = (((p*(legError)>>2) - (d*(legVel>>6)/2000<<12))/((((int16_t)(MA_femur_256lut[femurInd]>>9))*k>>2) + 1) + (crank>>8)) * 25 ;
+	returnable = ((int32_t) motorAngle) << 10;
+	returnable = returnable < 0*65536 ? 0*65536: returnable > 100*65536 ? 100*65536: returnable;
+	return returnable;
 }
 
 int32_t cmdLegLen(int16_t r) {

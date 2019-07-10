@@ -44,6 +44,7 @@ void stanceUpdate(void);
 void flightUpdate(void);
 void flightStanceTrans(void);
 void stanceFlightTrans(void);
+void swingUpEstimation(void);
 void takeoffEstimation(void);
 void balanceCtrl(void);
 void balanceOffsetEstimator(void);
@@ -75,6 +76,7 @@ void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint3
 void orientImageproc(int32_t* v_b, int16_t* v_ip);
 int32_t calibPos(uint8_t idx);
 int32_t cmdLegLen(int16_t leg);
+int32_t forceControl(int16_t length, int16_t p, int16_t d);
 int32_t cosApprox(int32_t x);
 int32_t sqrtApprox(int32_t n);
 uint16_t med3(uint16_t* arr);

@@ -67,6 +67,7 @@ int32_t telemDecimateCount = 0;
 // Miscellaneous important variables
 uint16_t procFlags = 0;     // Which functions to process
     // 1: Run takeoff processes immediately after takeoff
+    // 2: Takeoff correction complete: apply it to attitude estimate
 uint8_t modeFlags = 0;     // Running modes
     // 1: stance balance control enabled (1) or default aerial balance (0)
     // 2: Takeoff vel attitude correction (SHOVE) enabled (1) or disabled (0)
@@ -190,7 +191,11 @@ int16_t udd;                // Tilt control
 uint32_t u_time = 0;        // Time tilt command was set
 #define IY_CG 126  // moment of inertia about CG y axis (1.2E-4 N m^2)
 #define IX_CG 98   // moment of inertia about CG x axis (9.3E-5 N m^2)
+#if ROBOT_NAME == SALTO_1P_DASHER
+#define IY_TAIL 36 // tail moment of inertia (less than 0.07^2*0.008 N m^2)
+#else
 #define IY_TAIL 39 // tail moment of inertia (less than 0.07^2*0.008 N m^2)
+#endif
 int32_t I_cg = 734; // 2^20 ticks/(kg m^2)
 int32_t Iy = 860; // 2^20 ticks/(kg m^2)
 int32_t mgc = 90521; // in 2^20 ticks/(N m)
@@ -261,23 +266,22 @@ volatile int32_t position_last = 0;
 volatile uint32_t current_last = 0;
 volatile uint8_t flags_last =0;
 
-// TODO remove these debugging things below
-uint32_t ctrlCount;
-
 
 // Interrupt running loop at 1 kHz ============================================
 void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
     uint8_t i;
 
-    ctrlCount++;
-
-    mpuGetGyro(gdata); // This should be the only call to mpuGetGyro(gdata)
-    mpuGetXl(xldata); // Similarly, this should only be called once
+    //mpuGetGyro(gdata); // This should be the only call to mpuGetGyro(gdata)
+    //mpuGetXl(xldata); // Similarly, this should only be called once
 
     // Attitude
-    orientImageproc(gdataBody, gdata); // orient gyro readings to body
+    //orientImageproc(gdataBody, gdata); // orient gyro readings to body
 
-    if ((modeFlags>>5) == 1) {
+    // Previously in _T1Interrupt
+    //mpuBeginUpdate(); // Start IMU and encoder reads
+    //amsEncoderStartAsyncRead();
+
+    if ((modeFlags>>5) == 1) {  // swing-up
         w[0] = ((256-W_ALPHA)*w[0] + W_ALPHA*gdataBody[0])>>8; // Low pass the gyro signal
         w[2] = ((256-W_ALPHA)*w[2] + W_ALPHA*gdataBody[2])>>8; // Low pass the gyro signal
 
@@ -331,12 +335,11 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
 
     //qLagInd = (qLagInd+1)%LAG_MS; // Circular buffer index
 
-    if (ctrlCount%2) {
+    if (t1_ticks%2) {
         // Attitude integration at 500 Hz
         eulerUpdate(q,w500,1);
     } else {
         // Estimation and control at 500 Hz
-
         if (modeFlags < (1<<5)) {
             kinematicUpdate();
             modeEstimation();
@@ -355,7 +358,7 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
 
     
     if (gainsPD[9]) {
-        if (!(ctrlCount%2)) {
+        if (!(t1_ticks%2)) {
             // Old estimation using control values
             // Should NOT use the linearizing models
             q0offset = ((foreCmd+aftCmd)>>7)*STEP_MS;
@@ -365,7 +368,7 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         }
     } else {
         // Balance offset Estimator
-        if (!(ctrlCount%2)) {
+        if (!(t1_ticks%2)) {
             // Low-pass filters for balance offset estimation
             foreLP = ((31*foreLP)>>5) + (foreCmd>>5);
             aftLP = ((31*aftLP)>>5) + (aftCmd>>5);
@@ -373,7 +376,7 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
                 wLP[i] = ((7*wLP[i])>>3) + (w[i]>>3);
             }
         }
-        if (!(ctrlCount%BOE_DEC)) {
+        if (!(t1_ticks%BOE_DEC)) {
             // Toe balance estimation update
             if (modeFlags & 0b1 && 
                 (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND)) {
@@ -391,6 +394,16 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         }
     }
     */
+
+    // Previously in _T1Interrupt
+    t1_ticks++;
+    if (t1_ticks == T1_MAX) t1_ticks = 0;
+
+
+    // Previously in _T1Interrupt
+    //if (t1_ticks%TELEM_DECIMATE == 0) {
+    //    telemSaveNow();
+    //}
         
     _T5IF = 0;
 }
@@ -398,6 +411,14 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
 void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
 
     interrupt_count++;
+
+    if (interrupt_count == 1) {
+        // previously in _T5Interrupt
+        mpuGetGyro(gdata); // This should be the only call to mpuGetGyro(gdata)
+        mpuGetXl(xldata); // Similarly, this should only be called once
+        // Attitude
+        orientImageproc(gdataBody, gdata); // orient gyro readings to body
+    }
 
     if (interrupt_count == 3) {
         if (!telemDecimateCount){
@@ -410,8 +431,8 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
     } else if (interrupt_count == 5) {
         interrupt_count = 0;
 
-        if (t1_ticks == T1_MAX) t1_ticks = 0;
-            t1_ticks++;
+        //if (t1_ticks == T1_MAX) t1_ticks = 0;
+        //    t1_ticks++;
     }
 
     _T1IF = 0;
@@ -443,8 +464,9 @@ void salto1p_functions(void) {
             vCmd[1] = 0;
             vCmd[2] = 0;
             deadbeatVelCtrl(vB, vCmd, ctrl_vect);
-            qCmd[1] = ctrl_vect[0]; // offset back by 0 deg (1<<13 ticks/deg), no scale fudge
-            qCmd[0] = 3*ctrl_vect[1]/4; // offset by 0 deg, 0.75 scale fudge factor
+            // MANUAL TUNING
+            qCmd[1] = ctrl_vect[0]-4096; // offset back by 1/2 deg (1<<13 ticks/deg), no scale fudge
+            qCmd[0] = ctrl_vect[1]-8192; // offset by 1/2 deg, no scale fudge factor
         } else if (mj_state == MJ_GND || mj_state == MJ_STAND) {
             qCmd[1] = 0;
             qCmd[0] = 0;
@@ -859,15 +881,16 @@ void takeoffEstimation(void) {
 #endif
 
     // Compensate for CG offset
+    // MANUAL TUNING
 #if ROBOT_NAME == SALTO_1P_DASHER
-    TOw[1] -= 0.10*0.469*TOlegVel; // in rad/s. (2^15/2000*180/pi)/2000 = 0.4694
-    TOw[0] += 0.15*0.469*TOlegVel;
+    TOw[1] += 20*TOlegVel/213; // in (centi rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694: 100/0.4694 = 213
+    TOw[0] += 30*TOlegVel/213;
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-    TOw[1] += 0.0*0.469*TOlegVel; // in rad/s. (2^15/2000*180/pi)/2000 = 0.4694
+    TOw[1] += 0.0*0.469*TOlegVel; // in (rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694
     TOw[0] += 0.0*0.469*TOlegVel;
 #else
-    TOw[1] += 0.2*0.469*TOlegVel; // in rad/s. (2^15/2000*180/pi)/2000 = 0.4694
-    TOw[0] += 0.2*0.469*TOlegVel;
+    TOw[1] += 0.2*0.469*TOlegVel/; // in (rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694
+    TOw[0] += 0.2*0.469*TOlegVel/;
 #endif
 
     // Body velocity rotation matrix
@@ -994,13 +1017,13 @@ void balanceCtrl(void) {
         u = 0;
         ud = 0;
         udd = 0;
-        uCmd = 0;
-    } else {
-        // uCmd is in 2^15/(2000*pi/180)~=938.7 ticks/s
         uCmd = u + (ud/ck1) + (udd/ck0);
-        // u is in 2^15/(2000*pi/180)~=938.7 ticks/s
-        // ud is in 2^15/(2000*pi/180)~=938.7 ticks/s^2
-        // udd is in 2^15/(2000*pi/180)~=938.7 ticks/s^3
+    } else {
+        // uCmd is in 2^15/(2000*pi/180)~=938.7 ticks/(rad s)
+        uCmd = u + (ud/ck1) + (udd/ck0);
+        // u is in 2^15/(2000*pi/180)~=938.7 ticks/(rad s)
+        // ud is in 2^15/(2000*pi/180)~=938.7 ticks/rad
+        // udd is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s)
     }
 
     // M is in 2^15/(2000*pi/180)~=938.7 ticks/s
@@ -1032,7 +1055,7 @@ void balanceCtrl(void) {
         #if ROBOT_NAME == SALTO_1P_DASHER
         tailTorque = tau2/538;
         #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-        tailTorque = tau2/350;
+        tailTorque = tau2/538;
         #else
         tailTorque = tau2/269;
         #endif
@@ -1550,10 +1573,10 @@ int32_t thrusterLinearization(int32_t* thruster, int16_t velocity){
     //*
     // Accelerating thrusters (inertia)
     if (velocity < 2000 && thrusterOut > 0 && 2*thrusterOut > velocity) {
-        thrusterOut += ((2*thrusterOut > 2000 ? 2000 : 2*thrusterOut) - velocity)>>2;
+        thrusterOut += ((2*thrusterOut > 2000 ? 2000 : 2*thrusterOut) - velocity)>>1;//>>2;
     }
     if (velocity > -2000 && thrusterOut < 0 && 2*thrusterOut < velocity) {
-        thrusterOut += ((2*thrusterOut < -2000 ? -2000 : 2*thrusterOut) - velocity)>>2;
+        thrusterOut += ((2*thrusterOut < -2000 ? -2000 : 2*thrusterOut) - velocity)>>1;//>>2;
     }
     //*/
 
@@ -1653,6 +1676,13 @@ void setPushoffCmd(long cmd){
     pushoffCmd = cmd << 8;
 }
 
+void setMotorPos(uint32_t gain, long pos){
+    mj_state = MJ_STAND;
+    GAINS_STAND = gain;
+    pushoffCmd = pos;
+    modeFlags |= 0b10000;
+}
+
 void setBodyAngle(long* qSet) {
     // INPUT: long[3] {yaw, roll, pitch}
     q[0] = qSet[1];
@@ -1702,6 +1732,7 @@ void calibGyroBias(){
 void expStart(uint8_t startSignal) {
     mj_state = MJ_START;
     start_time = t1_ticks;
+    u_time = t1_ticks;
 }
 
 void expStop(uint8_t stopSignal) {
@@ -1871,14 +1902,18 @@ void orientImageproc(int32_t* v_b, int16_t* v_ip) {
 #if ROBOT_NAME == SALTO_1P_RUDOLPH
     // -55 degrees about roll
     // x axis right, y axis forwards, z axis up from ImageProc
-    v_b[2] = (165*((int32_t)v_ip[2]) - 196*((int32_t)v_ip[0]))>>8; //yaw
+    v_b[2] = (147*((int32_t)v_ip[2]) - 210*((int32_t)v_ip[0]))>>8; //yaw
     v_b[0] = -v_ip[1]; // roll
-    v_b[1] = (165*((int32_t)v_ip[0]) + 196*((int32_t)v_ip[2]))>>8; //pitch
+    v_b[1] = (147*((int32_t)v_ip[0]) + 210*((int32_t)v_ip[2]))>>8; //pitch
 #elif ROBOT_NAME == SALTO_1P_DASHER
     // -50 degrees about x, follwed by 180 degrees about body z
-    v_b[2] = (165*((int32_t)v_ip[2]) - 196*((int32_t)v_ip[0]))>>8; //yaw
+    //v_b[2] = (165*((int32_t)v_ip[2]) - 196*((int32_t)v_ip[0]))>>8; //yaw
+    //v_b[0] = -v_ip[1]; // roll
+    //v_b[1] = (165*((int32_t)v_ip[0]) + 196*((int32_t)v_ip[2]))>>8; //pitch
+    // -55 degrees about x, follwed by 180 degrees about body z
+    v_b[2] = (147*((int32_t)v_ip[2]) - 210*((int32_t)v_ip[0]))>>8; //yaw
     v_b[0] = -v_ip[1]; // roll
-    v_b[1] = (165*((int32_t)v_ip[0]) + 196*((int32_t)v_ip[2]))>>8; //pitch
+    v_b[1] = (147*((int32_t)v_ip[0]) + 210*((int32_t)v_ip[2]))>>8; //pitch
 #elif ROBOT_NAME == SALTO_1P_SANTA
     // -45 degrees about pitch
     v_b[2] = (((int32_t)(v_ip[2] + v_ip[1]))*181)>>8; //yaw

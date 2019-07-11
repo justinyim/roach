@@ -338,8 +338,9 @@ unsigned char cmdSetMotorPos(unsigned char type, unsigned char status, unsigned 
     uint32_t d_gain = (uint32_t)frame[4] + ((uint32_t)frame[5]<<8);
 
     uint32_t gain = (p_gain<<16) + d_gain;
+    setMotorPos(gain, pos);
     
-    send_command_packet(&uart_tx_packet_cmd, pos, gain, 2);
+    //send_command_packet(&uart_tx_packet_cmd, pos, gain, 2);
 
     return 1;
 }

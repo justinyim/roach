@@ -57,6 +57,7 @@ void setGains(int16_t* gains);
 void setAttitudeSetpoint(long yaw, long roll, long pitch);
 void setLegSetpoint(long length);
 void setPushoffCmd(long cmd);
+void setMotorPos(uint32_t gain, long pos);
 void setBodyAngle(long* qSet) ;
 void adjustBodyAngle(long* qAdjust);
 void updateBodyAngle(long* qUpdate);

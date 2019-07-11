@@ -877,7 +877,7 @@ void swingUpEstimation(void) {
 			// Up
 			r = (sqrtApprox(2*(int32_t)leg*(
 				((int32_t)leg*wSquared>>18)
-				- (GRAV_ACC*7>>3) // dividing (11/16)
+				- (GRAV_ACC) // dividing (11/16)
 				+ (GRAV_ACC*cos_theta>>(COS_PREC))) >> 8 ) << 15)
 				/ (wAbs/59) - LEG_ADJUST;
 				// sqrt argument is in 2^10 ticks/(m^2/s^2)
@@ -1097,7 +1097,7 @@ void balanceCtrl(void) {
         #if ROBOT_NAME == SALTO_1P_DASHER
         tailTorque = tau2/538;
         #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-        tailTorque = tau2/350;
+        tailTorque = tau2/538;
         #else
         tailTorque = tau2/269;
         #endif
@@ -1165,10 +1165,21 @@ void balanceOffsetEstimator(void) {
 
     if (gainsPD[3] || gainsPD[4]) {
         q0offset = 147*((Mx-MxBuff[Mind])*1/(BOE_DEC*N_MBUFF) - tauXSum/N_MBUFF)/(mgc>>7);
-    }
+    } else {
+		q0offset = 0;
+	}
     if (gainsPD[6] || gainsPD[7]) {
-        q1offset = 73*((My-MyBuff[Mind])*1/(BOE_DEC*N_MBUFF) - tauYSum/N_MBUFF)/(mgc>>7);
-    }
+		if (q[1] < PI/6 && q[1] > -PI/6) {
+			q1offset = 73*((My-MyBuff[Mind])*1/(BOE_DEC*N_MBUFF) - tauYSum/N_MBUFF)/(mgc>>7);
+		} else if (q[1] > 5*PI/6 || q[1] < -5*PI/6) {
+			// Robot is hangin upside down
+			q1offset = -73*((My-MyBuff[Mind])*1/(BOE_DEC*N_MBUFF) - tauYSum/N_MBUFF)/(mgc>>7);
+		} else {
+			q1offset = 0;
+        }
+    } else {
+		q1offset = 0;
+	}
 
     MxBuff[Mind] = Mx;
     MyBuff[Mind] = My;
@@ -1181,15 +1192,9 @@ void balanceOffsetEstimator(void) {
     q1offset = q1offset > 6*169*BOE_DEC ? 6*169*BOE_DEC :
                q1offset < -6*169*BOE_DEC ? -6*169*BOE_DEC :
                q1offset;
-
-    if (q[0] < PI/6 && q[0] > -PI/6) {
-        q[0] += q0offset;
-        q[1] += q1offset;
-    } else if (q[0] > 5*PI/6 || q[0] < -5*PI/6) {
-        // Robot is hangin upside down
-        q[0] -= q0offset;
-        q[1] -= q1offset;
-    }
+	
+	q[0] += q0offset;
+	q[1] += q1offset;
 
     // M_ and M_Buff are 938.7*2^20 ticks/(N m s)
     // BOE_DEC is 1000 tick/s
@@ -1396,8 +1401,8 @@ void swingUpCtrl(void) {
     if (mj_state != MJ_STOP && mj_state != MJ_STOPPED && mj_state != MJ_IDLE) {
         // Running
 
-        uint32_t energy_gains = (10*655*65536)+(20*7); // leg control gains 5 20
-        uint32_t balance_gains = (1*655*65536)+(20*7); // leg control gains
+        uint32_t energy_gains = (5*655*65536)+(20*7); // leg control gains 5 20
+        uint32_t balance_gains = (1*655*65536)+(20*7); // leg control gains 1 20
 
         mj_state = MJ_STAND;
 
@@ -1414,7 +1419,7 @@ void swingUpCtrl(void) {
 				r > 11141 ? 11141 :
 				r;
             //send_command_packet(&uart_tx_packet_global, 10*65536, balance_gains, 2);
-			send_command_packet(&uart_tx_packet_global, cmdLegLen(5898), balance_gains, 2);
+			send_command_packet(&uart_tx_packet_global, cmdLegLen(7000), balance_gains, 2);
 			
             if (q[1] > PI/8 || q[1] < -PI/8) {
                 swingMode = 0; // Switch to use energy controller
@@ -1426,7 +1431,7 @@ void swingUpCtrl(void) {
 				r > 11141 ? 11141 : // 13107
 				r;
 
-				// Leg pumping to add energy
+			// Leg pumping to add energy
 			send_command_packet(&uart_tx_packet_global, cmdLegLen(r), energy_gains, 2);
 
 			if ((q[1] > 7*PI/8 || q[1] < -7*PI/8) && w[1] < 2000 && w[1] > -2000) {

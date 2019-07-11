@@ -140,6 +140,7 @@ int32_t sTorque;            // Spring torque [2^14 ticks/(Nm)]
 int32_t force;              // Foot force [2^10 ticks/N]
 int16_t leg = 6000;         // Stance leg length [2^16 ticks/m]
 int16_t legVel;             // Stance leg velocity [2000 ticks/(m/s)]
+int16_t mLeg = 6000;		// Stance leg length [2^16 ticks/m]
 
 int32_t sin_theta = 0;      // pitch angle in COS_PREC bits
 int32_t cos_theta = 1<<COS_PREC;
@@ -732,6 +733,9 @@ void modeEstimation(void) {
     } else {
         leg = foot >> 2;
         legVel = 0;
+		int16_t motorIndex = mot>>8;
+		motorIndex = motorIndex < 0 ? 0: motorIndex > 255 ? 255: motorIndex;
+		mLeg = leg_crank_256lut[motorIndex]; //CCC
     }
     last_state = mj_state;
 
@@ -857,7 +861,7 @@ void swingUpEstimation(void) {
     #define GRAV_SQUARED 24636 // 96.2 in 2^8 ticks/(m^2/s^4)
     #define LEG_ADJUST 0//1966 CCC
 
-	leg = leg + LEG_ADJUST;
+	mLeg = mLeg + LEG_ADJUST;
 	
 	if ((w[1] > 0 && q[1] < 0) || (w[1] < 0 && q[1] > 0)){
 		if (0 && (q[1] < (-PI/2) || q[1] > (PI/2))) {
@@ -875,9 +879,9 @@ void swingUpEstimation(void) {
 			// wSquared is in 2^4 ticks/(rad/s)^2; max is 2^15
 		} else {
 			// Up
-			r = (sqrtApprox(2*(int32_t)leg*(
-				((int32_t)leg*wSquared>>18)
-				- (GRAV_ACC) // dividing (11/16)
+			r = (sqrtApprox(2*(int32_t)mLeg*(
+				((int32_t)mLeg*wSquared>>18)
+				- (GRAV_ACC*3>>2) // dividing (11/16)
 				+ (GRAV_ACC*cos_theta>>(COS_PREC))) >> 8 ) << 15)
 				/ (wAbs/59) - LEG_ADJUST;
 				// sqrt argument is in 2^10 ticks/(m^2/s^2)
@@ -898,7 +902,7 @@ void swingUpEstimation(void) {
 		r > 11141 ? 11141 : // 13107
 		r; // May take out if contradiction in interrupt CCC
 	
-	leg = leg - LEG_ADJUST;
+	mLeg = mLeg - LEG_ADJUST;
 	
 	procFlags &= ~0b100;
 }
@@ -1144,8 +1148,8 @@ void balanceOffsetEstimator(void) {
     //#define IX_CG 98   // moment of inertia about CG x axis (9.3E-5 N m^2)
     //#define IY_TAIL 47 // tail moment of inertia (4.5E-5 N m^2)
 
-    //int32_t I_cg = (FULL_MASS*(((int32_t)leg)*((int32_t)leg) >> 8)) >> 12;
-    //int32_t Iy = IY_CG + I_cg;
+    int32_t I_cg = (FULL_MASS*(((int32_t)leg)*((int32_t)leg) >> 8)) >> 12;
+    int32_t Iy = IY_CG + I_cg;
     int32_t My = Iy*wLP[1] + IY_TAIL*(173*tail_vel + wLP[1]) * 1;
     int32_t Ix = IX_CG + I_cg;
     int32_t Mx = Ix*wLP[0];
@@ -1402,7 +1406,7 @@ void swingUpCtrl(void) {
         // Running
 
         uint32_t energy_gains = (5*655*65536)+(20*7); // leg control gains 5 20
-        uint32_t balance_gains = (1*655*65536)+(20*7); // leg control gains 1 20
+        uint32_t balance_gains = (1*655*65536)+(30*7); // leg control gains 1 20
 
         mj_state = MJ_STAND;
 
@@ -1423,7 +1427,7 @@ void swingUpCtrl(void) {
 			
             if (q[1] > PI/8 || q[1] < -PI/8) {
                 swingMode = 0; // Switch to use energy controller
-                modeFlags &= ~0b1; // use balance offset estimator //CCC
+                modeFlags &= ~0b1; // don't use balance offset estimator //CCC
             }
         } else {
 			procFlags |= 0b100;
@@ -1451,7 +1455,7 @@ void swingUpCtrl(void) {
 			if ((q[1] < 49152 && q[1] > -196608 && w[1] < 3000 && w[1] > -1000) ||
 				(q[1] < 196608 && q[1] > -49152 && w[1] < 1000 && w[1] > -3000)) {
 				swingMode = 1; // Switch to use balance controller
-				modeFlags |= 0b1; // don't use balance offset estimator
+				modeFlags |= 0b1; // use balance offset estimator
 			}
         }
 

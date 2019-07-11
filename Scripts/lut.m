@@ -65,39 +65,97 @@ for ii = 1:numel(names)
     MAString{ii} = MAString{ii}(1:end-1); % strip final comma
 end
 
-fid = fopen('../lib/lut.h','wt');
-fprintf(fid, ['//Lookup tables have ',num2str(resolution),' samples from 0 to 90 degrees of femur rotation.\n\n']);
-for ii = 1:numel(names)
-    if ii == 1
-        fprintf(fid, ['#if ROBOT_NAME == ',names{ii},'\n']);
-    else
-        fprintf(fid, ['\n#elif ROBOT_NAME == ',names{ii},'\n']);
-    end
-    fprintf(fid, crankHeader);
-    fprintf(fid, crankString{ii});
-    fprintf(fid, footer);
-    fprintf(fid, ['static float motPos_to_femur_crank_units = ' num2str(crScale(ii)) ';\n']);
-    
-    fprintf(fid, extensionHeader);
-    fprintf(fid, extensionString{ii});
-    fprintf(fid, footer);
-    fprintf(fid, ['static float femur_leg_units = ' num2str(extScale(ii)) ';']);
-    fprintf(fid, ' //Leg extension is femur_leg_units m per 2^16\n');
-    
-    fprintf(fid, MAHeader);
-    fprintf(fid, MAString{ii});
-    fprintf(fid, footer);
-    fprintf(fid, ['static float femur_MA_units = ' num2str(MAScale(ii)) ';']);
-    fprintf(fid, ' //Mechanical advantage is femur_MA_units N/Nm per 2^16.\n');
+% fid = fopen('../lib/lut.h','wt');
+% fprintf(fid, ['//Lookup tables have ',num2str(resolution),' samples from 0 to 90 degrees of femur rotation.\n\n']);
+% for ii = 1:numel(names)
+%     if ii == 1
+%         fprintf(fid, ['#if ROBOT_NAME == ',names{ii},'\n']);
+%     else
+%         fprintf(fid, ['\n#elif ROBOT_NAME == ',names{ii},'\n']);
+%     end
+%     fprintf(fid, crankHeader);
+%     fprintf(fid, crankString{ii});
+%     fprintf(fid, footer);
+%     fprintf(fid, ['static float motPos_to_femur_crank_units = ' num2str(crScale(ii)) ';\n']);
+%     
+%     fprintf(fid, extensionHeader);
+%     fprintf(fid, extensionString{ii});
+%     fprintf(fid, footer);
+%     fprintf(fid, ['static float femur_leg_units = ' num2str(extScale(ii)) ';']);
+%     fprintf(fid, ' //Leg extension is femur_leg_units m per 2^16\n');
+%     
+%     fprintf(fid, MAHeader);
+%     fprintf(fid, MAString{ii});
+%     fprintf(fid, footer);
+%     fprintf(fid, ['static float femur_MA_units = ' num2str(MAScale(ii)) ';']);
+%     fprintf(fid, ' //Mechanical advantage is femur_MA_units N/Nm per 2^16.\n');
+% end
+% fprintf(fid, '#endif\n');
+% 
+% % Cosine lookup table
+% cosPrec = 8;
+% lutcos = sprintf('%u,', round(2^cosPrec*cosd(linspace(0,90,256))'));
+% lutcos = lutcos(1:(end-1));
+% fprintf(fid, '\nstatic unsigned int lut_cos[256] = {');
+% fprintf(fid, lutcos);
+% fprintf(fid, '}; // cosine lookup table\n');
+% 
+% fclose(fid);
+
+% Crank to foot lookup table
+x1 = unique(crank(1,:));
+y1 = zeros(size(x1));
+lookupx1 = crank(1,:);
+lookupy1 = extension(1,:);
+for i = 1:length(x1)
+    y1(i) = lookupy1(find(lookupx1 == x1(i),1));
 end
-fprintf(fid, '#endif\n');
 
-% Cosine lookup table
-cosPrec = 8;
-lutcos = sprintf('%u,', round(2^cosPrec*cosd(linspace(0,90,256))'));
-lutcos = lutcos(1:(end-1));
-fprintf(fid, '\nstatic unsigned int lut_cos[256] = {');
-fprintf(fid, lutcos);
-fprintf(fid, '}; // cosine lookup table\n');
+x2 = unique(crank(2,:));
+y2 = zeros(size(x2));
+lookupx2 = crank(2,:);
+lookupy2 = extension(2,:);
+for i = 1:length(x2)
+    y2(i) = lookupy2(find(lookupx2 == x2(i),1));
+end
 
-fclose(fid);
+x3 = unique(crank(3,:));
+y3 = zeros(size(x3));
+lookupx3 = crank(3,:);
+lookupy3 = extension(3,:);
+for i = 1:length(x3)
+    y3(i) = lookupy3(find(lookupx3 == x3(i),1));
+end
+
+f1 = fit(x1', y1', 'linearinterp');
+f2 = fit(x2', y2', 'linearinterp');
+f3 = fit(x3', y3', 'linearinterp');
+
+leg1 = f1(0:4/255:4);
+leg1(1:2) = leg1(3);
+leg2 = f2(0:4/255:4);
+leg2(1:10) = leg2(11);
+leg3 = f3(0:4/255:4);
+
+% figure, plot(crank(1,:), extension(1,:));
+% hold on
+% scatter(0:4/255:4,leg1);
+% figure, plot(crank(2,:), extension(2,:));
+% hold on
+% scatter(0:4/255:4,leg2);
+% figure, plot(crank(3,:), extension(3,:));
+% hold on
+% scatter(0:4/255:4,leg3);
+
+leg1 = round(leg1.*2^16); %Rudolph
+leg2 = round(leg2.*2^16); %Dasher
+leg3 = round(leg3.*2^16); %Unused
+
+target = leg3;
+fileID = fopen('lugLeg.txt', 'w');
+fprintf(fileID,'{');
+for i = 1:length(target) - 1
+    fprintf(fileID,'%d, ',target(i));
+end
+fprintf(fileID,'%d}',target(end));
+fclose(fileID);

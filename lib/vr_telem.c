@@ -35,6 +35,7 @@ extern int32_t MA;
 extern int32_t force;
 extern int16_t leg;
 extern int32_t legVel;
+extern int16_t mLeg;
 extern int32_t q[3];
 extern int16_t v[3];
 extern int32_t w[3];

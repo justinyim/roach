@@ -465,7 +465,7 @@ void salto1p_functions(void) {
             vCmd[2] = 0;
             deadbeatVelCtrl(vB, vCmd, ctrl_vect);
             // MANUAL TUNING
-            qCmd[1] = ctrl_vect[0]-4096; // offset back by 1/2 deg (1<<13 ticks/deg), no scale fudge
+            qCmd[1] = ctrl_vect[0]; // offset back by 0 deg (1<<13 ticks/deg), no scale fudge
             qCmd[0] = ctrl_vect[1]-8192; // offset by 1/2 deg, no scale fudge factor
         } else if (mj_state == MJ_GND || mj_state == MJ_STAND) {
             qCmd[1] = 0;
@@ -668,7 +668,7 @@ void jumpModes(void) {
 
         case MJ_AIR:
             // Ground contact transition out of air to ground
-            if (t1_ticks - transition_time > 200 
+            if (t1_ticks - transition_time > 300
                     && (spring > 1000)) {
                 if (modeFlags & 0b10000) {
                     mj_state = MJ_STAND;
@@ -683,7 +683,7 @@ void jumpModes(void) {
 
         case MJ_GND:
             // Liftoff transition from ground to air
-            if (t1_ticks - transition_time > 50
+            if (t1_ticks - transition_time > 30
                     && (spring < 500 || femur > FULL_EXTENSION)
                     && crank > 8192) {
                 mj_state = MJ_AIR;
@@ -734,13 +734,13 @@ void modeEstimation(void) {
     // Description TODO
     uint8_t j;
 
-    if (mj_state == MJ_GND || mj_state == MJ_LAUNCH) {
+    if (mj_state == MJ_GND || mj_state == MJ_LAUNCH || mj_state == MJ_STAND) {
         if (last_state == MJ_AIR) { // The robot just touched down
             flightStanceTrans();
         }
         stanceUpdate();
     } else if (mj_state == MJ_AIR) { // Flight phase estimation
-        if (last_state == MJ_GND || last_state == MJ_LAUNCH) { // robot thinks it just took off
+        if (last_state == MJ_GND || last_state == MJ_LAUNCH || mj_state == MJ_STAND) { // robot thinks it just took off
             stanceFlightTrans();
         }
         flightUpdate();
@@ -854,7 +854,9 @@ void stanceFlightTrans(void) {
         TOw[j] = w[j];
     }
     */
-    TOlegVel = TOlegVel + 900; // takeoff boost of 0.45 m/s
+
+    // MANUAL TUNING
+    TOlegVel = TOlegVel + 400; // takeoff boost of 0.2 m/s
 
     //velocity[2] = -velocity[2]; // velocity estimate until real calculation is done
     procFlags |= 0b1; // tell the main loop to calculate the takeoff velocities
@@ -883,8 +885,8 @@ void takeoffEstimation(void) {
     // Compensate for CG offset
     // MANUAL TUNING
 #if ROBOT_NAME == SALTO_1P_DASHER
-    TOw[1] += 20*TOlegVel/213; // in (centi rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694: 100/0.4694 = 213
-    TOw[0] += 30*TOlegVel/213;
+    TOw[1] += 10*TOlegVel/213; // in (centi rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694: 100/0.4694 = 213
+    TOw[0] -= 20*TOlegVel/213;
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
     TOw[1] += 0.0*0.469*TOlegVel; // in (rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694
     TOw[0] += 0.0*0.469*TOlegVel;
@@ -902,6 +904,7 @@ void takeoffEstimation(void) {
     // final units (legVel): 1/2000 (m/s)/tick
     // unit conversion: 1/30760.437 tick/tick
 
+    // MANUAL TUNING
     vyw = 3*vyw/4;
     // Lateral oscillations complete 1.5 periods during stance and cause a gyro
     // measurement overshoot of somewhere around 50% at takeoff time.
@@ -1013,14 +1016,16 @@ void balanceCtrl(void) {
         H22 = -50;
     */
 
+    #define U_OFF -4 // MANUAL TUNING momentum bias
+
     if (t1_ticks - u_time > 100) {
-        u = 0;
+        u = 0 + U_OFF;
         ud = 0;
         udd = 0;
         uCmd = u + (ud/ck1) + (udd/ck0);
     } else {
         // uCmd is in 2^15/(2000*pi/180)~=938.7 ticks/(rad s)
-        uCmd = u + (ud/ck1) + (udd/ck0);
+        uCmd = u + U_OFF + (ud/ck1) + (udd/ck0);
         // u is in 2^15/(2000*pi/180)~=938.7 ticks/(rad s)
         // ud is in 2^15/(2000*pi/180)~=938.7 ticks/rad
         // udd is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s)
@@ -1030,8 +1035,12 @@ void balanceCtrl(void) {
     int32_t M = (Iy*w[1] + IY_TAIL*(w[1] + 173*tail_vel))/mgc;
     // For w[1]=2^15, l=0.25m: M ~= 1700*2^15/2^16 ~= 2^26/2^16 = 2^10
 
+    int32_t Md = q[1];
+    int32_t Mdd = w[1];// + ((q[1]>>5)*((int32_t)legVel))/((int32_t)leg);
+    // 1000*2000/2^16 conversion ~= 30.52 ~= >>5
+
     // Mddd is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s^2)
-    int32_t Mddd = (k2*w[1]) + ((k1*q[1])>>10) + (k0*(M-uCmd));
+    int32_t Mddd = (k2*Mdd) + ((k1*Md)>>10) + (k0*(M-uCmd));
     // For w[1]=2^15, q[1]=pi:
     // term1 = 30*2^15 ~= 2^20
     // term2 = 300*2^14*180/1000 ~= 2^20
@@ -1123,9 +1132,19 @@ void balanceOffsetEstimator(void) {
 
     if (gainsPD[3] || gainsPD[4]) {
         q0offset = 147*((Mx-MxBuff[Mind])*1/(BOE_DEC*N_MBUFF) - tauXSum/N_MBUFF)/(mgc>>7);
+    } else {
+        q0offset = 0;
     }
     if (gainsPD[6] || gainsPD[7]) {
-        q1offset = 73*((My-MyBuff[Mind])*1/(BOE_DEC*N_MBUFF) - tauYSum/N_MBUFF)/(mgc>>7);
+        if (q[1] < PI/6 && q[1] > -PI/6) {
+            q1offset = 73*((My-MyBuff[Mind])*1/(BOE_DEC*N_MBUFF) - tauYSum/N_MBUFF)/(mgc>>7);
+        } else if (q[1] > 5*PI/6 || q[1] < -5*PI/6) {
+            q1offset = -73*((My-MyBuff[Mind])*1/(BOE_DEC*N_MBUFF) - tauYSum/N_MBUFF)/(mgc>>7);;
+        } else {
+            q1offset = 0;
+        }
+    } else {
+        q1offset = 0;
     }
 
     MxBuff[Mind] = Mx;
@@ -1140,14 +1159,8 @@ void balanceOffsetEstimator(void) {
                q1offset < -6*169*BOE_DEC ? -6*169*BOE_DEC :
                q1offset;
 
-    if (q[0] < PI/6 && q[0] > -PI/6) {
-        q[0] += q0offset;
-        q[1] += q1offset;
-    } else if (q[0] > 5*PI/6 || q[9] < -5*PI/6) {
-        // Robot is hangin upside down
-        q[0] -= q0offset;
-        q[1] -= q1offset;
-    }
+    q[0] += q0offset;
+    q[1] += q1offset;
 
     // M_ and M_Buff are 938.7*2^20 ticks/(N m s)
     // BOE_DEC is 1000 tick/s
@@ -1226,11 +1239,11 @@ int32_t deadbeatVelCtrl(int16_t* vi, int16_t* vo, int32_t* ctrl) {
 
 #ifdef FULL_POWER
     // 100% gains from runGridMotor18a
-    long pit_ctrl = -84*ix +32*ox // supposed to be 91, 36
+    long pit_ctrl = -91*ix +36*ox //-84*ix +32*ox // supposed to be 91, 36
         -17*ixiz +10*oxiz -2*ixoz -19*oxoz;
         // Scaled by 469 approx = PI/(3.14159*2000)
 
-    long rol_ctrl = -(-83*iy +34*oy // supposed to be 91, 36
+    long rol_ctrl = -(-91*iy +36*oy //-83*iy +34*oy // supposed to be 91, 36
         -17*iyiz +10*oyiz -2*iyoz -19*oyoz);
 
     long leg_ctrl = (77*65536 -472*iz -688*oz
@@ -1910,10 +1923,10 @@ void orientImageproc(int32_t* v_b, int16_t* v_ip) {
     //v_b[2] = (165*((int32_t)v_ip[2]) - 196*((int32_t)v_ip[0]))>>8; //yaw
     //v_b[0] = -v_ip[1]; // roll
     //v_b[1] = (165*((int32_t)v_ip[0]) + 196*((int32_t)v_ip[2]))>>8; //pitch
-    // -55 degrees about x, follwed by 180 degrees about body z
-    v_b[2] = (147*((int32_t)v_ip[2]) - 210*((int32_t)v_ip[0]))>>8; //yaw
+    // -54 degrees about x, follwed by 180 degrees about body z
+    v_b[2] = (139*((int32_t)v_ip[2]) - 215*((int32_t)v_ip[0]))>>8; //yaw
     v_b[0] = -v_ip[1]; // roll
-    v_b[1] = (147*((int32_t)v_ip[0]) + 210*((int32_t)v_ip[2]))>>8; //pitch
+    v_b[1] = (139*((int32_t)v_ip[0]) + 215*((int32_t)v_ip[2]))>>8; //pitch
 #elif ROBOT_NAME == SALTO_1P_SANTA
     // -45 degrees about pitch
     v_b[2] = (((int32_t)(v_ip[2] + v_ip[1]))*181)>>8; //yaw

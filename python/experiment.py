@@ -24,7 +24,7 @@ def main():
     motorgains = [100,80,0, 150,120,0, 120,15,0,0]
     motorgains = [0,0,0, 0,0,0, 0,0,0,0]
 
-    duration = 5000#15000
+    duration = 3000#15000
     rightFreq = 0
     leftFreq = 0
     phase = 0
@@ -206,18 +206,18 @@ def main():
         xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
         time.sleep(0.01)
 
-        viconTest = [0,0,0, 0,3667*-1.0*3.14159/180,0, 3*256,0*256]#55*256,70*256]
+        viconTest = [0,0,0, 0,3667*-0.0*3.14159/180,0, 3*256,0*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(0.01)
 
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
         time.sleep(0.01)
-        time.sleep(3.0)
+        time.sleep(2.0)
 
         #motorgains = [200,0,22,0,0, 0,0,0,0,0]
         #motorgains = [130,0,13,0,5, 0,0,0,0,0]
         #motorgains = [110,0,12,0,5, 0,0,0,0,0]
-        motorgains = [20,15,0, 40,40,0, 100,14,0,0] #[50,25,0, 180,140,0, 160,12,0,12]
+        motorgains = [40,15,0, 40,40,0, 100,14,0,0] #[50,25,0, 180,140,0, 160,12,0,12]
         #motorgains = [0,0,0, 0,0,0, 160,12,0,0]
         xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
 
@@ -284,68 +284,79 @@ def main():
 
 
         # Balance control tilt once to a*tau**2 radians
-        a = 10.0#22.0#22# # angular acceleration (rad/s^2)
-        tau = 0.1#0.08#0.08# # time scale (s)
+        a = 40.0# angular acceleration (rad/s^2)
+        tau = 0.04#0.08#0.08# # time scale (s)
         toHop = 1 # make a small jump (1) or not (0)
+
+        motorgains = [40,20,0, 120,80,0, 100,14,0,0]
+        xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
+        time.sleep(0.01)
 
         t0 = time.time()
         t = 0.0
-        tEnd = 12.0*tau
-        if toHop:
-            tEnd = 7.0*tau
+        tEnd = 13.0*tau
         while t < tEnd:
             # Md is in 2^15/(2000*pi/180)~=938.7 ticks/rad
             t = time.time() - t0
 
-            if t > 6.0*tau: # reverse trajectory to return to balance after t>6.0*tau
-                tr = 12.0*tau-t;
-                flip = -1.0
-            else:
-                tr = t
-                flip = 1.0
-
-            if tr < 0.0: # balance
+            if t < 0.0: # balance
                 Mdd = 0.0
                 Md = 0.0
                 M = 0.0
-            elif tr < tau: # begin lean back
-                Mdd = -a*tr
+            elif t < tau: # begin lean back
+                Mdd = -a*t
                 Md = -1.0/2.0*a*t**2.0
                 M = -1.0/6.0*a*t**3.0
-            elif tr < 3.0*tau: # reverse lean toward forward
-                tr = tr - tau
-                Mdd = -a*tau + a*tr
-                Md = -1.0/2.0*a*tau**2.0 - a*tau*tr + 1.0/2.0*a*tr**2.0
-                M = -1.0/6.0*a*tau**3.0 - 1.0/2.0*a*tau**2.0*tr - 1.0/2.0*a*tau*tr**2.0 + 1.0/6.0*a*tr**3.0
-            elif tr < 4.0*tau: # follow through forward tilt
-                tr = tr - 3*tau
+            elif t < 5.0*tau: # reverse lean toward forward
+                tr = t - tau
+                Mdd = -a*tau + 1.0/2.0*a*tr
+                Md = -1.0/2.0*a*tau**2.0 - a*tau*tr + 1.0/4.0*a*tr**2.0
+                M = -1.0/6.0*a*tau**3.0 - 1.0/2.0*a*tau**2.0*tr - 1.0/2.0*a*tau*tr**2.0 + 1.0/12.0*a*tr**3.0
+            elif t < 6.0*tau: # follow through forward tilt
+                tr = t - 5.0*tau
                 Mdd = a*tau
                 Md = -1.0/2.0*a*tau**2.0 + a*tau*tr
-                M = (-2.0+1.0/6.0)*a*tau**3.0 - 1.0/2.0*a*tau**2.0*tr + 1.0/2.0*a*tau*tr**2.0
-            elif tr < 5.0*tau: # slow forward tilt
-                tr = tr - 4.0*tau
-                Mdd = a*tau - a*tr
-                Md = 1.0/2.0*a*tau**2.0 + a*tau*tr - 1.0/2.0*a*tr**2.0
-                M = (-2.0+1.0/6.0)*a*tau**3.0 + 1.0/2.0*a*tau**2.0*tr + 1.0/2.0*a*tau*tr**2.0 - 1.0/6.0*a*tr**3.0;
-            else: # hold forward tilt
-                tr = tr - 5.0*tau
+                M = -29.0/6.0*a*tau**3.0 - 1.0/2.0*a*tau**2.0*tr + 1.0/2.0*a*tau*tr**2.0
+            elif t < 7.0*tau: # slow forward tilt
+                tr = t - 6.0*tau
+                Mdd = a*tau - 1.0/2.0*a*tr
+                Md = 1.0/2.0*a*tau**2.0 + a*tau*tr - 1.0/4.0*a*tr**2.0
+                M = -29.0/6.0*a*tau**3.0 + 1.0/2.0*a*tau**2.0*tr + 1.0/2.0*a*tau*tr**2.0 - 1.0/12.0*a*tr**3.0;
+            elif t < (7.0+2.217+2.0)*tau: # hold forward tilt
+                tr = t - 7.0*tau
+                Mdd = 1.0/2.0*a*tau
+                Md = 5.0/4.0*a*tau**2.0 + 1.0/2.0*a*tau*tr
+                M = -24/6*a*tau**3.0 + 5.0/4.0*a*tau**2.0*tr + 1.0/4.0*tau*tr**2.0
+            else:
                 Mdd = 0.0
-                Md = a*tau**2.0
-                M = -a*tau**3.0 + a*tau**2.0*tr
+                Md = 0.0
+                M = 0.0
 
             # Send tilt command
-            tiltCmd = [flip*M*938.7, Md*938.7, flip*Mdd*938.7]
+            tiltCmd = [M*938.7, Md*938.7, Mdd*938.7]
             xb_send(0, command.TILT, pack('3h', *tiltCmd))
             #print tiltCmd
             time.sleep(0.01)
 
-            if t > 6.0*tau - 0.12 and toHop == 1: # begin launch
-                viconTest = [0,0,0,0,0,0,40*256,80*256]
+            if t > 9.217*tau - 0.15 and toHop == 1: # begin launch
+                modeSignal = [7]
+                xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+                time.sleep(0.01)
+                viconTest = [0,0,0,0,0,0,50*256,80*256]
                 xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
                 time.sleep(0.01)
                 toHop = 2
-            if t > 6.5*tau and toHop == 2: # prepare for landing
-                viconTest = [0,0,0, 0,0,0, 45*256,25*256]
+            if t > 11.0*tau and toHop == 2: # prepare for landing
+                # # Make a few bounces, then stop
+                # modeSignal = [6]
+                # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+                # time.sleep(0.01)
+                # toSend = [500, 0, 6000, 0]
+                # xb_send(0, command.SET_VELOCITY, pack('4h',*toSend))
+                # time.sleep(0.01)
+
+                # Hop once and stop
+                viconTest = [0,0,0, 0,0,0, 50*256,30*256]
                 xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
                 time.sleep(0.01)
 
@@ -354,6 +365,21 @@ def main():
         time.sleep(0.02)
         
         if toHop:
+            # # Make a few bounces, then stop
+            # time.sleep(4)
+            # modeSignal = [23]
+            # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+            # time.sleep(0.01)
+            # viconTest = [0,0,0, 0,0,0, 45*256,25*256]
+            # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+            # time.sleep(0.01)
+
+            # Sit down
+
+            time.sleep(0.1)
+            modeSignal = [23]
+            xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+            time.sleep(0.01)
             time.sleep(1.5)
             viconTest = [0,0,0, 0,0,3667*-1*3.14159/180, 20*256,20*256]
             xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
@@ -389,6 +415,23 @@ def main():
         # viconTest = [0,0,0,0,0,0,0*256,0*256]
         # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         # time.sleep(1.0)
+
+        # # Turn in place
+        # viconTest = [0,0,0, 0,3667*-1.0*3.14159/180,0, 3*256,0*256]#55*256,70*256]
+        # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+        # time.sleep(0.02)
+        # motorgains = [30,15,0, 70,50,0, 100,14,0,0] #[50,25,0, 180,140,0, 160,12,0,12]
+        # xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
+        # time.sleep(0.02)
+
+        # fCmd = 4;
+        # degPerS = 60
+        # duration_s = 6
+        # for x in range(duration_s*fCmd):
+        #     viconTest = viconTest = [0,0,0, degPerS*64*x/fCmd,0,0, 0*256,0*256]
+        #     xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+        #     time.sleep(1.0/fCmd)
+        # time.sleep(2.0)
 
         #'''
 
@@ -556,7 +599,7 @@ def main():
         '''
 
 
-        time.sleep(params.duration / 500.0)
+        #time.sleep(params.duration / 500.0)
         #time.sleep(0.5)
         
         #time.sleep(10)

@@ -325,9 +325,9 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
             + 53*(int32_t)wyI[0] - 79*(int32_t)wyI[1] + 53*(int32_t)wyI[2])>>6;
         wyO[0] = w[1];
         #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-        // Period of 8 cycles, 0.125 bandwidth
-        w[1] = (75*(int32_t)wyO[1] - 43*(int32_t)wyO[2]
-            + 53*(int32_t)wyI[0] - 75*(int32_t)wyI[1] + 53*(int32_t)wyI[2])>>6;
+        // Period of 10 cycles, 0.125 bandwidth
+        w[1] = (86*(int32_t)wyO[1] - 43*(int32_t)wyO[2]
+            + 53*(int32_t)wyI[0] - 86*(int32_t)wyI[1] + 53*(int32_t)wyI[2])>>6;
         wyO[0] = w[1];
         #else
         #endif
@@ -697,8 +697,14 @@ void jumpModes(void) {
             // Liftoff transition from launch to air
             if ((spring < 500 || femur > FULL_EXTENSION)
                     && crank > 8192) {
-                mj_state = MJ_AIR;
-                transition_time = t1_ticks;
+                if (legVel < 2000 && modeFlags & 0b10000) {
+                    // In this case it's not jumping, just standing up
+                    mj_state = MJ_STAND;
+                } else {
+                    // usual transition to aerial phase
+                    mj_state = MJ_AIR;
+                    transition_time = t1_ticks;
+                }
             } else if (modeFlags & 0b10000) {
                 if (crank > 4096) {
                     // slow down the jump
@@ -975,10 +981,16 @@ void balanceCtrl(void) {
     // TODO description
     uint8_t i;
 
+    int32_t balanceLeg = leg;
+
+    #if ROBOT_NAME == SALTO_1P_RUDOLPH
+    balanceLeg = leg + 655; // add 1 cm for gripper offset
+    #endif
+
     // Constant parameters
-    I_cg = (FULL_MASS*(((int32_t)leg)*((int32_t)leg) >> 8)) >> 12; // 2^20 ticks/(kg m^2)
+    I_cg = (FULL_MASS*(balanceLeg*balanceLeg >> 8)) >> 12; // 2^20 ticks/(kg m^2)
     Iy = IY_CG + I_cg; // 2^20 ticks/(kg m^2)
-    mgc = ((int32_t)leg*FULL_MASS*GRAV_ACC) >> 6; // in 2^20 ticks/(N m)
+    mgc = (balanceLeg*FULL_MASS*GRAV_ACC) >> 6; // in 2^20 ticks/(N m)
 
     // Controller gain scheduling
     int32_t k0, k1, k2, ck0, ck1;
@@ -1520,8 +1532,8 @@ void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw){
         pitO[0] = pitch;
         #elif ROBOT_NAME == SALTO_1P_RUDOLPH
         // Period of 8 cycles, 0.125 bandwidth
-        pitch = (75*(int32_t)pitO[1] - 43*(int32_t)pitO[2]
-            + 53*(int32_t)pitI[0] - 75*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
+        pitch = (86*(int32_t)pitO[1] - 43*(int32_t)pitO[2]
+            + 53*(int32_t)pitI[0] - 86*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
         pitO[0] = pitch;
         #else
         #endif

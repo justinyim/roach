@@ -490,6 +490,18 @@ def main():
             xb_send(0, command.SET_MOTOR_POS, pack('3h', *legPosition))
             time.sleep(0.02)
         '''
+		
+        '''
+        # Gripper demo
+        # leg extension test with variable motor gains
+        arbitrary = [0]
+        # motor deflection [radians * 256], P gain [65536 * duty cyle/rad], D gain [65536 * duty cyle/(rad/s)]
+        for x in np.hstack((np.linspace(0,100,46),np.linspace(88,0,45))):
+            legPosition = [x*256, 0.03*65536, 0.005*65536]
+            xb_send(0, command.SET_MOTOR_POS, pack('3h', *legPosition))
+            time.sleep(0.02)
+        '''
+
 
         '''
         # Toe pull-ups

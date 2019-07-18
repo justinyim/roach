@@ -214,6 +214,7 @@ uint32_t swingTime = 0;		// delay for swing-up calculation
 int32_t r;
 int16_t fCentripetal;		// centripetal + gravitational force lump sum in 2^8 ticks per N
 int16_t legDiff;			// difference between leg and commanded
+int32_t leg_adjust = 0;
 
 int32_t ctrl_vect[3];       // deadbeat controller commands
 int16_t g_accumulator;      // count steps to integrate v change due to gravity
@@ -861,16 +862,20 @@ void swingUpEstimation(void) {
 	// w[1] is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s)
 	// wSquared is in 2^4 ticks/(rad/s)^2; conversion ~= 1/55076
     #define GRAV_SQUARED 24636 // 96.2 in 2^8 ticks/(m^2/s^4)
-    #define LEG_ADJUST 0//1310//1966 CCC
+    #define LEG_CHANGE 66//1310//1966 CCC
 	
 	fCentripetal = 3*((leg>>8)*(wSquared>>8) - GRAV_ACC*cos_theta>>(COS_PREC+2-4)) >> 1; // 3 in 2^5 ticks per kilogram is 93.75 grams
-
-	leg = leg + LEG_ADJUST;
 	
 	if (swingTime == 0 && ((w[1] > 100 && q[1] < 0) || (w[1] < -100 && q[1] > 0))) {
 		swingTime = 1;
 	}
-	if (swingTime == 1 && ((w[1] < -100 && q[1] < 0) || (w[1] > 100 && q[1] > 0))) {
+	if ((swingTime == 2 || swingTime == 1) && ((w[1] < -100 && q[1] < 0) || (w[1] > 100 && q[1] > 0))) {
+		if (swingTime == 2) {
+			leg_adjust = leg_adjust + LEG_CHANGE;
+		}
+		if (swingTime == 1) {
+			leg_adjust = leg_adjust - LEG_CHANGE;
+		}
 		swingTime = 0;
 	}
 	
@@ -886,7 +891,7 @@ void swingUpEstimation(void) {
 				+ ((GRAV_SQUARED*sin_theta*sin_theta)>>(2*COS_PREC+8))
 				+ (2*GRAV_ACC*(int32_t)leg*wSquared>>22) * ((-1<<COS_PREC) + cos_theta - sin_theta)>>(COS_PREC) ) << 20)
 				+ (GRAV_ACC*sin_theta<<(20-COS_PREC-2)) )
-				/ wSquared - LEG_ADJUST;
+				/ wSquared + leg_adjust;
 				// sqrt argument is in 2^0 ticks/(m^2/s^4)
 				// leg is 2^16 ticks/m; max is 2^14
 				// w[1] is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s); max is 2^15
@@ -895,9 +900,9 @@ void swingUpEstimation(void) {
 				// Up
 				r = (sqrtApprox(2*(int32_t)leg*(
 					((int32_t)leg*wSquared>>18)
-					- (GRAV_ACC) // dividing (3/4)
+					- (GRAV_ACC) // dividing (7/8)
 					+ (GRAV_ACC*cos_theta>>(COS_PREC))) >> 8 ) << 15)
-					/ (wAbs/59) - LEG_ADJUST;
+					/ (wAbs/59) + leg_adjust;
 					// sqrt argument is in 2^10 ticks/(m^2/s^2)
 					// leg is 2^16 ticks/m; max is 2^14
 					// w[1] is in 2^15/(2000*pi/180) ticks/(rad/s); max is 2^14
@@ -908,7 +913,7 @@ void swingUpEstimation(void) {
 	} else {
 		/*
 		r = (sqrtApprox((2*(-GRAV_ACC)*rmin*(cos_theta - (1 << COS_PREC))) >> (COS_PREC + 4)) << 13)
-			/ (wAbs/59) - LEG_ADJUST;
+			/ (wAbs/59) + leg_adjust;
 			*/
 		r = 10485; //9830 //11141; //13107
 	}
@@ -916,8 +921,6 @@ void swingUpEstimation(void) {
 	r = r < 5898 ? 5898 :
 		r > 10485 ? 10485 : // 13107
 		r; // May take out if contradiction in interrupt CCC
-		
-	leg = leg - LEG_ADJUST;
 	
 	legDiff = r - leg;
 	legDiff = legDiff < 0 ? -legDiff : legDiff;
@@ -1431,7 +1434,6 @@ void swingUpCtrl(void) {
         // State estimation
         kinematicUpdate();
         modeEstimation();
-        //leg = leg + LEG_ADJUST; // Put in estimation portion CCC
 		
         if (swingMode) {
             // Balance on toe
@@ -1483,10 +1485,13 @@ void swingUpCtrl(void) {
 			}
 
 			tiHSetDC(0+1, tailMotor); // send tail command to H-bridge
-			if ((q[1] < 49152 && q[1] > -196608 && w[1] < 3000 && w[1] > -1000) ||
+			if (q[1] < 196608 && q[1] > -196608) {
+				swingTime = 2;
+				if ((q[1] < 49152 && q[1] > -196608 && w[1] < 3000 && w[1] > -1000) ||
 				(q[1] < 196608 && q[1] > -49152 && w[1] < 1000 && w[1] > -3000)) {
-				//swingMode = 1; // Switch to use balance controller
-				//modeFlags |= 0b1; // use balance offset estimator
+					//swingMode = 1; // Switch to use balance controller
+					//modeFlags |= 0b1; // use balance offset estimator
+				}
 			}
         }
 

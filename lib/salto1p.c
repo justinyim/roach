@@ -1423,8 +1423,8 @@ void swingUpCtrl(void) {
     if (mj_state != MJ_STOP && mj_state != MJ_STOPPED && mj_state != MJ_IDLE) {
         // Running
 
-        uint32_t energy_gains = (10*655*65536)+(20*7); // leg control gains 5 20 were 15 and 20 for aggressive
-        uint32_t balance_gains = (1*655*65536)+(30*7); // leg control gains 1 20
+        uint32_t energy_gains = (5*655*65536)+(20*7); // leg control gains 5 20 were 15 and 20 for aggressive
+        uint32_t balance_gains = (1*655*65536)+(20*7); // leg control gains 1 20
 
         mj_state = MJ_STAND;
 
@@ -1453,8 +1453,9 @@ void swingUpCtrl(void) {
 				r > 10485 ? 10485 : // 13107
 				r;
 			
-			r = 10485;
-			send_command_packet(&uart_tx_packet_global, cmdLegLen(r) + forceControl(r,0,7,fCentripetal,1), energy_gains, 2);
+			//r = 10485;
+
+			send_command_packet(&uart_tx_packet_global, cmdLegLen(r) + forceControl(r,0,9,fCentripetal*3/2,1), energy_gains, 2); // r 0 8 fCentripetal 1
 			
 			//send_command_packet(&uart_tx_packet_global, cmdLegLen(r), energy_gains, 2);
 			// Leg pumping to add energy
@@ -1992,11 +1993,14 @@ int32_t forceControl(int16_t length, int16_t p, int16_t d, int16_t f, int16_t ad
 	if (addon == 0) {
 		motorAngle = ((-f + (p*(legError)>>2) - (d*(legVel>>6)/2000<<12))/(divider) + (crank>>8)) * 25 ;
 	} else {
-		motorAngle = ((-f + (p*(legError)>>2) - (d*(legVel>>6)/2000*MA_femur_256lut[femurInd]<<3))/(divider)) * 25;
-		//motorAngle = ((-f + (p*(legError)>>2) - (d*(legVel>>6)/2000<<12))/(divider)) * 25;
+		motorAngle = (((p*(legError)>>2) - (d*(legVel>>6)/2000*MA_femur_256lut[femurInd]<<3))/(divider) - f/(25*k>>2)) * 25;
 	}
 	returnable = ((int32_t) motorAngle) << 10;
-	returnable = returnable < 0*65536 ? 0*65536: returnable > 100*65536 ? 100*65536: returnable;
+	if (addon == 0) {
+		returnable = returnable < 0*65536 ? 0*65536: returnable > 100*65536 ? 100*65536: returnable;
+	} else {
+		returnable = returnable < -100*65536 ? -100*65536: returnable > 100*65536 ? 100*65536: returnable;
+	}
 	return returnable;
 }
 

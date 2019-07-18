@@ -54,6 +54,7 @@ extern int32_t q0offset;
 extern int32_t q1offset;
 extern int32_t r;
 extern int32_t returnable;
+extern int16_t fCentripetal;
 
 
 //extern long x_ctrl;
@@ -233,7 +234,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
     ptr->voltage = sensor_data->voltage;
     ptr->crank = crank;
-    ptr->force = r;//returnable>>8; //r;
+    ptr->force = r;//fCentripetal; //returnable>>8; //r;
     ptr->foot = leg;
     ptr->footVel = t1_ticks;
 }

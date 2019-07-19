@@ -869,18 +869,30 @@ void swingUpEstimation(void) {
 	if (swingTime == 0 && ((w[1] > 100 && q[1] < 0) || (w[1] < -100 && q[1] > 0))) {
 		swingTime = 1;
 	}
-	if ((swingTime == 2 || swingTime == 1) && ((w[1] < -100 && q[1] < 0) || (w[1] > 100 && q[1] > 0))) {
+	
+	if ((swingTime == 2 || swingTime == 3 || swingTime == 1) && ((w[1] < -100 && q[1] < 0) || (w[1] > 100 && q[1] > 0))) {
 		if (swingTime == 2) {
-			leg_adjust = leg_adjust + LEG_CHANGE;
+			if (w[1] > 0) {
+				leg_adjust = leg_adjust + LEG_CHANGE;
+			} else {
+				leg_adjust = leg_adjust - LEG_CHANGE;
+			}
+		}
+		if (swingTime == 3) {
+			if (w[1] < 0) {
+				leg_adjust = leg_adjust + LEG_CHANGE;
+			} else {
+				leg_adjust = leg_adjust - LEG_CHANGE;
+			}
 		}
 		if (swingTime == 1) {
-			leg_adjust = leg_adjust - LEG_CHANGE;
+			leg_adjust = 0;//leg_adjust - LEG_CHANGE;
 		}
 		swingTime = 0;
 	}
 	
 	if (swingTime == 1){
-		if (wAbs < 6000) { // reduce noise CCC
+		if (0 && wAbs < 6000) { // reduce noise CCC
 			r = 10485;
 		} else {
 			if (0 && (q[1] < (-PI/2) || q[1] > (PI/2))) {
@@ -1486,7 +1498,11 @@ void swingUpCtrl(void) {
 
 			tiHSetDC(0+1, tailMotor); // send tail command to H-bridge
 			if (q[1] < 196608 && q[1] > -196608) {
-				swingTime = 2;
+				if (w[1] > 0) {
+					swingTime = 2;
+				} else {
+					swingTime = 3;
+				}
 				if ((q[1] < 49152 && q[1] > -196608 && w[1] < 3000 && w[1] > -1000) ||
 				(q[1] < 196608 && q[1] > -49152 && w[1] < 1000 && w[1] > -3000)) {
 					//swingMode = 1; // Switch to use balance controller

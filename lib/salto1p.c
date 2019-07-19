@@ -1505,8 +1505,8 @@ void swingUpCtrl(void) {
 				}
 				if ((q[1] < 49152 && q[1] > -196608 && w[1] < 3000 && w[1] > -1000) ||
 				(q[1] < 196608 && q[1] > -49152 && w[1] < 1000 && w[1] > -3000)) {
-					//swingMode = 1; // Switch to use balance controller
-					//modeFlags |= 0b1; // use balance offset estimator
+					swingMode = 1; // Switch to use balance controller
+					modeFlags |= 0b1; // use balance offset estimator
 				}
 			}
         }

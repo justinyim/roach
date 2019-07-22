@@ -54,9 +54,6 @@ uint32_t GAINS_AIR = (P_AIR<<16)+D_AIR;
 uint32_t GAINS_GND = (P_GND<<16)+D_GND;
 uint32_t GAINS_STAND = (P_STAND<<16)+D_STAND;
 
-// Communication and telemetry constants
-#define UART_PERIOD 10
-
 #define TELEM_DECIMATE 2
 int32_t telemDecimateCount = 0;
 #define T1_MAX 0xffffff
@@ -131,6 +128,7 @@ int16_t vB[3];              // CG vel in world aligned to the body-fixed frame
 
 int32_t mot;                // Motor angle [2^14 ticks/rad at the gear]
 int32_t last_mot;           // Last motor angle for rejecting bad samples
+int32_t motw;               // Motor angVel. [2^15 ticks/(2000 deg/s) at motor]
 int32_t femur;              // Femur angle [2^16 ticks/rot]
 int32_t crank;              // Crank angle [2^14 ticks/rad]
 int32_t foot;               // Foot distance [2^14 ticks/m]
@@ -189,23 +187,32 @@ int16_t u;                  // Tilt control
 int16_t ud;                 // Tilt control
 int16_t udd;                // Tilt control
 uint32_t u_time = 0;        // Time tilt command was set
-#define IY_CG 126  // moment of inertia about CG y axis (1.2E-4 N m^2)
-#define IX_CG 98   // moment of inertia about CG x axis (9.3E-5 N m^2)
+#define IY_CG 126   // moment of inertia about CG y axis (1.2E-4 N m^2)
+#define IX_CG 98    // moment of inertia about CG x axis (9.3E-5 N m^2)
+#define IY_MOT 1    // moment of inertia of motor (594E-9 N m^2)
 #if ROBOT_NAME == SALTO_1P_DASHER
-#define IY_TAIL 36 // tail moment of inertia (less than 0.07^2*0.008 N m^2)
+#define IY_TAIL 36  // tail moment of inertia (less than 0.07^2*0.008 N m^2)
 #else
-#define IY_TAIL 39 // tail moment of inertia (less than 0.07^2*0.008 N m^2)
+#define IY_TAIL 39  // tail moment of inertia (less than 0.07^2*0.008 N m^2)
 #endif
 int32_t I_cg = 734; // 2^20 ticks/(kg m^2)
 int32_t Iy = 860; // 2^20 ticks/(kg m^2)
 int32_t mgc = 90521; // in 2^20 ticks/(N m)
 int32_t uCmd;
         // 10 // 8 // 7 // 6+-3i // 6 
+/*
 #define K0 -1000//-343//-312//-216// in 1 tick/(rad/s^3)
 #define K1 -307//-197//-151//-127//-111// in 1024/1000 tick/(rad/s^2)
 #define K2 -30//-24//-21//-18//-18// in 1 tick/(rad/s)
 #define CK0 100 // command filter 1/(z*z)
 #define CK1 5 // command filter 1/((z+z)/(z*z))
+*/
+// poles -14, -14, -10
+#define K0 -1960// in 1 tick/(rad/s^3)
+#define K1 -487// in 1024/1000 tick/(rad/s^2)
+#define K2 -38// in 1 tick/(rad/s)
+#define CK0 196 // command filter 1/(z*z)
+#define CK1 7 // command filter 1/((z+z)/(z*z))
 
 #define K0_UP -343 // in 1 tick/(rad/s^3)
 #define K1_UP -197 // in 1024/1000 tick/(rad/s^2)
@@ -591,6 +598,7 @@ void kinematicUpdate(void) {
         mot = last_mot; // reject bad samples
     }
     last_mot = mot;
+    motw = sensor_data->velocity/70; // velocity in 2^16 and motw in 938.7 ticks/(rad/s)
 
     spring = mot - crank;
     if(spring < 0){spring=0;}
@@ -669,7 +677,7 @@ void jumpModes(void) {
         case MJ_AIR:
             // Ground contact transition out of air to ground
             if (t1_ticks - transition_time > 300
-                    && (spring > 1000)) {
+                    && (spring > 1500)) {
                 if (modeFlags & 0b10000) {
                     mj_state = MJ_STAND;
                 } else {
@@ -1028,7 +1036,7 @@ void balanceCtrl(void) {
         H22 = -50;
     */
 
-    #define U_OFF -4 // MANUAL TUNING momentum bias
+    #define U_OFF -3 // MANUAL TUNING momentum bias
 
     if (t1_ticks - u_time > 100) {
         u = 0 + U_OFF;
@@ -1044,11 +1052,11 @@ void balanceCtrl(void) {
     }
 
     // M is in 2^15/(2000*pi/180)~=938.7 ticks/s
-    int32_t M = (Iy*w[1] + IY_TAIL*(w[1] + 173*tail_vel))/mgc;
+    int32_t M = (Iy*w[1] + IY_TAIL*(w[1] + 173*tail_vel) + IY_MOT*motw)/mgc;
     // For w[1]=2^15, l=0.25m: M ~= 1700*2^15/2^16 ~= 2^26/2^16 = 2^10
 
     int32_t Md = q[1];
-    int32_t Mdd = w[1];// + ((q[1]>>5)*((int32_t)legVel))/((int32_t)leg);
+    int32_t Mdd = w[1];
     // 1000*2000/2^16 conversion ~= 30.52 ~= >>5
 
     // Mddd is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s^2)
@@ -1072,11 +1080,11 @@ void balanceCtrl(void) {
 
     int32_t tailTorque;
     if (gainsPD[6] || gainsPD[7]) {
-        // tailCmd is in ~4000/0.07~= ticks/(N m)
+        // tailCmd is in ~4000/0.07~= ticks/(N m): conversion ~= 568
         #if ROBOT_NAME == SALTO_1P_DASHER
-        tailTorque = tau2/538;
+        tailTorque = tau2/500; // for 0.065 N m, it is 499.8
         #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-        tailTorque = tau2/538;
+        tailTorque = tau2/500;
         #else
         tailTorque = tau2/269;
         #endif
@@ -1802,7 +1810,7 @@ void setVelocitySetpoint(int16_t* newCmd, int32_t newYaw) {
         newCmd[1] = newCmd[1] > vB[1]+2000 ? vB[1]+2000 :
                     newCmd[1] < vB[1]-2000 ? vB[1]-2000 :
                     newCmd[1];
-        /*
+        //*
         // Usual velocity command
         for (i=0; i<3; i++){
             vCmd[i] = newCmd[i];
@@ -1815,10 +1823,10 @@ void setVelocitySetpoint(int16_t* newCmd, int32_t newYaw) {
         while (qCmd[2] < -PI) {
             qCmd[2] += 2*PI;
         }
-        */
+        //*/
 
-        //*
         // Command positions
+        /*
         pCmd[0] += newCmd[0]*1;//*50/25; // only integrate at 1/2 speed
         pCmd[1] += newCmd[1]*1;//*50/25;
         vCmd[2] = newCmd[2];
@@ -1826,7 +1834,7 @@ void setVelocitySetpoint(int16_t* newCmd, int32_t newYaw) {
 
         vCmd[0] = (pCmd[0]-p[0])/(50*2) + newCmd[0];
         vCmd[1] = (pCmd[1]-p[1])/(50*2) + newCmd[1];
-        //*/
+        */
     } else {
         // Trajectory
         tCycle = (t1_ticks - start_time) % 20000;
@@ -1968,6 +1976,28 @@ int32_t calibPos(uint8_t idx){
     else {
         return -1;
     }
+}
+
+int32_t forceControl(int16_t length, int16_t p, int16_t d, int16_t f, int16_t addon){
+    // p in 2^0 tick per N/m maximum 2^9 ticks (2^9 N/m)
+    // d in 2^2 tick per Ns/m maximum 2^8 ticks (2^6 Ns/m)
+    // f in 2^8 tick per N
+    int16_t k = 5; // k in 2^4 ticks per N/m
+    int16_t femurInd = femur/64 < 0 ? 0: femur/64 > 255 ? 255: femur/64;
+    int16_t legError = length - leg >> 6;
+    legError = legError > 64 ? 64: legError < -64 ? -64: legError;
+    int16_t divider = (((int16_t)(MA_femur_256lut[femurInd]>>9))*k>>2);
+    divider = divider == 0 ? 1 : divider;
+    int16_t motorAngle;
+    if (addon == 0) {
+        motorAngle = ((-f + (p*(legError)>>2) - (d*(legVel>>6)/2000<<12))/(divider) + (crank>>8)) * 25 ;
+    } else {
+        motorAngle = ((-f + (p*(legError)>>2) - (d*(legVel>>6)/2000*MA_femur_256lut[femurInd]<<3))/(divider)) * 25;
+        //motorAngle = ((-f + (p*(legError)>>2) - (d*(legVel>>6)/2000<<12))/(divider)) * 25;
+    }
+    int32_t returnable = ((int32_t) motorAngle) << 10;
+    returnable = returnable < 0*65536 ? 0*65536: returnable > 100*65536 ? 100*65536: returnable;
+    return returnable;
 }
 
 int32_t cmdLegLen(int16_t r) {

@@ -58,6 +58,11 @@ extern int16_t fCentripetal;
 extern uint32_t swingTime;
 extern int32_t leg_adjust;
 
+extern int32_t My;  // reee
+extern int32_t MyBuff[10]; // reee
+extern uint8_t Mind; // reee
+extern int32_t tauYSum; // reee
+
 
 //extern long x_ctrl;
 //extern long y_ctrl;
@@ -97,9 +102,9 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->gyroX = w[0];//gdata[0];
     ptr->gyroY = w[1];//gdata[1];
     ptr->gyroZ = w[2];//gdata[2];
-    ptr->accelX = xldata[0];
-    ptr->accelY = xldata[1];
-    ptr->accelZ = xldata[2];
+    ptr->accelX = (My-MyBuff[Mind])*1/(4*10)>>9;//xldata[0]; //reee
+    ptr->accelY = tauYSum/10>>9;//xldata[1]; //reee
+    ptr->accelZ = q1offset;//xldata[2]; //reee
     //*/
     /*
     //ptr->otherMode = 6; // onboard body velocities and lowpass angular velocity in place of accels
@@ -236,7 +241,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
     ptr->voltage = sensor_data->voltage;
     ptr->crank = crank;
-    ptr->force = leg_adjust;//swingTime;//fCentripetal; //returnable>>8; //r;
+    ptr->force = r; //q1offset;//leg_adjust;//swingTime;//fCentripetal; //returnable>>8; //r;
     ptr->foot = leg;
     ptr->footVel = t1_ticks;
 }

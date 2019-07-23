@@ -130,6 +130,7 @@ int16_t vB[3];              // CG vel in world aligned to the body-fixed frame
 
 int32_t mot;                // Motor angle [2^14 ticks/rad at the gear]
 int32_t last_mot;           // Last motor angle for rejecting bad samples
+int32_t motw;				// Motor angular speed [2^15 ticks/2000 degrees/sec]
 int32_t femur;              // Femur angle [2^16 ticks/rot]
 int32_t crank;              // Crank angle [2^14 ticks/rad]
 int32_t foot;               // Foot distance [2^14 ticks/m]
@@ -178,6 +179,7 @@ int32_t tauX = 0;           // Torque in stance (see balanceOffsetEstimator)
 int32_t tauY = 0;           // Torque in stance (see balanceOffsetEstimator)
 #define N_MBUFF 10          // circular buffer length
 #define BOE_DEC 4           // Balance off. est. decimation
+int32_t My; // reee
 int32_t MxBuff[N_MBUFF];    // x angular momentum circular buffer
 int32_t MyBuff[N_MBUFF];    // y angular momentum circular buffer
 int32_t tauXBuff[N_MBUFF];  // x torque circular buffer
@@ -192,6 +194,7 @@ uint32_t u_time = 0;        // Time tilt command was set
 #define IY_CG 126  // moment of inertia about CG y axis (1.2E-4 N m^2)
 #define IX_CG 98   // moment of inertia about CG x axis (9.3E-5 N m^2)
 #define IY_TAIL 39 // tail moment of inertia (less than 0.07^2*0.008 N m^2)
+#define IY_MOT 1 // motor moment of inertia
 int32_t I_cg = 734; // 2^20 ticks/(kg m^2)
 int32_t Iy = 860; // 2^20 ticks/(kg m^2)
 int32_t mgc = 90521; // in 2^20 ticks/(N m)
@@ -580,6 +583,7 @@ void kinematicUpdate(void) {
         mot = last_mot; // reject bad samples
     }
     last_mot = mot;
+	motw = sensor_data->velocity/70;
 
     spring = mot - crank;
     if(spring < 0){spring=0;}
@@ -862,33 +866,52 @@ void swingUpEstimation(void) {
 	// w[1] is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s)
 	// wSquared is in 2^4 ticks/(rad/s)^2; conversion ~= 1/55076
     #define GRAV_SQUARED 24636 // 96.2 in 2^8 ticks/(m^2/s^4)
-    #define LEG_CHANGE 66//1310//1966 CCC
+    #define LEG_CHANGE 240//120 //66
 	
 	fCentripetal = 3*((leg>>8)*(wSquared>>8) - GRAV_ACC*cos_theta>>(COS_PREC+2-4)) >> 1; // 3 in 2^5 ticks per kilogram is 93.75 grams
+	
+	// swingTime indices
+	// 0 = fully extended out of cone
+	// 1 = retracting phase (calculation)
+	// 2 = in cone with positive angular velocity
+	// 3 = in cone with negative angular velocity
+	// 4 = fully extended in cone
 	
 	if (swingTime == 0 && ((w[1] > 100 && q[1] < 0) || (w[1] < -100 && q[1] > 0))) {
 		swingTime = 1;
 	}
 	
 	if ((swingTime == 2 || swingTime == 3 || swingTime == 1) && ((w[1] < -100 && q[1] < 0) || (w[1] > 100 && q[1] > 0))) {
-		if (swingTime == 2) {
-			if (w[1] > 0) {
-				leg_adjust = leg_adjust + LEG_CHANGE;
-			} else {
-				leg_adjust = leg_adjust - LEG_CHANGE;
-			}
-		}
-		if (swingTime == 3) {
-			if (w[1] < 0) {
-				leg_adjust = leg_adjust + LEG_CHANGE;
-			} else {
-				leg_adjust = leg_adjust - LEG_CHANGE;
-			}
-		}
 		if (swingTime == 1) {
-			leg_adjust = 0;//leg_adjust - LEG_CHANGE;
+			leg_adjust = 0; //leg_adjust - LEG_CHANGE;
+			swingTime = 0;
 		}
-		swingTime = 0;
+		
+		if (q[1] >= 196608 || q[1] <= -196608) {
+			if (swingTime == 2) {
+				if (w[1] > 0) {
+					if (0 && leg_adjust >= LEG_CHANGE*3) {
+						q[1] += 10000;
+					} else {
+						leg_adjust = leg_adjust + LEG_CHANGE;
+					}
+				} else {
+					leg_adjust = leg_adjust - LEG_CHANGE;
+				}
+			}
+			if (swingTime == 3) {
+				if (w[1] < 0) {
+					if (0 && leg_adjust >= LEG_CHANGE*3) {
+						q[1] -= 10000;
+					} else {
+						leg_adjust = leg_adjust + LEG_CHANGE;
+					}
+				} else {
+					leg_adjust = leg_adjust - LEG_CHANGE;
+				}
+			}
+			swingTime = 0;
+		}
 	}
 	
 	if (swingTime == 1){
@@ -903,7 +926,7 @@ void swingUpEstimation(void) {
 				+ ((GRAV_SQUARED*sin_theta*sin_theta)>>(2*COS_PREC+8))
 				+ (2*GRAV_ACC*(int32_t)leg*wSquared>>22) * ((-1<<COS_PREC) + cos_theta - sin_theta)>>(COS_PREC) ) << 20)
 				+ (GRAV_ACC*sin_theta<<(20-COS_PREC-2)) )
-				/ wSquared + leg_adjust;
+				/ wSquared;
 				// sqrt argument is in 2^0 ticks/(m^2/s^4)
 				// leg is 2^16 ticks/m; max is 2^14
 				// w[1] is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s); max is 2^15
@@ -932,7 +955,11 @@ void swingUpEstimation(void) {
 	
 	r = r < 5898 ? 5898 :
 		r > 10485 ? 10485 : // 13107
-		r; // May take out if contradiction in interrupt CCC
+		r; // May take out if contradiction in interrupt CCC		
+	r += leg_adjust;
+	r = r < 5898 ? 5898 :
+		r > 10485 ? 10485 : // 13107
+		r; // May take out if contradiction in interrupt CCC			
 	
 	legDiff = r - leg;
 	legDiff = legDiff < 0 ? -legDiff : legDiff;
@@ -1183,7 +1210,7 @@ void balanceOffsetEstimator(void) {
 
     int32_t I_cg = (FULL_MASS*(((int32_t)leg)*((int32_t)leg) >> 8)) >> 12;
     int32_t Iy = IY_CG + I_cg;
-    int32_t My = Iy*wLP[1] + IY_TAIL*(173*tail_vel + wLP[1]) * 1;
+    My = Iy*wLP[1] + IY_TAIL*(173*tail_vel + wLP[1]) * 1 + IY_MOT * motw; // reee add back in "int32_t My"
     int32_t Ix = IX_CG + I_cg;
     int32_t Mx = Ix*wLP[0];
     // conversion from tail_vel to wLP is 173
@@ -1209,7 +1236,7 @@ void balanceOffsetEstimator(void) {
 		if (q[1] < PI/6 && q[1] > -PI/6) {
 			q1offset = 73*((My-MyBuff[Mind])*1/(BOE_DEC*N_MBUFF) - tauYSum/N_MBUFF)/(mgc>>7);
 		} else if (q[1] > 5*PI/6 || q[1] < -5*PI/6) {
-			// Robot is hangin upside down
+			// Robot is hangin' upside down
 			q1offset = -73*((My-MyBuff[Mind])*1/(BOE_DEC*N_MBUFF) - tauYSum/N_MBUFF)/(mgc>>7);
 		} else {
 			q1offset = 0;
@@ -1459,6 +1486,7 @@ void swingUpCtrl(void) {
 			
             if (q[1] > PI/8 || q[1] < -PI/8) {
                 swingMode = 0; // Switch to use energy controller
+				//modeFlags |= 0b1; // take out and uncomment bottom line to disable balance offset for swingup CCC
                 modeFlags &= ~0b1; // don't use balance offset estimator //CCC
             }
         } else {
@@ -1481,7 +1509,6 @@ void swingUpCtrl(void) {
 				send_command_packet(&uart_tx_packet_global, cmdLegLen(r) + forceControl(r,0,175,-425,0), energy_gains, 2);
 			}
 			*/
-
 			
 			if ((q[1] > 7*PI/8 || q[1] < -7*PI/8) && w[1] < 2000 && w[1] > -2000) {
 				// Tail pumping
@@ -1505,8 +1532,8 @@ void swingUpCtrl(void) {
 				}
 				if ((q[1] < 49152 && q[1] > -196608 && w[1] < 3000 && w[1] > -1000) ||
 				(q[1] < 196608 && q[1] > -49152 && w[1] < 1000 && w[1] > -3000)) {
-					swingMode = 1; // Switch to use balance controller
-					modeFlags |= 0b1; // use balance offset estimator
+					//swingMode = 1; // Switch to use balance controller
+					//modeFlags |= 0b1; // use balance offset estimator
 				}
 			}
         }

@@ -253,8 +253,8 @@ int32_t last_mot;
 //#define ATT_CORRECTION_GAIN_Y 8
 #define ATT_CORRECTION_GAIN_Y 10
 
-#define TAIL_BRAKE 20
-#define TAIL_REVERSE 7
+#define TAIL_BRAKE 0//20
+#define TAIL_REVERSE 0//7
 
 
 // Communications variables ---------------------------------------------------

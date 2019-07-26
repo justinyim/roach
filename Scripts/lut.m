@@ -5,17 +5,24 @@
 
 names = {'SALTO_1P_RUDOLPH','SALTO_1P_DASHER','UNUSED'};
 
+legFunctionFits
+
 fmax = pi/2; % maximum femur deflection for LUT
 resolution = 2^8;
 x = linspace(0,fmax,resolution); % femur sample points [rad]
 
 % crank function outputs are in radians
+%{
 crank = [x.*(-5.545933486743863e-1)+x.^2.*4.861385182590551-x.^3.*3.076529866354905+...
     x.^4.*1.110905627213665-x.^5.*6.960572009953411e-2+4.410270509582694e-2; ... % Rudolph
     1.02*x.^5-2.216*x.^4+0.7596*x.^3+2.773*x.^2-0.01726*x+0.1533; ... % New dasher
     %x.*(-2.219771122747685e-1)+x.^2.*3.934037595625176-x.^3.*2.017414906463222+...
     %x.^4.*1.677073832029953e-1+x.^5.*2.253083088706445e-1+1.883563826690602e-1; % Dasher
     2.003.*x.^5.0 - 7.434.*x.^4.0 + 9.429.*x.^3.0 - 2.691.*x.^2.0 + 0.3893.*x - 0.001175]; % Unused
+%}
+crank = [-model(2).f_crank(-x);
+    -model(3).f_crank(-x);
+    -model(1).f_crank(-x)];
 crankMax = 4; % Saturate, since furthest extension is nonphysical
 crank(crank>crankMax) = crankMax;
 crankScale = floor((2^16-1)./crank(:,end)); % Saturate to max range of femur encoder
@@ -25,18 +32,23 @@ crank_scaled = floor(max(0,crank.*crankScale)); %
 crScale = 1/(25*crankMax)*ones(size(crankScale));
 
 % extension function output is in meters
+%{
 extension = [-x.*(-9.689463228112449e-2)+x.^2.*6.989908944388874e-2-...
     x.^3.*4.630772363424869e-2 + 0.09; ... % Rudolph
     -x.*(-1.10783409238789e-1)+x.^2.*3.18398134512155e-2-...
     x.^3.*2.62460134201421e-2 + 0.09; ... % Dasher
     - 0.04776*x.^3 + 0.1042*x.^2 + 0.05917*x + 0.07623]; % Unused
+%}
+extemsopm = [model(2).f_fd(x);
+    model(3).f_fd(x);
+    model(1).f_fd(x)];
 extensionScale = floor((2^16-1)/0.25);%floor((2^16-1)./max(extension,[],2));
 extension_scaled = floor(max(0,extension.*extensionScale));
 
 extScale = 0.25*ones(size(crankScale));%max(extension,[],2); % Leg extension in m per 2^16 counts
 
 % MA function output is in N/Nm (mechanical advantage from femur angle)
-% TODO: these are currently wrong
+%{
 MA = [((-x).*9.722770365181102+(-x).^2.*9.229589599064714+(-x).^3.*4.443622508854662+...
     (-x).^4.*3.480286004976706e-1+5.545933486743863e-1)./...
     ((-x).*1.397981788877775e-1+(-x).^2.*1.389231709027461e-1-9.689463228112449e-2); ... % Rudolph
@@ -44,6 +56,10 @@ MA = [((-x).*9.722770365181102+(-x).^2.*9.229589599064714+(-x).^3.*4.44362250885
     (-x).^4.*1.126541544353222+2.219771122747685e-1)./...
     ((-x).*6.367962690243101e-2+(-x).^2.*7.873804026042631e-2-1.10783409238789e-1); % Dasher
     4963*x.^3-1060*x.^2+75.7*x+1.961]; % Unused
+%}
+MA = [model(2).f_MA(-x);
+    model(3).f_MA(-x);
+    model(1).f_MA(-x)];
 MA(MA>128) = 128; % Saturate, since furthest extension is nonphysical
 MA(MA<1) = 1;
 maScale = floor((2^16-1)./max(MA,[],2));

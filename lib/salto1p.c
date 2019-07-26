@@ -1731,8 +1731,9 @@ void adjustBodyAngle(long* qAdjust){
 }
 
 void updateBodyAngle(long* qUpdate){
-    if (modeFlags && 0b10) {
-        // Don't accept offboard angle updates if onboard balance offset estimation is active
+    if (modeFlags && 0b11) {
+        // Don't accept offboard angle updates if onboard balance offset 
+        // estimation or toe balance control is active
         return;
     }
 

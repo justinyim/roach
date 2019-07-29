@@ -861,12 +861,16 @@ void swingUpEstimation(void) {
 	int32_t rmin = 6553;//5898;
     int32_t wSquared;
 	int32_t wAbs;
+	int32_t rFilt;
 	wSquared = ((int32_t)w[1]*(int32_t)w[1])/55076;
 	wAbs = w[1] > 0 ? w[1] : -w[1];
 	// w[1] is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s)
 	// wSquared is in 2^4 ticks/(rad/s)^2; conversion ~= 1/55076
     #define GRAV_SQUARED 24636 // 96.2 in 2^8 ticks/(m^2/s^4)
-    #define LEG_CHANGE 240//120 //66
+    #define LEG_CHANGE 120 //66
+	#define LEG_OFFSET 1835
+	
+	leg = leg + LEG_OFFSET;
 	
 	fCentripetal = 3*((leg>>8)*(wSquared>>8) - GRAV_ACC*cos_theta>>(COS_PREC+2-4)) >> 1; // 3 in 2^5 ticks per kilogram is 93.75 grams
 	
@@ -890,22 +894,14 @@ void swingUpEstimation(void) {
 		if (q[1] >= 196608 || q[1] <= -196608) {
 			if (swingTime == 2) {
 				if (w[1] > 0) {
-					if (0 && leg_adjust >= LEG_CHANGE*3) {
-						q[1] += 10000;
-					} else {
-						leg_adjust = leg_adjust + LEG_CHANGE;
-					}
+					leg_adjust = leg_adjust + LEG_CHANGE;
 				} else {
 					leg_adjust = leg_adjust - LEG_CHANGE;
 				}
 			}
 			if (swingTime == 3) {
 				if (w[1] < 0) {
-					if (0 && leg_adjust >= LEG_CHANGE*3) {
-						q[1] -= 10000;
-					} else {
-						leg_adjust = leg_adjust + LEG_CHANGE;
-					}
+					leg_adjust = leg_adjust + LEG_CHANGE;
 				} else {
 					leg_adjust = leg_adjust - LEG_CHANGE;
 				}
@@ -933,16 +929,20 @@ void swingUpEstimation(void) {
 				// wSquared is in 2^4 ticks/(rad/s)^2; max is 2^15
 			} else {
 				// Up
-				r = (sqrtApprox(2*(int32_t)leg*(
+				rFilt = (sqrtApprox(2*(int32_t)leg*(
 					((int32_t)leg*wSquared>>18)
-					- (GRAV_ACC) // dividing (7/8)
+					- (GRAV_ACC>>1) // dividing (7/8)
 					+ (GRAV_ACC*cos_theta>>(COS_PREC))) >> 8 ) << 15)
-					/ (wAbs/59) + leg_adjust;
+					/ (wAbs/59) + leg_adjust - LEG_OFFSET;
 					// sqrt argument is in 2^10 ticks/(m^2/s^2)
 					// leg is 2^16 ticks/m; max is 2^14
 					// w[1] is in 2^15/(2000*pi/180) ticks/(rad/s); max is 2^14
 					//      conversion to 2^4 ~= 1/58.7
 					// wSquared is in 2^4 ticks/(rad/s)^2; max is 2^15
+				rFilt = rFilt < 5898 ? 5898 :
+				rFilt > 10485 ? 10485 :
+				rFilt;
+				r = (r*3>>2) + (rFilt>>2);
 			}
 		}
 	} else {
@@ -959,7 +959,9 @@ void swingUpEstimation(void) {
 	r += leg_adjust;
 	r = r < 5898 ? 5898 :
 		r > 10485 ? 10485 : // 13107
-		r; // May take out if contradiction in interrupt CCC			
+		r; // May take out if contradiction in interrupt CCC	
+
+	leg = leg - LEG_OFFSET;
 	
 	legDiff = r - leg;
 	legDiff = legDiff < 0 ? -legDiff : legDiff;
@@ -1474,7 +1476,7 @@ void swingUpCtrl(void) {
         kinematicUpdate();
         modeEstimation();
 		
-        if (swingMode) {
+        if (0 && swingMode) {
             // Balance on toe
             balanceCtrl();
 
@@ -1482,7 +1484,7 @@ void swingUpCtrl(void) {
 				r > 10485 ? 10485 :
 				r;
             //send_command_packet(&uart_tx_packet_global, 10*65536, balance_gains, 2);
-			send_command_packet(&uart_tx_packet_global, cmdLegLen(9000), energy_gains, 2); // cmdLegLen(8000)
+			send_command_packet(&uart_tx_packet_global, cmdLegLen(6000) + forceControl(6000,0,9,fCentripetal*3/2,1), energy_gains, 2); // cmdLegLen(8000)
 			
             if (q[1] > PI/8 || q[1] < -PI/8) {
                 swingMode = 0; // Switch to use energy controller
@@ -1490,6 +1492,7 @@ void swingUpCtrl(void) {
                 modeFlags &= ~0b1; // don't use balance offset estimator //CCC
             }
         } else {
+			modeFlags &= ~0b1;
 			procFlags |= 0b100;
 			r = r < 5898 ? 5898 :
 				r > 10485 ? 10485 : // 13107
@@ -1497,6 +1500,10 @@ void swingUpCtrl(void) {
 			
 			//r = 10485;
 
+			if ((q[1] > 7*PI/8 || q[1] < -7*PI/8) && w[1] < 1000 && w[1] > -1000) {
+				r = 10485;
+			}
+			
 			send_command_packet(&uart_tx_packet_global, cmdLegLen(r) + forceControl(r,0,9,fCentripetal*3/2,1), energy_gains, 2); // r 0 8 fCentripetal 1
 			
 			//send_command_packet(&uart_tx_packet_global, cmdLegLen(r), energy_gains, 2);
@@ -1530,8 +1537,8 @@ void swingUpCtrl(void) {
 				} else {
 					swingTime = 3;
 				}
-				if ((q[1] < 49152 && q[1] > -196608 && w[1] < 3000 && w[1] > -1000) ||
-				(q[1] < 196608 && q[1] > -49152 && w[1] < 1000 && w[1] > -3000)) {
+				if ((q[1] < 196608 && q[1] > 0 && w[1] < 0 && w[1] > -1500) || // (q[1] < 49152 && q[1] > -196608 && w[1] < 3000 && w[1] > -1000)
+				(q[1] < 0 && q[1] > -196608 && w[1] < 1500 && w[1] > 0)) {
 					//swingMode = 1; // Switch to use balance controller
 					//modeFlags |= 0b1; // use balance offset estimator
 				}
@@ -1610,8 +1617,8 @@ void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw){
     }
 
     // Attitude actuator mixing
-    foreCmd = roll - yaw;//(foreCmd>>1) + ((roll - yaw)>>1);
-    aftCmd = roll + yaw;//(aftCmd>>1) + ((roll + yaw)>>1);
+    foreCmd = cos_theta*roll - cos_theta*yaw + sin_theta*roll + sin_theta*yaw;//roll - yaw;//(foreCmd>>1) + ((roll - yaw)>>1);
+    aftCmd = cos_theta*roll + cos_theta*yaw - sin_theta*roll + sin_theta*yaw;//roll + yaw;//(aftCmd>>1) + ((roll + yaw)>>1);
     tailCmd = pitch;
 
     if (modeFlags & 0b1 && 

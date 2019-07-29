@@ -105,7 +105,8 @@ def main():
         angle = [3667*3.14159]
 
         #motorgains = [0,0,0, 0,0,0, 200,12,0,12]
-        motorgains = [0,0,0, 0,0,0, 200,12,0,0]
+        motorgains = [40,20,0, 40,20,0, 200,12,0,0]
+        #motorgains = [0,0,0, 0,0,0, 200,12,0,0]
         xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
 
         viconTest = [0,0,0,0,0,0,0*256,0*256]#55*256,70*256]
@@ -113,18 +114,18 @@ def main():
         time.sleep(0.01)
 
 
-        #xb_send(0, command.RESET_BODY_ANG, pack('h', *angle))
-        #time.sleep(0.01)
+        xb_send(0, command.RESET_BODY_ANG, pack('h', *angle))
+        time.sleep(0.01)
 
-        xb_send(0, command.RESET_BODY_ANG, pack('h', *arbitrary))
-        time.sleep(0.01)
-        xb_send(0, command.GYRO_BIAS, pack('h', *arbitrary))
-        time.sleep(0.01)
-        xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
-        time.sleep(0.01)
-        adjust = [0,64,-128] # 3667 ticks per radian, yaw, roll, pitch (64 ticks per degree)
-        xb_send(0, command.ADJUST_BODY_ANG, pack('3h', *adjust))
-        time.sleep(0.01)
+        #xb_send(0, command.RESET_BODY_ANG, pack('h', *arbitrary))
+        #time.sleep(0.01)
+        #xb_send(0, command.GYRO_BIAS, pack('h', *arbitrary))
+        #time.sleep(0.01)
+        #xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
+        #time.sleep(0.01)
+        #adjust = [0,64,-128] # 3667 ticks per radian, yaw, roll, pitch (64 ticks per degree)
+        #xb_send(0, command.ADJUST_BODY_ANG, pack('3h', *adjust))
+        #time.sleep(0.01)
 
 
         xb_send(0, command.GYRO_BIAS, pack('h', *arbitrary))

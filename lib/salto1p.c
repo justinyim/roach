@@ -931,7 +931,7 @@ void swingUpEstimation(void) {
 				// Up
 				rFilt = (sqrtApprox(2*(int32_t)leg*(
 					((int32_t)leg*wSquared>>18)
-					- (GRAV_ACC>>1) // dividing (7/8)
+					- (GRAV_ACC) // dividing (7/8)
 					+ (GRAV_ACC*cos_theta>>(COS_PREC))) >> 8 ) << 15)
 					/ (wAbs/59) + leg_adjust - LEG_OFFSET;
 					// sqrt argument is in 2^10 ticks/(m^2/s^2)
@@ -1467,7 +1467,7 @@ void swingUpCtrl(void) {
     if (mj_state != MJ_STOP && mj_state != MJ_STOPPED && mj_state != MJ_IDLE) {
         // Running
 
-        uint32_t energy_gains = (5*655*65536)+(20*7); // leg control gains 5 20 were 15 and 20 for aggressive
+        uint32_t energy_gains = (10*655*65536)+(20*7); // leg control gains 5 20 were 15 and 20 for aggressive
         uint32_t balance_gains = (1*655*65536)+(20*7); // leg control gains 1 20
 
         mj_state = MJ_STAND;
@@ -1504,7 +1504,11 @@ void swingUpCtrl(void) {
 				r = 10485;
 			}
 			
-			send_command_packet(&uart_tx_packet_global, cmdLegLen(r) + forceControl(r,0,9,fCentripetal*3/2,1), energy_gains, 2); // r 0 8 fCentripetal 1
+			if (r >= leg) {
+				send_command_packet(&uart_tx_packet_global, cmdLegLen(r) + forceControl(r,0,9,fCentripetal*2,1), energy_gains, 2); // r 0 8 fCentripetal 1
+			} else {
+				send_command_packet(&uart_tx_packet_global, cmdLegLen(r) + forceControl(r,0,0,fCentripetal*2,1), energy_gains, 2);
+			}
 			
 			//send_command_packet(&uart_tx_packet_global, cmdLegLen(r), energy_gains, 2);
 			// Leg pumping to add energy
@@ -1617,8 +1621,8 @@ void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw){
     }
 
     // Attitude actuator mixing
-    foreCmd = cos_theta*roll - cos_theta*yaw + sin_theta*roll + sin_theta*yaw;//roll - yaw;//(foreCmd>>1) + ((roll - yaw)>>1);
-    aftCmd = cos_theta*roll + cos_theta*yaw - sin_theta*roll + sin_theta*yaw;//roll + yaw;//(aftCmd>>1) + ((roll + yaw)>>1);
+    foreCmd = cos_theta*roll - cos_theta*yaw + sin_theta*roll + sin_theta*yaw >> COS_PREC;//roll - yaw;//(foreCmd>>1) + ((roll - yaw)>>1);
+    aftCmd = cos_theta*roll + cos_theta*yaw - sin_theta*roll + sin_theta*yaw >> COS_PREC;//roll + yaw;//(aftCmd>>1) + ((roll + yaw)>>1);
     tailCmd = pitch;
 
     if (modeFlags & 0b1 && 

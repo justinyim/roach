@@ -243,7 +243,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->crank = crank;
     ptr->force = r; //q1offset;//leg_adjust;//swingTime;//fCentripetal; //returnable>>8; //r;
     ptr->foot = leg;
-    ptr->footVel = t1_ticks;
+    ptr->footVel = returnable>>8;//t1_ticks;
 }
 
 //This may be unneccesary, since the telemtry type isn't totally anonymous

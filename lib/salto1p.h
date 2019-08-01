@@ -67,7 +67,7 @@ void expStart(uint8_t startSignal);
 void expStop(uint8_t stopSignal);
 void setOnboardMode(uint8_t flags, uint8_t mode);
 void setVelocitySetpoint(int16_t* newCmd, int32_t newYaw);
-void setTilt(int16_t u_in, int16_t ud_in, int16_t udd_in);
+void setTilt(int16_t u_in, int16_t ud_in, int16_t udd_in, int16_t uddd_in);
 
 // Other
 void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint32_t current, uint8_t flags);

@@ -349,8 +349,9 @@ unsigned char cmdTilt(unsigned char type, unsigned char status, unsigned char le
     int16_t u = (int16_t)frame[0] + ((int16_t)frame[1]<<8);
     int16_t ud = (int16_t)frame[2] + ((int16_t)frame[3]<<8);
     int16_t udd = (int16_t)frame[4] + ((int16_t)frame[5]<<8);
+    int16_t uddd = (int16_t)frame[6] + ((int16_t)frame[7]<<8);
 
-    setTilt(u,ud,udd);
+    setTilt(u,ud,udd,uddd);
     return 1;
 }
 

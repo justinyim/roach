@@ -71,13 +71,10 @@ uint8_t modeFlags = 0;     // Running modes
     // 4: use onboard velocity control (1) or accept offboard attitude cmd (0)
     // 8: use onboard trajectory (1) or accept offboard horz. velocity cmd (0)
     // 16: static standing balance (1) or usual operation (0)
-    // 1 << 5: swing-up controller
-    // 2 << 5: 
-    // 3 << 5: 
-    // 4 << 5: 
-    // 5 << 5: 
-    // 6 << 5: 
-    // 7 << 5: 
+    // 32: don't turn off when the robot flips over
+    // 1 << 6: swing-up controller
+    // 2 << 6: 
+    // 3 << 6: 
 uint32_t t1_ticks = 0;      // Time (1 tick per ms)
 uint8_t interrupt_count = 0;// How many processing cycles have passed
 
@@ -186,14 +183,15 @@ uint8_t Mind = 0;           // index circular buffers
 int16_t u;                  // Tilt control
 int16_t ud;                 // Tilt control
 int16_t udd;                // Tilt control
+int16_t uddd;               // Tilt control
 uint32_t u_time = 0;        // Time tilt command was set
 #define IY_CG 126   // moment of inertia about CG y axis (1.2E-4 N m^2)
 #define IX_CG 98    // moment of inertia about CG x axis (9.3E-5 N m^2)
 #define IY_MOT 1    // moment of inertia of motor (594E-9 N m^2)
 #if ROBOT_NAME == SALTO_1P_DASHER
-#define IY_TAIL 36  // tail moment of inertia (less than 0.07^2*0.008 N m^2)
+#define IY_TAIL 34  // tail moment of inertia (less than 0.07^2*0.008 N m^2)
 #else
-#define IY_TAIL 39  // tail moment of inertia (less than 0.07^2*0.008 N m^2)
+#define IY_TAIL 36  // tail moment of inertia (less than 0.07^2*0.008 N m^2)
 #endif
 int32_t I_cg = 734; // 2^20 ticks/(kg m^2)
 int32_t Iy = 860; // 2^20 ticks/(kg m^2)
@@ -207,18 +205,74 @@ int32_t uCmd;
 #define CK0 100 // command filter 1/(z*z)
 #define CK1 5 // command filter 1/((z+z)/(z*z))
 */
+/*
 // poles -14, -14, -10
 #define K0 -1960// in 1 tick/(rad/s^3)
 #define K1 -487// in 1024/1000 tick/(rad/s^2)
 #define K2 -38// in 1 tick/(rad/s)
 #define CK0 196 // command filter 1/(z*z)
 #define CK1 7 // command filter 1/((z+z)/(z*z))
-
+*/
+/*
+// poles -8, -8, -8
 #define K0_UP -343 // in 1 tick/(rad/s^3)
 #define K1_UP -197 // in 1024/1000 tick/(rad/s^2)
 #define K2_UP -24 // in 1 tick/(rad/s)
 #define CK0_UP 64 // command filter 1/(z*z)
 #define CK1_UP 4 // command filter 1/((z+z)/(z*z))
+*/
+
+//*
+#if ROBOT_NAME == SALTO_1P_DASHER
+// poles -12, -12, -12
+#define K0 -1728// in 1 tick/(rad/s^3) prod(poles)
+#define K1 -442// in 1024/1000 tick/(rad/s^2) sum(prod(nchoosek(poles,2),2))
+#define K2 -36// in 1 tick/(rad/s) sum(poles)
+#define CK3 1728 // command filter (z*z*z)
+#define CK2 48 // command filter 1/(3*(1/(z*z)))
+#define CK1 4 // command filter 1/(1/z+1/z+1/z)
+// poles -9, -9, -9
+#define K0_UP -729 // in 1 tick/(rad/s^3)
+#define K1_UP -249 // in 1024/1000 tick/(rad/s^2)
+#define K2_UP -27 // in 1 tick/(rad/s)
+#define CK3_UP 729 // command filter 1/(z*z)
+#define CK2_UP 27 // command filter 1/((z+z)/(z*z))
+#define CK1_UP 3 // command filter 1/(1/z+1/z+1/z)
+
+#elif ROBOT_NAME == SALTO_1P_RUDOLPH
+// poles -9, -9, -9
+#define K0 -729// in 1 tick/(rad/s^3)
+#define K1 -249// in 1024/1000 tick/(rad/s^2)
+#define K2 -27// in 1 tick/(rad/s)
+#define CK3 729 // command filter (z*z*z)
+#define CK2 27 // command filter 1/(3/(z*z))
+#define CK1 3 // command filter 1/(1/z+1/z+1/z)
+// poles -6, -6, -6
+#define K0_UP -216 // in 1 tick/(rad/s^3)
+#define K1_UP -111 // in 1024/1000 tick/(rad/s^2) 
+#define K2_UP -18 // in 1 tick/(rad/s)
+#define CK3_UP 216 // command filter (z*z*z)
+#define CK2_UP 12 // command filter 1/(3/(z*z))
+#define CK1_UP 2 // command filter 1/(1/z+1/z+1/z)
+
+#else
+// poles -9, -9, -9
+#define K0 -729// in 1 tick/(rad/s^3)
+#define K1 -249// in 1024/1000 tick/(rad/s^2)
+#define K2 -27// in 1 tick/(rad/s)
+#define CK3 729 // command filter (z*z*z)
+#define CK2 27 // command filter 1/(3/(z*z))
+#define CK1 3 // command filter 1/(1/z+1/z+1/z)
+// poles -9, -9, -9
+#define K0_UP -729 // in 1 tick/(rad/s^3)
+#define K1_UP -249 // in 1024/1000 tick/(rad/s^2)
+#define K2_UP -27 // in 1 tick/(rad/s)
+#define CK3_UP 729 // command filter (z*z*z)
+#define CK2_UP 27 // command filter 1/(3/(z*z))
+#define CK1_UP 3 // command filter 1/(1/z+1/z+1/z)
+
+#endif
+//*/
 
 uint8_t swingMode = 1;      // swing-up mode
 
@@ -253,8 +307,8 @@ int32_t last_mot;
 //#define ATT_CORRECTION_GAIN_Y 8
 #define ATT_CORRECTION_GAIN_Y 10
 
-#define TAIL_BRAKE 0//20
-#define TAIL_REVERSE 0//7
+#define TAIL_BRAKE 20
+#define TAIL_REVERSE 7
 
 
 // Communications variables ---------------------------------------------------
@@ -288,7 +342,7 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
     //mpuBeginUpdate(); // Start IMU and encoder reads
     //amsEncoderStartAsyncRead();
 
-    if ((modeFlags>>5) == 1) {  // swing-up
+    if ((modeFlags>>6) == 1) {  // swing-up
         w[0] = ((256-W_ALPHA)*w[0] + W_ALPHA*gdataBody[0])>>8; // Low pass the gyro signal
         w[2] = ((256-W_ALPHA)*w[2] + W_ALPHA*gdataBody[2])>>8; // Low pass the gyro signal
 
@@ -332,9 +386,9 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
             + 53*(int32_t)wyI[0] - 79*(int32_t)wyI[1] + 53*(int32_t)wyI[2])>>6;
         wyO[0] = w[1];
         #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-        // Period of 10 cycles, 0.125 bandwidth
-        w[1] = (86*(int32_t)wyO[1] - 43*(int32_t)wyO[2]
-            + 53*(int32_t)wyI[0] - 86*(int32_t)wyI[1] + 53*(int32_t)wyI[2])>>6;
+        // Period of 12 cycles, 0.125 bandwidth
+        w[1] = (92*(int32_t)wyO[1] - 43*(int32_t)wyO[2]
+            + 53*(int32_t)wyI[0] - 92*(int32_t)wyI[1] + 53*(int32_t)wyI[2])>>6;
         wyO[0] = w[1];
         #else
         #endif
@@ -347,7 +401,7 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         eulerUpdate(q,w500,1);
     } else {
         // Estimation and control at 500 Hz
-        if (modeFlags < (1<<5)) {
+        if (modeFlags < (1<<6)) {
             kinematicUpdate();
             modeEstimation();
             jumpModes();
@@ -358,7 +412,7 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
             } else {
                 attitudeCtrl();
             }
-        } else if ((modeFlags>>5) == 1) {
+        } else if ((modeFlags>>6) == 1) {
             swingUpCtrl();
         }
     }
@@ -658,7 +712,7 @@ void jumpModes(void) {
     // Hacky e-stop if the robot falls over
     if ((mj_state != MJ_STOPPED) 
             && ((q[0] > PI/3 || q[0] < -PI/3)
-            || (q[1] > PI/3 || q[1] < -PI/3))) {
+            || (q[1] > PI/3 || q[1] < -PI/3) && !(modeFlags & 0b100000) )) {
         mj_state = MJ_STOP;
     }
 
@@ -992,7 +1046,7 @@ void balanceCtrl(void) {
     int32_t balanceLeg = leg;
 
     #if ROBOT_NAME == SALTO_1P_RUDOLPH
-    balanceLeg = leg + 655; // add 1 cm for gripper offset
+    balanceLeg = leg + 2*655; // add 1 cm for gripper offset
     #endif
 
     // Constant parameters
@@ -1001,19 +1055,21 @@ void balanceCtrl(void) {
     mgc = (balanceLeg*FULL_MASS*GRAV_ACC) >> 6; // in 2^20 ticks/(N m)
 
     // Controller gain scheduling
-    int32_t k0, k1, k2, ck0, ck1;
+    int32_t k0, k1, k2, ck1, ck2, ck3;
     if (leg < 7864) {// 0.12 m extension: around the middle of the soft spot
         k0 = K0;
         k1 = K1;
         k2 = K2;
-        ck0 = CK0;
         ck1 = CK1;
+        ck2 = CK2;
+        ck3 = CK3;
     } else {
         k0 = K0_UP;
         k1 = K1_UP;
         k2 = K2_UP;
-        ck0 = CK0_UP;
         ck1 = CK1_UP;
+        ck2 = CK2_UP;
+        ck3 = CK3_UP;
     }
 
     // Variables that vary with leg length (0.08 to 0.3m):
@@ -1042,13 +1098,15 @@ void balanceCtrl(void) {
         u = 0 + U_OFF;
         ud = 0;
         udd = 0;
-        uCmd = u + (ud/ck1) + (udd/ck0);
+        uddd = 0;
+        uCmd = u + (ud/ck1) + (udd/ck2) + (uddd/ck3);
     } else {
         // uCmd is in 2^15/(2000*pi/180)~=938.7 ticks/(rad s)
-        uCmd = u + U_OFF + (ud/ck1) + (udd/ck0);
+        uCmd = u + U_OFF + (ud/ck1) + (udd/ck2) + (uddd/ck3);
         // u is in 2^15/(2000*pi/180)~=938.7 ticks/(rad s)
         // ud is in 2^15/(2000*pi/180)~=938.7 ticks/rad
         // udd is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s)
+        // uddd is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s^2)
     }
 
     // M is in 2^15/(2000*pi/180)~=938.7 ticks/s
@@ -1076,13 +1134,13 @@ void balanceCtrl(void) {
     // For q[1]=pi/2, l=0.25m: term1 = 1013*2^8*2^7 = 2^25, term2 ~= 229*2^21 = 2^29
 
     // tau2 is in 2^30/(2000*pi/180)~=30760000 ticks/(N m)
-    int32_t tau2 = qdd1H22 + qdd2H22;
+    int32_t tau2 = qdd2H22; // + qdd1H22;
 
     int32_t tailTorque;
     if (gainsPD[6] || gainsPD[7]) {
         // tailCmd is in ~4000/0.07~= ticks/(N m): conversion ~= 568
         #if ROBOT_NAME == SALTO_1P_DASHER
-        tailTorque = tau2/500; // for 0.065 N m, it is 499.8
+        tailTorque = tau2/461; // for 0.060 N m, it is 461.4
         #elif ROBOT_NAME == SALTO_1P_RUDOLPH
         tailTorque = tau2/500;
         #else
@@ -1394,7 +1452,7 @@ void swingUpCtrl(void) {
         mj_state = MJ_STAND;
 
         #define GRAV_SQUARED 24636 // 96.2 in 2^8 ticks/(m^2/s^4)
-        #define LEG_ADJUST 656
+        #define LEG_ADJUST 0//656
 
         // State estimation
         kinematicUpdate();
@@ -1539,9 +1597,9 @@ void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw){
             + 53*(int32_t)pitI[0] - 79*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
         pitO[0] = pitch;
         #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-        // Period of 8 cycles, 0.125 bandwidth
-        pitch = (86*(int32_t)pitO[1] - 43*(int32_t)pitO[2]
-            + 53*(int32_t)pitI[0] - 86*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
+        // Period of 12 cycles, 0.125 bandwidth
+        pitch = (93*(int32_t)pitO[1] - 43*(int32_t)pitO[2]
+            + 53*(int32_t)pitI[0] - 93*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
         pitO[0] = pitch;
         #else
         #endif
@@ -1549,8 +1607,8 @@ void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw){
     }
 
     // Attitude actuator mixing
-    foreCmd = roll - yaw;//(foreCmd>>1) + ((roll - yaw)>>1);
-    aftCmd = roll + yaw;//(aftCmd>>1) + ((roll + yaw)>>1);
+    foreCmd = (cos_theta*roll - cos_theta*yaw + sin_theta*roll + sin_theta*yaw)>>COS_PREC;//(foreCmd>>1) + ((roll - yaw)>>1);
+    aftCmd = (cos_theta*roll + cos_theta*yaw - sin_theta*roll + sin_theta*yaw)>>COS_PREC;//(aftCmd>>1) + ((roll + yaw)>>1);
     tailCmd = pitch;
 
     if (modeFlags & 0b1 && 
@@ -1878,10 +1936,11 @@ void setVelocitySetpoint(int16_t* newCmd, int32_t newYaw) {
 
 }
 
-void setTilt(int16_t u_in, int16_t ud_in, int16_t udd_in) {
+void setTilt(int16_t u_in, int16_t ud_in, int16_t udd_in, int16_t uddd_in) {
     u = u_in;
     ud = ud_in;
     udd = udd_in;
+    uddd = uddd_in;
     u_time = t1_ticks;
 }
 

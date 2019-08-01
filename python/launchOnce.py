@@ -24,11 +24,11 @@ def main():
     #  [ Kp , Kd , other , Kp , Kd , other , Kp , Kd , other , other ]
     motorgains = [40,20,0, 120,80,0, 140,15,0,0]
 
-    launch = 70
+    launch = 90
     t_off = -0.08#-0.02
     a = -35
     tilt = -3
-    retract = 70
+    retract = 60
 
     tau = 0.05
 

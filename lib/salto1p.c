@@ -193,7 +193,7 @@ int16_t udd;                // Tilt control
 uint32_t u_time = 0;        // Time tilt command was set
 #define IY_CG 126  // moment of inertia about CG y axis (1.2E-4 N m^2)
 #define IX_CG 98   // moment of inertia about CG x axis (9.3E-5 N m^2)
-#define IY_TAIL 39 // tail moment of inertia (less than 0.07^2*0.008 N m^2)
+#define IY_TAIL 90 // tail moment of inertia (less than 0.07^2*0.008 N m^2)
 #define IY_MOT 1 // motor moment of inertia
 int32_t I_cg = 734; // 2^20 ticks/(kg m^2)
 int32_t Iy = 860; // 2^20 ticks/(kg m^2)
@@ -333,8 +333,8 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         wyO[0] = w[1];
         #elif ROBOT_NAME == SALTO_1P_RUDOLPH
         // Period of 8 cycles, 0.125 bandwidth
-        w[1] = (75*(int32_t)wyO[1] - 43*(int32_t)wyO[2]
-            + 53*(int32_t)wyI[0] - 75*(int32_t)wyI[1] + 53*(int32_t)wyI[2])>>6;
+        w[1] = (96*(int32_t)wyO[1] - 43*(int32_t)wyO[2]
+            + 53*(int32_t)wyI[0] - 96*(int32_t)wyI[1] + 53*(int32_t)wyI[2])>>6;
         wyO[0] = w[1];
         #else
         #endif
@@ -867,12 +867,12 @@ void swingUpEstimation(void) {
 	// w[1] is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s)
 	// wSquared is in 2^4 ticks/(rad/s)^2; conversion ~= 1/55076
     #define GRAV_SQUARED 24636 // 96.2 in 2^8 ticks/(m^2/s^4)
-    #define LEG_CHANGE 120 //66
+    #define LEG_CHANGE 180//120 //66
 	#define LEG_OFFSET 1835
 	
 	leg = leg + LEG_OFFSET;
 	
-	fCentripetal = 3*((leg>>8)*(wSquared>>8) - GRAV_ACC*cos_theta>>(COS_PREC+2-4)) >> 1; // 3 in 2^5 ticks per kilogram is 93.75 grams
+	fCentripetal = 4*((leg>>8)*(wSquared>>8) - GRAV_ACC*cos_theta>>(COS_PREC+2-4)) >> 1; // 3 in 2^5 ticks per kilogram is 93.75 grams
 	
 	// swingTime indices
 	// 0 = fully extended out of cone
@@ -1476,7 +1476,7 @@ void swingUpCtrl(void) {
         kinematicUpdate();
         modeEstimation();
 		
-        if (0 && swingMode) {
+        if (swingMode) {
             // Balance on toe
             balanceCtrl();
 
@@ -1492,7 +1492,6 @@ void swingUpCtrl(void) {
                 modeFlags &= ~0b1; // don't use balance offset estimator //CCC
             }
         } else {
-			modeFlags &= ~0b1;
 			procFlags |= 0b100;
 			r = r < 5898 ? 5898 :
 				r > 10485 ? 10485 : // 13107
@@ -1512,16 +1511,8 @@ void swingUpCtrl(void) {
 			
 			//send_command_packet(&uart_tx_packet_global, cmdLegLen(r), energy_gains, 2);
 			// Leg pumping to add energy
-			
-			/*
-			if (q[1] < (-PI/2) || q[1] > (PI/2)) { // hanging down
-				send_command_packet(&uart_tx_packet_global, cmdLegLen(r) + forceControl(r,0,175,425,0), energy_gains, 2); //r 218 187 250(or fCentripetal) or forceControl(r,190,175,250)
-			} else {
-				send_command_packet(&uart_tx_packet_global, cmdLegLen(r) + forceControl(r,0,175,-425,0), energy_gains, 2);
-			}
-			*/
-			
-			if ((q[1] > 7*PI/8 || q[1] < -7*PI/8) && w[1] < 2000 && w[1] > -2000) {
+						
+			if (0 && (q[1] > 7*PI/8 || q[1] < -7*PI/8) && w[1] < 2000 && w[1] > -2000) { //CCC
 				// Tail pumping
 				if (w[1] > -500 && q[1] > 0) {
 					tailCmd = -2000;
@@ -1541,10 +1532,10 @@ void swingUpCtrl(void) {
 				} else {
 					swingTime = 3;
 				}
-				if ((q[1] < 196608 && q[1] > 0 && w[1] < 0 && w[1] > -1500) || // (q[1] < 49152 && q[1] > -196608 && w[1] < 3000 && w[1] > -1000)
-				(q[1] < 0 && q[1] > -196608 && w[1] < 1500 && w[1] > 0)) {
-					//swingMode = 1; // Switch to use balance controller
-					//modeFlags |= 0b1; // use balance offset estimator
+				if ((q[1] < 49152 && q[1] > -196608 && w[1] < 3000 && w[1] > -1000) || // (q[1] < 196608 && q[1] > 0 && w[1] < 0 && w[1] > -1500) // (q[1] < 49152 && q[1] > -196608 && w[1] < 3000 && w[1] > -1000)
+				(q[1] < 196608 && q[1] > -49152 && w[1] < 1000 && w[1] > -3000)) {
+					swingMode = 1; // Switch to use balance controller
+					modeFlags |= 0b1; // use balance offset estimator
 				}
 			}
         }
@@ -1612,8 +1603,8 @@ void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw){
         pitO[0] = pitch;
         #elif ROBOT_NAME == SALTO_1P_RUDOLPH
         // Period of 8 cycles, 0.125 bandwidth
-        pitch = (75*(int32_t)pitO[1] - 43*(int32_t)pitO[2]
-            + 53*(int32_t)pitI[0] - 75*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
+        pitch = (96*(int32_t)pitO[1] - 43*(int32_t)pitO[2]
+            + 53*(int32_t)pitI[0] - 96*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
         pitO[0] = pitch;
         #else
         #endif
@@ -2060,6 +2051,28 @@ int32_t forceControl(int16_t length, int16_t p, int16_t d, int16_t f, int16_t ad
 	} else {
 		returnable = returnable < -100*65536 ? -100*65536: returnable > 100*65536 ? 100*65536: returnable;
 	}
+	return returnable;
+}
+
+int32_t forceSetpoint(int16_t r_des, int16_t rd_des, int16_t k1, int16_t k2){
+	// r_des in 2^16 ticks per m
+	// rd_des in 2000 ticks per m/s
+	// k1 in 2^0 ticks per unit
+	// k2 in 2^6 ticks per unit
+	// FULL_MASS in 2^8 ticks per kg
+	int16_t k = 5; // k in 2^4 ticks per N/m
+	int16_t femurInd = femur/64 < 0 ? 0: femur/64 > 255 ? 255: femur/64;
+	
+	int16_t legError = leg - r_des >> 6;
+	legError = legError > 64 ? 64: legError < -64 ? -64: legError;
+	int16_t velError = (legVel - rd_des<<2)/2000;
+	int16_t rdd_des = (k1*(legError)>>2) + k2*(velError);
+
+	int16_t divider = (((int16_t)(MA_femur_256lut[femurInd]>>9))*k>>2);
+	divider = divider == 0 ? 1 : divider;
+	int16_t motorAngle = ((FULL_MASS*rdd_des>>8)/(divider) + (crank>>8)) * 25 ;
+	returnable = ((int32_t) motorAngle) << 10;
+	returnable = returnable < 0*65536 ? 0*65536: returnable > 100*65536 ? 100*65536: returnable;
 	return returnable;
 }
 

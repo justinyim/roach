@@ -241,7 +241,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
     ptr->voltage = sensor_data->voltage;
     ptr->crank = crank;
-    ptr->force = r; //q1offset;//leg_adjust;//swingTime;//fCentripetal; //returnable>>8; //r;
+    ptr->force = legVel; //q1offset;//leg_adjust;//swingTime;//fCentripetal; //returnable>>8; //r //legVel;
     ptr->foot = leg;
     ptr->footVel = returnable>>8;//t1_ticks;
 }

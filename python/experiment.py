@@ -105,8 +105,8 @@ def main():
         angle = [3667*3.14159]
 
         #motorgains = [0,0,0, 0,0,0, 200,12,0,12]
-        motorgains = [40,20,0, 40,20,0, 200,12,0,0]
-        #motorgains = [0,0,0, 0,0,0, 200,12,0,0]
+        #motorgains = [40,20,0, 40,20,0, 200,12,0,0]
+        motorgains = [0,0,0, 0,0,0, 200,12,0,0]
         xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
 
         viconTest = [0,0,0,0,0,0,0*256,0*256]#55*256,70*256]

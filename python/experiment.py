@@ -98,7 +98,7 @@ def main():
         '''
 
 
-        '''
+        #'''
         # Swing-up pendulum test
         exp = [2]
         arbitrary = [0]
@@ -132,13 +132,13 @@ def main():
         time.sleep(0.01)
 
         #modeSignal = [7]
-        modeSignal = [33]#[32]
+        modeSignal = [64]#[33]#[32]
         xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
         time.sleep(0.01)
 
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
         time.sleep(0.1)
-        '''
+        #'''
 
 
         '''
@@ -173,7 +173,7 @@ def main():
         '''
 
 
-        #'''
+        '''
         # Balance on toe test
         #Start robot 0: wall jump, 1: single jump, 2: vicon jumps
         exp = [2]
@@ -534,7 +534,7 @@ def main():
         #     time.sleep(1.0/fCmd)
         # time.sleep(2.0)
 
-        #'''
+        '''
 
         '''
         # Foot buzzing (new balance control)

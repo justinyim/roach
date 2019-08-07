@@ -76,6 +76,7 @@ void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint3
 void orientImageproc(int32_t* v_b, int16_t* v_ip);
 int32_t calibPos(uint8_t idx);
 int32_t forceControl(int16_t length, int16_t p, int16_t d, int16_t f, int16_t addon);
+int32_t forceSetpoint(int16_t r_des, int16_t rd_des, int16_t k1, int16_t k2);
 int32_t cmdLegLen(int16_t leg);
 int32_t cosApprox(int32_t x);
 int32_t sqrtApprox(int32_t n);

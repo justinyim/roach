@@ -207,13 +207,13 @@ def main():
         xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
         time.sleep(0.01)
 
-        viconTest = [0,0,0, 0,3667*0.7*3.14159/180,0, 3*256,0*256]#55*256,70*256]
+        viconTest = [0,0,0, 0,3667*-0.5*3.14159/180,0, 3*256,0*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(0.01)
 
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
         time.sleep(0.01)
-        time.sleep(1.5)#2.0)
+        #time.sleep(1.5)#2.0)
 
         #motorgains = [200,0,22,0,0, 0,0,0,0,0]
         #motorgains = [130,0,13,0,5, 0,0,0,0,0]
@@ -224,7 +224,7 @@ def main():
 
         #time.sleep(15.0)
 
-        time.sleep(1.0)
+        time.sleep(1.5)
         # countDown = 2
         # for x in range(countDown):
         #     print countDown-x
@@ -428,19 +428,32 @@ def main():
 
 
         # Slow extension
+        tiltCmd = [0, 0.02*938.7, 0, 0]
+        xb_send(0, command.TILT, pack('4h', *tiltCmd))
+        time.sleep(0.01)
         viconTest = [0,0,0, 0,0,0, 25*256,40*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        time.sleep(0.12)
+        time.sleep(0.07)
+        tiltCmd = [0, 0.02*938.7, 0, 0]
+        xb_send(0, command.TILT, pack('4h', *tiltCmd))
+        time.sleep(0.08)
         viconTest = [0,0,0, 0,0,0, 90*256,90*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(0.1)
-        viconTest = [0,0,0, 0,0,0, 45*256,20*256]#55*256,70*256]
+        viconTest = [0,0,0, 0,0,0, 50*256,25*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(0.02)
         modeSignal = [23+32]
         xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
         time.sleep(0.1)
 
+        time.sleep(1.5)
+        viconTest = [0,0,0, 0,0,0, 15*256,15*256]#55*256,70*256]
+        xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+        time.sleep(1.0)
+        viconTest = [0,0,0, 0,0,0, 0*256,0*256]#55*256,70*256]
+        xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+        time.sleep(0.02)
 
 
         # # Extend leg, then do other things

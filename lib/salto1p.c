@@ -191,9 +191,11 @@ uint32_t u_time = 0;        // Time tilt command was set
 #define IX_CG 98    // moment of inertia about CG x axis (9.3E-5 N m^2)
 #define IY_MOT 1    // moment of inertia of motor (594E-9 N m^2)
 #if ROBOT_NAME == SALTO_1P_DASHER
-#define IY_TAIL 34  // tail moment of inertia (less than 0.07^2*0.008 N m^2)
+#define IY_TAIL 34  // tail moment of inertia (less than 0.07^2*0.008 kg m^2)
+#elif ROBOT_NAME == SALTO_1P_RUDOLPH
+#define IY_TAIL 90  // tail moment of inertial (less than 0.064^2*0.021 kg m^2)
 #else
-#define IY_TAIL 36  // tail moment of inertia (less than 0.07^2*0.008 N m^2)
+#define IY_TAIL 36  // tail moment of inertia (less than 0.07^2*0.008 kg m^2)
 #endif
 int32_t I_cg = 734; // 2^20 ticks/(kg m^2)
 int32_t Iy = 860; // 2^20 ticks/(kg m^2)
@@ -388,9 +390,9 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
             + 53*(int32_t)wyI[0] - 79*(int32_t)wyI[1] + 53*(int32_t)wyI[2])>>6;
         wyO[0] = w[1];
         #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-        // Period of 12 cycles, 0.125 bandwidth
-        w[1] = (92*(int32_t)wyO[1] - 43*(int32_t)wyO[2]
-            + 53*(int32_t)wyI[0] - 92*(int32_t)wyI[1] + 53*(int32_t)wyI[2])>>6;
+        // Period of 14 cycles, 0.125 bandwidth
+        w[1] = (96*(int32_t)wyO[1] - 43*(int32_t)wyO[2]
+            + 53*(int32_t)wyI[0] - 96*(int32_t)wyI[1] + 53*(int32_t)wyI[2])>>6;
         wyO[0] = w[1];
         #else
         #endif
@@ -411,8 +413,10 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
                 (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND)
                 && !gainsPD[9]){ // gainsPD[9] is used to select new or old balance
                 balanceCtrl();
+                stanceLegCtrl();
             } else {
                 attitudeCtrl();
+                legCtrl();
             }
         } else if ((modeFlags>>6) == 1) {
             swingUpCtrl();
@@ -740,8 +744,6 @@ void jumpModes(void) {
                     mj_state = MJ_GND;
                 }
                 transition_time = t1_ticks;
-            } else { // remain in air state
-                send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_AIR, 2);
             }
             break;
 
@@ -752,8 +754,6 @@ void jumpModes(void) {
                     && crank > 8192) {
                 mj_state = MJ_AIR;
                 transition_time = t1_ticks;
-            } else { // remain in ground state
-                send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
             }
             break;
 
@@ -769,16 +769,6 @@ void jumpModes(void) {
                     mj_state = MJ_AIR;
                     transition_time = t1_ticks;
                 }
-            } else if (modeFlags & 0b10000) {
-                if (crank > 4096) {
-                    // slow down the jump
-                    send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_STAND, 2);
-                } else {
-                    // usual jump
-                    send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
-                }
-            } else { // remain in launch state
-                send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
             }
             break;
 
@@ -786,9 +776,6 @@ void jumpModes(void) {
             // No longer standing mode: jump!
             if (!(modeFlags & 0b10000)) {
                 mj_state = MJ_LAUNCH;
-            } else {
-                //send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_STAND, 2);
-                send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_STAND, 2);
             }
 
         case MJ_STOPPED:
@@ -1039,6 +1026,34 @@ void takeoffEstimation(void) {
     procFlags |= 0b10;
     //*/
     procFlags &= ~0b1;
+}
+
+void legCtrl(void) {
+    if (mj_state == MJ_GND) {
+        send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
+    } else if (mj_state == MJ_STAND) {
+        send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_STAND, 2);
+    } else if (mj_state == MJ_LAUNCH) {
+        if (modeFlags & 0b10000) {
+            if (crank > 4096) {
+                // slow down the jump
+                send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_STAND, 2);
+            } else {
+                // usual jump
+                send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
+            }
+        } else {
+            send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
+        }
+    } else if (mj_state == MJ_AIR) {
+        send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_AIR, 2);
+    } else {
+        send_command_packet(&uart_tx_packet_global, 0, 0, 0);
+    }
+}
+
+void stanceLegCtrl(void) {
+    
 }
 
 void balanceCtrl(void) {
@@ -1600,9 +1615,9 @@ void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw){
             + 53*(int32_t)pitI[0] - 79*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
         pitO[0] = pitch;
         #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-        // Period of 12 cycles, 0.125 bandwidth
-        pitch = (93*(int32_t)pitO[1] - 43*(int32_t)pitO[2]
-            + 53*(int32_t)pitI[0] - 93*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
+        // Period of 14 cycles, 0.125 bandwidth
+        pitch = (96*(int32_t)pitO[1] - 43*(int32_t)pitO[2]
+            + 53*(int32_t)pitI[0] - 96*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
         pitO[0] = pitch;
         #else
         #endif

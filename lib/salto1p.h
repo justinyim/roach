@@ -45,6 +45,8 @@ void flightUpdate(void);
 void flightStanceTrans(void);
 void stanceFlightTrans(void);
 void takeoffEstimation(void);
+void legCtrl(void);
+void stanceLegCtrl(void);
 void balanceCtrl(void);
 void balanceOffsetEstimator(void);
 int32_t deadbeatVelCtrl(int16_t* vi, int16_t* vo, int32_t* ctrl);

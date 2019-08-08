@@ -667,7 +667,7 @@ def main():
         '''
 
 
-        '''
+        #'''
         # small step calibration for crank 2
         # leg extension test with variable motor gains
         arbitrary = [0]
@@ -676,7 +676,7 @@ def main():
             legPosition = [x*256, 0.03*65536, 0.005*65536]
             xb_send(0, command.SET_MOTOR_POS, pack('3h', *legPosition))
             time.sleep(0.02)
-        '''
+        #'''
 
         '''
         # Toe pull-ups
@@ -693,7 +693,7 @@ def main():
         '''
 
 
-        '''
+        #'''
         # five leg extension points
         exp = [2]
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
@@ -710,7 +710,7 @@ def main():
         viconTest = [0,0,0,0,0,0,80*256,80*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(1)
-        '''
+        #'''
 
 
         time.sleep(params.duration / 500.0)

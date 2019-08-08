@@ -1530,7 +1530,8 @@ void swingUpCtrl(void) {
                 r;
 
             //send_command_packet(&uart_tx_packet_global, cmdLegLen(r), energy_gains, 2);
-			send_command_packet(&uart_tx_packet_global, forceSetpoint(leg, 600, 0, -100, -21), energy_gains, 2);
+			send_command_packet(&uart_tx_packet_global, cmdLegLen(11141), energy_gains, 2);
+			//send_command_packet(&uart_tx_packet_global, forceSetpoint(leg, 600, 0, -100, -21), energy_gains, 2);
 			
             if ((q[1] > 7*PI/8 || q[1] < -7*PI/8) && w[1] < 2000 && w[1] > -2000) {
                 // Tail pumping
@@ -2081,6 +2082,7 @@ int32_t forceControl(int16_t length, int16_t p, int16_t d, int16_t f, int16_t ad
 int32_t forceSetpoint(int16_t r_des, int16_t rd_des, int16_t rdd_des, int16_t k1, int16_t k2){
 	// r_des in 2^16 ticks per m
 	// rd_des in 2000 ticks per m/s
+	// rdd_des in 2^5 ticks per m/s^2
 	// k1 in 2^0 ticks per unit
 	// k2 in 2^0 ticks per unit
 	int16_t body_mass = 3; // body_mass in 2^5 ticks per kg
@@ -2093,8 +2095,8 @@ int32_t forceSetpoint(int16_t r_des, int16_t rd_des, int16_t rdd_des, int16_t k1
 
 	int16_t divider = (((int16_t)(MA_femur_256lut[femurInd]>>9))*k>>2);
 	divider = divider == 0 ? 1 : divider;
-	int16_t motorAngle = ((body_mass*accel>>7)/(divider) + (crank>>8)) * 25;
-	command = body_mass*rdd_des;
+	int16_t motorAngle = ((body_mass*rdd_des>>2 + body_mass*accel>>7)/(divider) + (crank>>8)) * 25;
+	command = body_mass*accel;
 	returnable = ((int32_t)motorAngle) << 10;
 	returnable = returnable < 0*65536 ? 0*65536: returnable > 100*65536 ? 100*65536: returnable;
 	return returnable + BLDC_MOTOR_OFFSET;

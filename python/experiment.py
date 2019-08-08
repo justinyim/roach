@@ -98,7 +98,7 @@ def main():
         '''
 
 
-        '''
+        #'''
         # Swing-up pendulum test
         exp = [2]
         arbitrary = [0]
@@ -132,13 +132,13 @@ def main():
         time.sleep(0.01)
 
         #modeSignal = [7]
-        modeSignal = [33]#[32]
+        modeSignal = [64]#[33]#[32]
         xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
         time.sleep(0.01)
 
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
         time.sleep(0.1)
-        '''
+        #'''
 
 
         '''
@@ -173,7 +173,7 @@ def main():
         '''
 
 
-        #'''
+        '''
         # Balance on toe test
         #Start robot 0: wall jump, 1: single jump, 2: vicon jumps
         exp = [2]
@@ -547,7 +547,7 @@ def main():
         #     time.sleep(1.0/fCmd)
         # time.sleep(2.0)
 
-        #'''
+        '''
 
         '''
         # Foot buzzing (new balance control)
@@ -667,7 +667,7 @@ def main():
         '''
 
 
-        '''
+        #'''
         # small step calibration for crank 2
         # leg extension test with variable motor gains
         arbitrary = [0]
@@ -676,7 +676,7 @@ def main():
             legPosition = [x*256, 0.03*65536, 0.005*65536]
             xb_send(0, command.SET_MOTOR_POS, pack('3h', *legPosition))
             time.sleep(0.02)
-        '''
+        #'''
 
         '''
         # Toe pull-ups
@@ -693,7 +693,7 @@ def main():
         '''
 
 
-        '''
+        #'''
         # five leg extension points
         exp = [2]
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
@@ -710,7 +710,7 @@ def main():
         viconTest = [0,0,0,0,0,0,80*256,80*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(1)
-        '''
+        #'''
 
 
         time.sleep(params.duration / 500.0)

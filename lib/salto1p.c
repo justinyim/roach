@@ -461,8 +461,8 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
     */
 
     // Previously in _T1Interrupt
-    t1_ticks++;
-    if (t1_ticks == T1_MAX) t1_ticks = 0;
+    //t1_ticks++;
+    //if (t1_ticks == T1_MAX) t1_ticks = 0;
 
 
     // Previously in _T1Interrupt
@@ -496,8 +496,8 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
     } else if (interrupt_count == 5) {
         interrupt_count = 0;
 
-        //if (t1_ticks == T1_MAX) t1_ticks = 0;
-        //    t1_ticks++;
+        if (t1_ticks == T1_MAX) t1_ticks = 0;
+            t1_ticks++;
     }
 
     _T1IF = 0;
@@ -551,13 +551,13 @@ void salto1p_functions(void) {
 
 // Other functions ============================================================
 void salto1pSetup(void) {
-    
+
     // Timer setup
-    SetupTimer1();
-    SetupTimer5();
-    
-    EnableIntT1; // turn on main interrupt
-    EnableIntT5; 
+    SetupTimer1(); // TODO: fix t1_ticks hack!! 
+    // Timer 1 interrupt must be run alongisde timer 5 in order for t1_ticks to
+    // increment; Timer 5 cannot run before motor setup, but motor setup
+    // requires t1_ticks!
+    EnableIntT1;
 
     // BLDC driver setup
     delay_ms(10);
@@ -574,6 +574,9 @@ void salto1pSetup(void) {
     delay_ms(10);
     send_command_packet(&uart_tx_packet_global, 0, (3*65536/4), 17);
 #endif
+    
+    SetupTimer5(); // turn on main interrupt
+    EnableIntT5;
 
 }
 
@@ -716,7 +719,7 @@ void jumpModes(void) {
     // Hacky e-stop if the robot falls over
     if ((mj_state != MJ_STOPPED) 
             && ((q[0] > PI/3 || q[0] < -PI/3)
-            || (q[1] > PI/3 || q[1] < -PI/3) && !(modeFlags & 0b100000) )) {
+            || ((q[1] > PI/3 || q[1] < -PI/3) && !(modeFlags & 0b100000)) )) {
         mj_state = MJ_STOP;
     }
 
@@ -1045,8 +1048,6 @@ void legCtrl(void) {
         }
     } else if (mj_state == MJ_AIR) {
         send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_AIR, 2);
-    } else {
-        send_command_packet(&uart_tx_packet_global, 0, 0, 0);
     }
 }
 

@@ -411,8 +411,10 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
                 (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND)
                 && !gainsPD[9]){ // gainsPD[9] is used to select new or old balance
                 balanceCtrl();
+                stanceLegCtrl();
             } else {
                 attitudeCtrl();
+                legCtrl();
             }
         } else if ((modeFlags>>6) == 1) {
             swingUpCtrl();
@@ -740,8 +742,6 @@ void jumpModes(void) {
                     mj_state = MJ_GND;
                 }
                 transition_time = t1_ticks;
-            } else { // remain in air state
-                send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_AIR, 2);
             }
             break;
 
@@ -752,8 +752,6 @@ void jumpModes(void) {
                     && crank > 8192) {
                 mj_state = MJ_AIR;
                 transition_time = t1_ticks;
-            } else { // remain in ground state
-                send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
             }
             break;
 
@@ -769,16 +767,6 @@ void jumpModes(void) {
                     mj_state = MJ_AIR;
                     transition_time = t1_ticks;
                 }
-            } else if (modeFlags & 0b10000) {
-                if (crank > 4096) {
-                    // slow down the jump
-                    send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_STAND, 2);
-                } else {
-                    // usual jump
-                    send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
-                }
-            } else { // remain in launch state
-                send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
             }
             break;
 
@@ -786,9 +774,6 @@ void jumpModes(void) {
             // No longer standing mode: jump!
             if (!(modeFlags & 0b10000)) {
                 mj_state = MJ_LAUNCH;
-            } else {
-                //send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_STAND, 2);
-                send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_STAND, 2);
             }
 
         case MJ_STOPPED:
@@ -1039,6 +1024,34 @@ void takeoffEstimation(void) {
     procFlags |= 0b10;
     //*/
     procFlags &= ~0b1;
+}
+
+void legCtrl(void) {
+    if (mj_state == MJ_GND) {
+        send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
+    } else if (mj_state == MJ_STAND) {
+        send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_STAND, 2);
+    } else if (mj_state == MJ_LAUNCH) {
+        if (modeFlags & 0b10000) {
+            if (crank > 4096) {
+                // slow down the jump
+                send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_STAND, 2);
+            } else {
+                // usual jump
+                send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
+            }
+        } else {
+            send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
+        }
+    } else if (mj_state == MJ_AIR) {
+        send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_AIR, 2);
+    } else {
+        send_command_packet(&uart_tx_packet_global, 0, 0, 0);
+    }
+}
+
+void stanceLegCtrl(void) {
+    
 }
 
 void balanceCtrl(void) {

@@ -186,6 +186,11 @@ int16_t u;                  // Tilt control
 int16_t ud;                 // Tilt control
 int16_t udd;                // Tilt control
 int16_t uddd;               // Tilt control
+int16_t rdes;				// Force control
+int16_t rddes;				// Force control
+int16_t rdddes;				// Force control
+int16_t k1des;				// Force control
+int16_t k2des;				// Force control
 uint32_t u_time = 0;        // Time tilt command was set
 #define IY_CG 126   // moment of inertia about CG y axis (1.2E-4 N m^2)
 #define IX_CG 98    // moment of inertia about CG x axis (9.3E-5 N m^2)
@@ -409,14 +414,13 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
             kinematicUpdate();
             modeEstimation();
             jumpModes();
+			legCtrl();
             if (modeFlags & 0b1 && 
                 (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND)
                 && !gainsPD[9]){ // gainsPD[9] is used to select new or old balance
                 balanceCtrl();
-                stanceLegCtrl();
             } else {
                 attitudeCtrl();
-                legCtrl();
             }
         } else if ((modeFlags>>6) == 1) {
             swingUpCtrl();
@@ -1035,7 +1039,7 @@ void legCtrl(void) {
     if (mj_state == MJ_GND) {
         send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
     } else if (mj_state == MJ_STAND) {
-        send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_STAND, 2);
+		send_command_packet(&uart_tx_packet_global, forceSetpoint(rdes, rddes, rdddes, k1des, k2des)+BLDC_CMD_OFFSET, GAINS_GND, 2);
     } else if (mj_state == MJ_LAUNCH) {
         if (modeFlags & 0b10000) {
             if (crank > 4096) {
@@ -1051,10 +1055,6 @@ void legCtrl(void) {
     } else if (mj_state == MJ_AIR) {
         send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_AIR, 2);
     }
-}
-
-void stanceLegCtrl(void) {
-    
 }
 
 void balanceCtrl(void) {
@@ -1531,8 +1531,8 @@ void swingUpCtrl(void) {
                 r;
 
             //send_command_packet(&uart_tx_packet_global, cmdLegLen(r), energy_gains, 2);
-			send_command_packet(&uart_tx_packet_global, cmdLegLen(11141), energy_gains, 2);
-			//send_command_packet(&uart_tx_packet_global, forceSetpoint(leg, 600, 0, -100, -21), energy_gains, 2);
+			//send_command_packet(&uart_tx_packet_global, cmdLegLen(11141), energy_gains, 2);
+			send_command_packet(&uart_tx_packet_global, forceSetpoint(leg, 600, 0, -100, -21)+BLDC_MOTOR_OFFSET, energy_gains, 2);
 			
             if ((q[1] > 7*PI/8 || q[1] < -7*PI/8) && w[1] < 2000 && w[1] > -2000) {
                 // Tail pumping
@@ -1964,6 +1964,14 @@ void setTilt(int16_t u_in, int16_t ud_in, int16_t udd_in, int16_t uddd_in) {
     u_time = t1_ticks;
 }
 
+void setLeg(int16_t rdes_in, int16_t rddes_in, int16_t rdddes_in, int16_t k1des_in int16_t k2des_in) {
+		rdes = rdes_in;
+		rddes = rddes_in;
+		rdddes = rdddes_in;
+		k1des = k1des_in;
+		k2des = k2des_in;
+}
+
 void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint32_t current, uint8_t flags){
     // Send UART command packets to the MBed KL25Z Brushless DC Motor Driver.
     // 
@@ -2096,11 +2104,11 @@ int32_t forceSetpoint(int16_t r_des, int16_t rd_des, int16_t rdd_des, int16_t k1
 
 	int16_t divider = (((int16_t)(MA_femur_256lut[femurInd]>>9))*k>>2);
 	divider = divider == 0 ? 1 : divider;
-	int16_t motorAngle = ((body_mass*rdd_des>>2 + body_mass*accel>>7)/(divider) + (crank>>8)) * 25;
+	int16_t motorAngle = (((body_mass*rdd_des>>2) + (body_mass*accel>>7))/(divider) + (crank>>8)) * 25;
 	command = body_mass*accel;
 	returnable = ((int32_t)motorAngle) << 10;
 	returnable = returnable < 0*65536 ? 0*65536: returnable > 100*65536 ? 100*65536: returnable;
-	return returnable + BLDC_MOTOR_OFFSET;
+	return returnable;
 }
 
 int32_t cmdLegLen(int16_t r) {

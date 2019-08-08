@@ -59,6 +59,7 @@ static unsigned char cmdGVectAtt(unsigned char type, unsigned char status, unsig
 static unsigned char cmdSetVelocity(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdAdjustBodyAngle(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdTilt(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
+static unsigned char cmdStance(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 
 //Motor and PID functions
 static unsigned char cmdSetThrustOpenLoop(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
@@ -114,6 +115,7 @@ void cmdSetup(void) {
     cmd_func[CMD_SET_VELOCITY] = &cmdSetVelocity;
     cmd_func[CMD_ADJUST_BODY_ANG] = &cmdAdjustBodyAngle;
     cmd_func[CMD_TILT] = &cmdTilt;
+    cmd_func[CMD_STANCE] = &cmdStance;
 }
 
 void cmdPushFunc(MacPacket rx_packet) {
@@ -352,6 +354,23 @@ unsigned char cmdTilt(unsigned char type, unsigned char status, unsigned char le
     int16_t uddd = (int16_t)frame[6] + ((int16_t)frame[7]<<8);
 
     setTilt(u,ud,udd,uddd);
+    return 1;
+}
+
+unsigned char cmdTilt(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
+    int16_t u = (int16_t)frame[0] + ((int16_t)frame[1]<<8);
+    int16_t ud = (int16_t)frame[2] + ((int16_t)frame[3]<<8);
+    int16_t udd = (int16_t)frame[4] + ((int16_t)frame[5]<<8);
+    int16_t uddd = (int16_t)frame[6] + ((int16_t)frame[7]<<8);
+    
+    int16_t r = (int16_t)frame[8] + ((int16_t)frame[9]<<8);
+    int16_t rd = (int16_t)frame[10] + ((int16_t)frame[11]<<8);
+    int16_t rdd = (int16_t)frame[12] + ((int16_t)frame[13]<<8);
+    int16_t k1 = (int16_t)frame[14] + ((int16_t)frame[15]<<8);
+    int16_t k2 = (int16_t)frame[16] + ((int16_t)frame[17]<<8);
+
+    setTilt(u,ud,udd,uddd);
+    setLeg(r,rd,rdd,k1,k2);
     return 1;
 }
 

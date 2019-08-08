@@ -121,6 +121,7 @@ int32_t w500[3];            // Attitude sum for 500Hz Euler update
 int32_t wLast[3];           // Last angular velocity for computing q500
 
 int32_t gdataBody[3];       // Raw gyro data in the body frame
+int32_t xldataBody[3];      // Raw accelerometer data in body frame
 int16_t vB[3];              // CG vel in world aligned to the body-fixed frame
 
 int32_t mot;                // Motor angle [2^14 ticks/rad at the gear]
@@ -374,7 +375,8 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         }
     }
 
-    if (modeFlags & 0b1 && 
+    if (!(t1_ticks%2) &&
+        modeFlags & 0b1 && 
         (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND)) {
         // Notch filter for pitch
         wyI[2] = wyI[1];
@@ -483,6 +485,7 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
         mpuGetXl(xldata); // Similarly, this should only be called once
         // Attitude
         orientImageproc(gdataBody, gdata); // orient gyro readings to body
+        orientImageproc(xldataBody, xldata); // orient gyro readings to body
     }
 
     if (interrupt_count == 3) {
@@ -1130,7 +1133,7 @@ void balanceCtrl(void) {
     // For w[1]=2^15, l=0.25m: M ~= 1700*2^15/2^16 ~= 2^26/2^16 = 2^10
 
     int32_t Md = q[1];
-    int32_t Mdd = w[1];
+    int32_t Mdd = w[1];// + ((int32_t)legVel*q[1]/(int32_t)leg >> 5);
     // 1000*2000/2^16 conversion ~= 30.52 ~= >>5
 
     // Mddd is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s^2)
@@ -1145,7 +1148,12 @@ void balanceCtrl(void) {
     // For w[1]=2^15, q[1]=pi: qdd1H22 ~= 50*2^21/2^5 = 2^22
 
     // qdd2H22 is in 2^30/(2000*pi/180)~=30760000 ticks/(N m)
-    int32_t qdd2H22 = ((mgc*sin_theta*29)>>COS_PREC) - (Iy*(Mddd>>5));
+    int32_t qdd2H22 = ((mgc*sin_theta*29)>>COS_PREC) - (Iy*(
+            (Mddd>>5)
+            //- (((q[2]>>10) * (int32_t)w[1] >> 10) * (int32_t)w[1] >> 10)
+            //+ ((int32_t)legVel*(int32_t)w[1]/(int32_t)leg << 5)
+            //+ ((int32_t)xldataBody[2]*q[1]/(int32_t)leg >> 16)
+            ));
     // mgc is in 2^20 ticks/(N m): conversion is 2^10/(2000*pi/180) ~= 29.3354
     // For q[1]=pi/2, l=0.25m: term1 = 1013*2^8*2^7 = 2^25, term2 ~= 229*2^21 = 2^29
 

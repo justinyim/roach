@@ -868,7 +868,7 @@ void swingUpEstimation(void) {
 	// wSquared is in 2^4 ticks/(rad/s)^2; conversion ~= 1/55076
     #define GRAV_SQUARED 24636 // 96.2 in 2^8 ticks/(m^2/s^4)
     #define LEG_CHANGE 180//120 //66
-	#define LEG_OFFSET 1835
+	#define LEG_OFFSET 0//1835 for branch swinging
 	
 	leg = leg + LEG_OFFSET;
 	
@@ -1476,7 +1476,7 @@ void swingUpCtrl(void) {
         kinematicUpdate();
         modeEstimation();
 		
-        if (swingMode) {
+        if (0 && swingMode) {
             // Balance on toe
             balanceCtrl();
 
@@ -1497,22 +1497,21 @@ void swingUpCtrl(void) {
 				r > 10485 ? 10485 : // 13107
 				r;
 			
-			//r = 10485;
-
+			
+			// Starting initially at bottom, for ease of pushing
 			if ((q[1] > 7*PI/8 || q[1] < -7*PI/8) && w[1] < 1000 && w[1] > -1000) {
 				r = 10485;
 			}
 			
+			// Leg commands
 			if (r >= leg) {
-				send_command_packet(&uart_tx_packet_global, cmdLegLen(r) + forceControl(r,0,9,fCentripetal*2,1), energy_gains, 2); // r 0 8 fCentripetal 1
+				send_command_packet(&uart_tx_packet_global, cmdLegLen(r) + forceControl(r,0,9,fCentripetal,1), energy_gains, 2); // r 0 9 fCentripetal*2 1 for branch
 			} else {
-				send_command_packet(&uart_tx_packet_global, cmdLegLen(r) + forceControl(r,0,0,fCentripetal*2,1), energy_gains, 2);
+				send_command_packet(&uart_tx_packet_global, cmdLegLen(r) + forceControl(r,0,9,fCentripetal,1), energy_gains, 2); // r 0 0 fCentripetal*2 1 for branch
 			}
 			
-			//send_command_packet(&uart_tx_packet_global, cmdLegLen(r), energy_gains, 2);
-			// Leg pumping to add energy
-						
-			if (0 && (q[1] > 7*PI/8 || q[1] < -7*PI/8) && w[1] < 2000 && w[1] > -2000) { //CCC
+									
+			if (0 && (q[1] > 7*PI/8 || q[1] < -7*PI/8) && w[1] < 2000 && w[1] > -2000) {
 				// Tail pumping
 				if (w[1] > -500 && q[1] > 0) {
 					tailCmd = -2000;
@@ -1525,7 +1524,7 @@ void swingUpCtrl(void) {
 				tailMotor = tailLinearization(&tailCmd); // Linearizing the actuator response
 			}
 
-			tiHSetDC(0+1, tailMotor); // send tail command to H-bridge
+			//tiHSetDC(0+1, tailMotor); // send tail command to H-bridge
 			if (q[1] < 196608 && q[1] > -196608) {
 				if (w[1] > 0) {
 					swingTime = 2;
@@ -1534,8 +1533,8 @@ void swingUpCtrl(void) {
 				}
 				if ((q[1] < 49152 && q[1] > -196608 && w[1] < 3000 && w[1] > -1000) || // (q[1] < 196608 && q[1] > 0 && w[1] < 0 && w[1] > -1500) // (q[1] < 49152 && q[1] > -196608 && w[1] < 3000 && w[1] > -1000)
 				(q[1] < 196608 && q[1] > -49152 && w[1] < 1000 && w[1] > -3000)) {
-					swingMode = 1; // Switch to use balance controller
-					modeFlags |= 0b1; // use balance offset estimator
+					//swingMode = 1; // Switch to use balance controller
+					//modeFlags |= 0b1; // use balance offset estimator
 				}
 			}
         }

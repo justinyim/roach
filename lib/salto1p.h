@@ -24,7 +24,7 @@
 #define GRAV_ACC 39         // -9.81 m/s^2 * (2^2 ticks/(m/s^2))
 
 #define MAX_THROT 3800
-#define MAX_TAIL 4000
+#define MAX_TAIL 3960
 
 // Setup
 void salto1pSetup(void);
@@ -69,7 +69,7 @@ void expStop(uint8_t stopSignal);
 void setOnboardMode(uint8_t flags, uint8_t mode);
 void setVelocitySetpoint(int16_t* newCmd, int32_t newYaw);
 void setTilt(int16_t u_in, int16_t ud_in, int16_t udd_in, int16_t uddd_in);
-void setLeg(int16_t rdes_in, int16_t rddes_in, int16_t rdddes_in, int16_t k1des_in int16_t k2des_in);
+void setLeg(int16_t rdes_in, int16_t rddes_in, int16_t rdddes_in, int16_t k1des_in, int16_t k2des_in);
 
 // Other
 void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint32_t current, uint8_t flags);

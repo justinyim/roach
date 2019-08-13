@@ -42,13 +42,14 @@ int32_t gainsPD[10];      // PD controller gains (yaw, rol, pit) (P, D, other)
 
 #define TAIL_ALPHA 25 // Low pass tail velocity out of 128
 #define W_ALPHA 64  // Low pass body angular velocity out of 256 (RC = 0.003 s)
+#define TAIL_CMD_ALPHA 4  // Low pass tail PWM out of 8
 
 #define P_AIR ((3*65536)/100) // leg proportional gain in the air (duty cycle/rad * 65536)
 #define D_AIR ((0*65536)/1000) // leg derivative gain in the air (duty cycle/[rad/s] * 65536)
 #define P_GND ((5*65536)/10) // leg proportional gain on the ground
-#define D_GND ((1*65536)/1000)
-#define P_STAND ((2*65536)/100) // leg proportional gain for standing
-#define D_STAND ((4*65536)/10000)
+#define D_GND ((3*65536)/1000)
+#define P_STAND ((2*65536)/100) //((1*65536)/10) // leg proportional gain for standing
+#define D_STAND ((4*65536)/10000) //((1*65536)/1000)
 
 uint32_t GAINS_AIR = (P_AIR<<16)+D_AIR;
 uint32_t GAINS_GND = (P_GND<<16)+D_GND;
@@ -146,7 +147,6 @@ int32_t sin_psi = 0;        // yaw angle
 int32_t cos_psi = 1<<COS_PREC;
 
 int32_t returnable; // TODO delete only for testing purposes
-int32_t command;
 
 
 // Attitude actuator notch filters
@@ -249,6 +249,9 @@ int32_t uCmd;
 #define CK2_UP 27 // command filter 1/((z+z)/(z*z))
 #define CK1_UP 3 // command filter 1/(1/z+1/z+1/z)
 
+#define THE_LIMIT 187750
+#define PHI_LIMIT 93873
+
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
 // poles -9, -9, -9
 #define K0 -729// in 1 tick/(rad/s^3)
@@ -265,6 +268,9 @@ int32_t uCmd;
 #define CK2_UP 12 // command filter 1/(3/(z*z))
 #define CK1_UP 2 // command filter 1/(1/z+1/z+1/z)
 
+#define THE_LIMIT 187750
+#define PHI_LIMIT 93873
+
 #else
 // poles -9, -9, -9
 #define K0 -729// in 1 tick/(rad/s^3)
@@ -280,6 +286,9 @@ int32_t uCmd;
 #define CK3_UP 729 // command filter (z*z*z)
 #define CK2_UP 27 // command filter 1/(3/(z*z))
 #define CK1_UP 3 // command filter 1/(1/z+1/z+1/z)
+
+#define THE_LIMIT 187750
+#define PHI_LIMIT 93873
 
 #endif
 //*/
@@ -319,6 +328,10 @@ int32_t last_mot;
 
 #define TAIL_BRAKE 20
 #define TAIL_REVERSE 7
+
+int32_t originalLegSetpoint;
+int32_t originalPushoffCmd;
+uint8_t keepLanding = 1;
 
 
 // Communications variables ---------------------------------------------------
@@ -382,7 +395,7 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         }
     }
 
-    if (!(t1_ticks%2) &&
+    if (
         modeFlags & 0b1 && 
         (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND)) {
         // Notch filter for pitch
@@ -396,6 +409,10 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         w[1] = (79*(int32_t)wyO[1] - 43*(int32_t)wyO[2]
             + 53*(int32_t)wyI[0] - 79*(int32_t)wyI[1] + 53*(int32_t)wyI[2])>>6;
         wyO[0] = w[1];
+        // Period of 15 cycles, 0.1 bandwidth
+        //w[1] = (101*(int32_t)wyO[1] - 46*(int32_t)wyO[2]
+        //    + 55*(int32_t)wyI[0] - 101*(int32_t)wyI[1] + 55*(int32_t)wyI[2])>>6;
+        //wyO[0] = w[1];
         #elif ROBOT_NAME == SALTO_1P_RUDOLPH
         // Period of 14 cycles, 0.125 bandwidth
         w[1] = (96*(int32_t)wyO[1] - 43*(int32_t)wyO[2]
@@ -516,6 +533,8 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void) {
 void salto1p_functions(void) {
     // Low priority processing to be run in the main loop
 
+    int32_t tempPushoffCmd;
+
     // Update yaw angle approximations
     cos_psi = cosApprox(q[2]);
     sin_psi = cosApprox(q[2]-PI/2);
@@ -536,8 +555,22 @@ void salto1p_functions(void) {
         if (mj_state == MJ_AIR) {
             vCmd[0] = 0;
             vCmd[1] = 0;
-            vCmd[2] = 0;
-            deadbeatVelCtrl(vB, vCmd, ctrl_vect);
+            if (vB[0] > 500 || vB[0] < -500 ||
+                vB[1] > 500 || vB[1] < -500) {
+                vCmd[2] = 5000;
+                pushoffCmd = deadbeatVelCtrl(vB, vCmd, ctrl_vect);
+                legSetpoint = ctrl_vect[2];
+            } else {
+                vCmd[2] = 4000;
+                tempPushoffCmd = deadbeatVelCtrl(vB, vCmd, ctrl_vect);
+                if (v[2] < -6000) {
+                    legSetpoint = ctrl_vect[2];
+                    pushoffCmd = tempPushoffCmd;
+                } else {
+                    legSetpoint = originalLegSetpoint;
+                    pushoffCmd = originalPushoffCmd;
+                }
+            }
             // MANUAL TUNING
             qCmd[1] = ctrl_vect[0]; // offset back by 0 deg (1<<13 ticks/deg), no scale fudge
             qCmd[0] = ctrl_vect[1]-8192; // offset by 1/2 deg, no scale fudge factor
@@ -748,10 +781,13 @@ void jumpModes(void) {
             // Ground contact transition out of air to ground
             if (t1_ticks - transition_time > 300
                     && (spring > 1500)) {
-                if (modeFlags & 0b10000) {
+                if (modeFlags & 0b10000
+                        && legSetpoint == originalLegSetpoint) {
                     mj_state = MJ_STAND;
+                    keepLanding = 1;
                 } else {
                     mj_state = MJ_GND;
+                    keepLanding = 0;
                 }
                 transition_time = t1_ticks;
             }
@@ -786,6 +822,19 @@ void jumpModes(void) {
             // No longer standing mode: jump!
             if (!(modeFlags & 0b10000)) {
                 mj_state = MJ_LAUNCH;
+            }
+            int32_t the_eff = q[1] + (int32_t)w[1]*100; // ~= qy + wy*Tt = qy + wy*0.1
+            int32_t phi_eff = q[0] + (int32_t)w[0]*100; // ~= qx + qx*Tt
+            if (!keepLanding ||
+                    the_eff > THE_LIMIT || the_eff < -THE_LIMIT || // 0.2*PI
+                    phi_eff > PHI_LIMIT || phi_eff < -PHI_LIMIT) {
+                keepLanding = 0;
+                if (t1_ticks - transition_time > 30
+                        && (spring < 500 || femur > FULL_EXTENSION)
+                        && crank > 8192) {
+                    mj_state = MJ_AIR;
+                    transition_time = t1_ticks;
+                }
             }
 
         case MJ_STOPPED:
@@ -1042,7 +1091,21 @@ void legCtrl(void) {
     if (mj_state == MJ_GND) {
         send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
     } else if (mj_state == MJ_STAND) {
-		send_command_packet(&uart_tx_packet_global, forceSetpoint(rdes, rddes, rdddes, k1des, k2des)+BLDC_CMD_OFFSET, GAINS_GND, 2);
+        if (!keepLanding) {
+            // Unrecoverable
+            if (v[2] < 6000) {
+                #ifdef FULL_POWER
+                send_command_packet(&uart_tx_packet_global, 90*65536+BLDC_CMD_OFFSET, GAINS_GND, 2);
+                #else
+                send_command_packet(&uart_tx_packet_global, 80*65536+BLDC_CMD_OFFSET, GAINS_GND, 2);
+                #endif
+            } else {
+                send_command_packet(&uart_tx_packet_global, 50*65536+BLDC_CMD_OFFSET, GAINS_GND, 2);
+            }
+        } else {
+            send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_STAND, 2);
+            //send_command_packet(&uart_tx_packet_global, forceSetpoint(rdes, rddes, rdddes, k1des, k2des)+BLDC_CMD_OFFSET, GAINS_STAND, 2);
+        }
     } else if (mj_state == MJ_LAUNCH) {
         if (modeFlags & 0b10000) {
             if (crank > 4096) {
@@ -1179,6 +1242,10 @@ void balanceCtrl(void) {
         tailTorque = 0;
     }
 
+    if (!keepLanding) {
+        // Unrecoverable: just zero the angular momentum
+        tailTorque = -TAIL_BRAKE*(tail_vel + TAIL_REVERSE*(w[1]>>8));
+    }
 
     // Attitude PD controllers
     int32_t qErr[3];
@@ -1621,14 +1688,14 @@ void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw){
         pitO[1] = pitO[0];
         #if ROBOT_NAME == SALTO_1P_DASHER
         // Period of 8.5 cycles, 0.125 bandwidth
-        pitch = (79*(int32_t)pitO[1] - 43*(int32_t)pitO[2]
+        pitO[0] = (79*(int32_t)pitO[1] - 43*(int32_t)pitO[2]
             + 53*(int32_t)pitI[0] - 79*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
-        pitO[0] = pitch;
+        pitch = (8-TAIL_CMD_ALPHA)*pitch + TAIL_CMD_ALPHA*pitO[0] >> 3; // low pass filter
         #elif ROBOT_NAME == SALTO_1P_RUDOLPH
         // Period of 14 cycles, 0.125 bandwidth
-        pitch = (96*(int32_t)pitO[1] - 43*(int32_t)pitO[2]
+        pitO[0] = (96*(int32_t)pitO[1] - 43*(int32_t)pitO[2]
             + 53*(int32_t)pitI[0] - 96*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
-        pitO[0] = pitch;
+        pitch = (8-TAIL_CMD_ALPHA)*pitch + TAIL_CMD_ALPHA*pitO[0] >> 3; // low pass filter
         #else
         #endif
         //*/
@@ -1654,7 +1721,17 @@ void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw){
 
     // Set motor PWM commands
     if (mj_state != MJ_STOP && mj_state != MJ_STOPPED && mj_state != MJ_IDLE) {
-        tiHSetDC(0+1, tailMotor);
+        if (mj_state == MJ_AIR &&
+            (tail_vel < -150 &&
+            tailCmd > -5*tail_vel ||
+            tail_vel > 150 &&
+            tailCmd < -5*tail_vel)) {
+            tiHChangeMode(1, TIH_MODE_BRAKE);
+            tiHSetDC(1, tailCmd > 0 ? 4000 : -4000);
+        } else {
+            tiHChangeMode(1, TIH_MODE_COAST);
+            tiHSetDC(0+1, tailMotor);
+        }
         tiHSetDC(2+1, foreThruster);
         tiHSetDC(3+1, aftThruster);
     } else {
@@ -1739,11 +1816,11 @@ int32_t tailLinearization(int32_t* tail){
 
     // Friction (stiction) compensation
     if (tail_vel < -20) {
-        tailOut -= 100;
+        tailOut -= 40;
     } else if (tail_vel > 20) {
-        tailOut += 100;
+        tailOut += 40;
     } else {
-        tailOut += 5*tail_vel;
+        tailOut += 2*tail_vel;
     }
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
     if (modeFlags & 0b1 &&
@@ -1789,10 +1866,12 @@ void setAttitudeSetpoint(long yaw, long roll, long pitch){
 
 void setLegSetpoint(long length){
     legSetpoint = length << 8;
+    originalLegSetpoint = legSetpoint;
 }
 
 void setPushoffCmd(long cmd){
     pushoffCmd = cmd << 8;
+    originalPushoffCmd = pushoffCmd;
 }
 
 void setMotorPos(uint32_t gain, long pos){
@@ -1972,12 +2051,16 @@ void setTilt(int16_t u_in, int16_t ud_in, int16_t udd_in, int16_t uddd_in) {
     u_time = t1_ticks;
 }
 
-void setLeg(int16_t rdes_in, int16_t rddes_in, int16_t rdddes_in, int16_t k1des_in int16_t k2des_in) {
-		rdes = rdes_in;
-		rddes = rddes_in;
-		rdddes = rdddes_in;
-		k1des = k1des_in;
-		k2des = k2des_in;
+void setLeg(int16_t rdes_in, int16_t rddes_in, int16_t rdddes_in, int16_t k1des_in, int16_t k2des_in) {
+    rdes = rdes_in;
+    rddes = rddes_in;
+    rdddes = rdddes_in;
+    k1des = k1des_in;
+    k2des = k2des_in;
+
+    if (mj_state == MJ_LAUNCH || mj_state == MJ_GND) {
+        mj_state = MJ_STAND;
+    }
 }
 
 void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint32_t current, uint8_t flags){
@@ -2102,19 +2185,17 @@ int32_t forceSetpoint(int16_t r_des, int16_t rd_des, int16_t rdd_des, int16_t k1
 	// rdd_des in 2^5 ticks per m/s^2
 	// k1 in 2^0 ticks per unit
 	// k2 in 2^0 ticks per unit
-	int16_t body_mass = 3; // body_mass in 2^5 ticks per kg
-	int16_t k = 5; // k in 2^4 ticks per N/m
+	#define k 5 // k in 2^4 ticks per N/m
 	int16_t femurInd = femur/64 < 0 ? 0: femur/64 > 255 ? 255: femur/64;
 	
-	int16_t legError = leg - r_des >> 6;
-	int32_t velError = (((int32_t)(legVel - rd_des)) << 10)/2000;
-	int16_t accel = k1*(legError) + (k2*(velError));
+	int32_t legError = leg - r_des >> 6;
+	int32_t velError = ((int32_t)(legVel - rd_des)) >> 1; // ~= 2^10 ticks/(m/s)
+	int32_t accel = (int32_t)k1*legError + (int32_t)k2*velError;
 
-	int16_t divider = (((int16_t)(MA_femur_256lut[femurInd]>>9))*k>>2);
+	int32_t divider = (int32_t)MA_femur_256lut[femurInd]*k >> 7;
 	divider = divider == 0 ? 1 : divider;
-	int16_t motorAngle = (((body_mass*rdd_des>>2) + (body_mass*accel>>7))/(divider) + (crank>>8)) * 25;
-	command = body_mass*accel;
-	returnable = ((int32_t)motorAngle) << 10;
+	int32_t motorAngle = (((FULL_MASS*(int32_t)rdd_des<<7) + (FULL_MASS*accel<<2))/(divider) + ((int32_t)crank)) * 25;
+	returnable = ((int32_t)motorAngle) << 2;
 	returnable = returnable < 0*65536 ? 0*65536: returnable > 100*65536 ? 100*65536: returnable;
 	return returnable;
 }

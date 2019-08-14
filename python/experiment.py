@@ -198,7 +198,7 @@ def main():
         xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
         time.sleep(0.01)
 
-        adjust = [0,-256,-128]#[0,192,-256]# 3667 ticks per radian, yaw, roll, pitch (64 ticks per degree)
+        adjust = [0,-128,-256]#[0,192,-256]# 3667 ticks per radian, yaw, roll, pitch (64 ticks per degree)
         xb_send(0, command.ADJUST_BODY_ANG, pack('3h', *adjust))
         time.sleep(0.01)
 

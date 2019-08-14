@@ -46,8 +46,8 @@ int32_t gainsPD[10];      // PD controller gains (yaw, rol, pit) (P, D, other)
 
 #define P_AIR ((3*65536)/100) // leg proportional gain in the air (duty cycle/rad * 65536)
 #define D_AIR ((0*65536)/1000) // leg derivative gain in the air (duty cycle/[rad/s] * 65536)
-#define P_GND ((5*65536)/10) // leg proportional gain on the ground
-#define D_GND ((3*65536)/1000)
+#define P_GND ((3*65536)/10) // leg proportional gain on the ground
+#define D_GND ((2*65536)/1000)
 #define P_STAND ((2*65536)/100) //((1*65536)/10) // leg proportional gain for standing
 #define D_STAND ((4*65536)/10000) //((1*65536)/1000)
 
@@ -199,7 +199,7 @@ uint32_t u_time = 0;        // Time tilt command was set
 #if ROBOT_NAME == SALTO_1P_DASHER
 #define IY_TAIL 34  // tail moment of inertia (less than 0.07^2*0.008 kg m^2)
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-#define IY_TAIL 90  // tail moment of inertial (less than 0.064^2*0.021 kg m^2)
+#define IY_TAIL 77  // tail moment of inertial (less than 0.064^2*0.018 kg m^2)
 #else
 #define IY_TAIL 36  // tail moment of inertia (less than 0.07^2*0.008 kg m^2)
 #endif
@@ -395,8 +395,7 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         }
     }
 
-    if (
-        modeFlags & 0b1 && 
+    if (modeFlags & 0b1 &&
         (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND)) {
         // Notch filter for pitch
         wyI[2] = wyI[1];
@@ -406,17 +405,17 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         wyO[1] = wyO[0];
         #if ROBOT_NAME == SALTO_1P_DASHER
         // Period of 8.5 cycles, 0.125 bandwidth
-        w[1] = (79*(int32_t)wyO[1] - 43*(int32_t)wyO[2]
-            + 53*(int32_t)wyI[0] - 79*(int32_t)wyI[1] + 53*(int32_t)wyI[2])>>6;
-        wyO[0] = w[1];
-        // Period of 15 cycles, 0.1 bandwidth
-        //w[1] = (101*(int32_t)wyO[1] - 46*(int32_t)wyO[2]
-        //    + 55*(int32_t)wyI[0] - 101*(int32_t)wyI[1] + 55*(int32_t)wyI[2])>>6;
+        //w[1] = (79*(int32_t)wyO[1] - 43*(int32_t)wyO[2]
+        //    + 53*(int32_t)wyI[0] - 79*(int32_t)wyI[1] + 53*(int32_t)wyI[2])>>6;
         //wyO[0] = w[1];
+        // Period of 15 cycles, 0.1 bandwidth
+        w[1] = (101*(int32_t)wyO[1] - 46*(int32_t)wyO[2]
+            + 55*(int32_t)wyI[0] - 101*(int32_t)wyI[1] + 55*(int32_t)wyI[2])>>6;
+        wyO[0] = w[1];
         #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-        // Period of 14 cycles, 0.125 bandwidth
-        w[1] = (96*(int32_t)wyO[1] - 43*(int32_t)wyO[2]
-            + 53*(int32_t)wyI[0] - 96*(int32_t)wyI[1] + 53*(int32_t)wyI[2])>>6;
+        // Period of 20 cycles, 0.1 bandwidth
+        w[1] = (105*(int32_t)wyO[1] - 46*(int32_t)wyO[2]
+            + 55*(int32_t)wyI[0] - 105*(int32_t)wyI[1] + 55*(int32_t)wyI[2])>>6;
         wyO[0] = w[1];
         #else
         #endif
@@ -787,7 +786,7 @@ void jumpModes(void) {
                     keepLanding = 1;
                 } else {
                     mj_state = MJ_GND;
-                    keepLanding = 0;
+                    keepLanding = 1;//0;
                 }
                 transition_time = t1_ticks;
             }
@@ -825,9 +824,9 @@ void jumpModes(void) {
             }
             int32_t the_eff = q[1] + (int32_t)w[1]*100; // ~= qy + wy*Tt = qy + wy*0.1
             int32_t phi_eff = q[0] + (int32_t)w[0]*100; // ~= qx + qx*Tt
-            if (!keepLanding ||
+            if (0 && (!keepLanding || // DISABLED
                     the_eff > THE_LIMIT || the_eff < -THE_LIMIT || // 0.2*PI
-                    phi_eff > PHI_LIMIT || phi_eff < -PHI_LIMIT) {
+                    phi_eff > PHI_LIMIT || phi_eff < -PHI_LIMIT)) {
                 keepLanding = 0;
                 if (t1_ticks - transition_time > 30
                         && (spring < 500 || femur > FULL_EXTENSION)
@@ -897,9 +896,22 @@ void stanceUpdate(void) {
     leg += legVel/31 * STEP_MS + 3*(legErr >> 2);
     // leg is in 1 m / 2^16 ticks
     // conversion from legVel*STEP_MS to leg is 1000000*2/2^16 or about 31
-    legVel += (((-GRAV_ACC + force/FULL_MASS) * STEP_MS) >> 1) + (legErr << 1);
+    legVel += (((force/FULL_MASS
+        - (GRAV_ACC*cos_theta*cos_phi>>(2*COS_PREC)) // gravity
+        + ((((int32_t)w[1]*(int32_t)w[1]>>10) + ((int32_t)w[0]*(int32_t)w[0]>>10))*(int32_t)leg >> 24) // Cengrifugal
+        ) * STEP_MS) >> 1) + (legErr << 1);
     // legVel is in 1 m/s / (1000*2 ticks)
     // acceleration is in m/s^2 / (2^2 ticks)
+
+    #if ROBOT_NAME == SALTO_1P_DASHER
+    if (leg < 5964 && legVel < 0) { // 9cm+1mm
+        legVel = 0;
+    }
+    #elif ROBOT_NAME == SALTO_1P_RUDOLPH
+    if (leg < 7000 && legVel < 0) { // 10.7cm
+        legVel = 0;
+    }
+    #endif
 
     v[0] = 0; // zero velocities; not really necessary
     v[1] = 0;
@@ -1130,7 +1142,7 @@ void balanceCtrl(void) {
     int32_t balanceLeg = leg;
 
     #if ROBOT_NAME == SALTO_1P_RUDOLPH
-    balanceLeg = leg + 2*655; // add 1 cm for gripper offset
+    //balanceLeg = leg + 2*655; // add 1 cm for gripper offset
     #endif
 
     // Constant parameters
@@ -1194,11 +1206,11 @@ void balanceCtrl(void) {
     }
 
     // M is in 2^15/(2000*pi/180)~=938.7 ticks/s
-    int32_t M = (Iy*w[1] + IY_TAIL*(w[1] + 173*tail_vel) + IY_MOT*motw)/mgc;
+    int32_t M = (Iy*w[1] + IY_TAIL*(w[1] + 173*tail_vel))/mgc;// + IY_MOT*motw)/mgc;
     // For w[1]=2^15, l=0.25m: M ~= 1700*2^15/2^16 ~= 2^26/2^16 = 2^10
 
     int32_t Md = q[1];
-    int32_t Mdd = w[1];// + ((int32_t)legVel*q[1]/(int32_t)leg >> 5);
+    int32_t Mdd = w[1];
     // 1000*2000/2^16 conversion ~= 30.52 ~= >>5
 
     // Mddd is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s^2)
@@ -1213,12 +1225,9 @@ void balanceCtrl(void) {
     // For w[1]=2^15, q[1]=pi: qdd1H22 ~= 50*2^21/2^5 = 2^22
 
     // qdd2H22 is in 2^30/(2000*pi/180)~=30760000 ticks/(N m)
-    int32_t qdd2H22 = ((mgc*sin_theta*29)>>COS_PREC) - (Iy*(
-            (Mddd>>5)
-            //- (((q[2]>>10) * (int32_t)w[1] >> 10) * (int32_t)w[1] >> 10)
-            //+ ((int32_t)legVel*(int32_t)w[1]/(int32_t)leg << 5)
-            //+ ((int32_t)xldataBody[2]*q[1]/(int32_t)leg >> 16)
-            ));
+    int32_t qdd2H22 = - (Iy*((Mddd>>5)))
+        + ((mgc*sin_theta*29)>>COS_PREC) // Gravitational compensation
+        + 2*((FULL_MASS*(int32_t)leg>>10)*(int32_t)legVel>>10)*(int32_t)w[1]; // Coriolis
     // mgc is in 2^20 ticks/(N m): conversion is 2^10/(2000*pi/180) ~= 29.3354
     // For q[1]=pi/2, l=0.25m: term1 = 1013*2^8*2^7 = 2^25, term2 ~= 229*2^21 = 2^29
 
@@ -1231,7 +1240,7 @@ void balanceCtrl(void) {
         #if ROBOT_NAME == SALTO_1P_DASHER
         tailTorque = tau2/461; // for 0.060 N m, it is 461.4
         #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-        tailTorque = tau2/500;
+        tailTorque = tau2/461;
         #else
         tailTorque = tau2/269;
         #endif
@@ -1692,9 +1701,9 @@ void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw){
             + 53*(int32_t)pitI[0] - 79*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
         pitch = (8-TAIL_CMD_ALPHA)*pitch + TAIL_CMD_ALPHA*pitO[0] >> 3; // low pass filter
         #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-        // Period of 14 cycles, 0.125 bandwidth
-        pitO[0] = (96*(int32_t)pitO[1] - 43*(int32_t)pitO[2]
-            + 53*(int32_t)pitI[0] - 96*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
+        // Period of 12 cycles, 0.125 bandwidth
+        pitO[0] = (86*(int32_t)pitO[1] - 43*(int32_t)pitO[2]
+            + 53*(int32_t)pitI[0] - 86*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
         pitch = (8-TAIL_CMD_ALPHA)*pitch + TAIL_CMD_ALPHA*pitO[0] >> 3; // low pass filter
         #else
         #endif

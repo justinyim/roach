@@ -109,7 +109,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     */
 
 
-    /*
+    //*
     // leg dynamics
     ptr->otherMode = 4;
     ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
@@ -118,7 +118,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->force = force;
     ptr->foot = leg;
     ptr->footVel = legVel;
-    */
+    //*/
     /*
     // body velocity
     ptr->otherMode = 5;
@@ -237,7 +237,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->foot = q1offset;
     ptr->footVel = t1_ticks;
     */
-	///*
+	/*
 	// Force control testing
 	ptr->otherMode = 5;
     ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
@@ -246,7 +246,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->force = v[0];//legVel; //
     ptr->foot = v[1];//leg;//
     ptr->footVel = v[2];//command;//returnable >> 8;//
-	//*/
+	*/
 }
 
 //This may be unneccesary, since the telemtry type isn't totally anonymous

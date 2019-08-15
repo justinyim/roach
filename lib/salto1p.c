@@ -54,6 +54,7 @@ int32_t gainsPD[10];      // PD controller gains (yaw, rol, pit) (P, D, other)
 uint32_t GAINS_AIR = (P_AIR<<16)+D_AIR;
 uint32_t GAINS_GND = (P_GND<<16)+D_GND;
 uint32_t GAINS_STAND = (P_STAND<<16)+D_STAND;
+uint32_t GAINS_ENERGY = (5*655*65536)+(20*7);
 
 #define TELEM_DECIMATE 2
 int32_t telemDecimateCount = 0;
@@ -1115,8 +1116,8 @@ void legCtrl(void) {
                 send_command_packet(&uart_tx_packet_global, 50*65536+BLDC_CMD_OFFSET, GAINS_GND, 2);
             }
         } else {
-            send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_STAND, 2);
-            //send_command_packet(&uart_tx_packet_global, forceSetpoint(rdes, rddes, rdddes, k1des, k2des)+BLDC_CMD_OFFSET, GAINS_STAND, 2);
+            //send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_STAND, 2);
+            send_command_packet(&uart_tx_packet_global, forceSetpoint(rdes, rddes, rdddes, k1des, k2des)+BLDC_CMD_OFFSET, GAINS_ENERGY, 2);
         }
     } else if (mj_state == MJ_LAUNCH) {
         if (modeFlags & 0b10000) {
@@ -2067,7 +2068,7 @@ void setLeg(int16_t rdes_in, int16_t rddes_in, int16_t rdddes_in, int16_t k1des_
     k1des = k1des_in;
     k2des = k2des_in;
 
-    if (mj_state == MJ_LAUNCH || mj_state == MJ_GND) {
+    if (mj_state == MJ_GND) {
         mj_state = MJ_STAND;
     }
 }
@@ -2191,9 +2192,23 @@ int32_t forceControl(int16_t length, int16_t p, int16_t d, int16_t f, int16_t ad
 int32_t forceSetpoint(int16_t r_des, int16_t rd_des, int16_t rdd_des, int16_t k1, int16_t k2){
 	// r_des in 2^16 ticks per m
 	// rd_des in 2000 ticks per m/s
-	// rdd_des in 2^5 ticks per m/s^2
+	// rdd_des in 2^10 ticks per m/s^2
 	// k1 in 2^0 ticks per unit
 	// k2 in 2^0 ticks per unit
+    #define k 5
+    int16_t femurInd = femur/64 < 0 ? 0: femur/64 > 255 ? 255: femur/64;
+    
+    int32_t legError = leg - r_des >> 6;
+    int32_t velError = legVel - rd_des >> 1; // ~= 2^10 ticks/(m/s)
+    int32_t accel = ((int32_t)k1)*legError + ((int32_t)k2)*velError;
+
+    int32_t divider = ((int32_t)MA_femur_256lut[femurInd]>>9)*k >> 2;
+    divider = divider == 0 ? 1 : divider;
+    int32_t motorAngle = (((FULL_MASS*(int32_t)rdd_des>>10) + (FULL_MASS*accel>>10))/(divider) + ((int32_t)crank>>8)) * 25;
+    returnable = ((int32_t)motorAngle) << 10;
+    returnable = returnable < 0*65536 ? 0*65536: returnable > 100*65536 ? 100*65536: returnable;
+    return returnable;
+    /*
 	#define k 5 // k in 2^4 ticks per N/m
 	int16_t femurInd = femur/64 < 0 ? 0: femur/64 > 255 ? 255: femur/64;
 	
@@ -2201,12 +2216,13 @@ int32_t forceSetpoint(int16_t r_des, int16_t rd_des, int16_t rdd_des, int16_t k1
 	int32_t velError = ((int32_t)(legVel - rd_des)) >> 1; // ~= 2^10 ticks/(m/s)
 	int32_t accel = (int32_t)k1*legError + (int32_t)k2*velError;
 
-	int32_t divider = (int32_t)MA_femur_256lut[femurInd]*k >> 7;
+	int32_t divider = (int32_t)MA_femur_256lut[femurInd]*k >> 9;
 	divider = divider == 0 ? 1 : divider;
-	int32_t motorAngle = (((FULL_MASS*(int32_t)rdd_des<<7) + (FULL_MASS*accel<<2))/(divider) + ((int32_t)crank)) * 25;
+	int32_t motorAngle = (((FULL_MASS*(int32_t)rdd_des>>4) + (FULL_MASS*accel>>4))/(divider) + ((int32_t)crank)) * 25;
 	returnable = ((int32_t)motorAngle) << 2;
 	returnable = returnable < 0*65536 ? 0*65536: returnable > 100*65536 ? 100*65536: returnable;
 	return returnable;
+    */
 }
 
 int32_t cmdLegLen(int16_t r) {

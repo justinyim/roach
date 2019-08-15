@@ -66,7 +66,7 @@ def main():
 
         '''
         # basic leg extension test
-        exp = [2]
+        
         arbitrary = [0]
         xb_send(0, command.RESET_BODY_ANG, pack('h', *arbitrary))
         time.sleep(0.02)
@@ -95,6 +95,32 @@ def main():
         legPosition = [30*256, 0.1*65535, 0.002*65535]
         # motor deflection [radians * 256], P gain [65535 * duty cyle/rad], D gain [65535 * duty cyle/(rad/s)]
         xb_send(0, command.SET_MOTOR_POS, pack('3H', *legPosition))
+        '''
+
+        '''
+        #New force control leg extension
+        modeSignal = [23+32]#[19]
+        xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+        time.sleep(0.02)
+
+        exp = [2]
+        xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
+        time.sleep(0.02)
+
+        tEnd = 8
+        l = 0.14
+        al = 0.02
+        wl = 0.5*2*3.14159
+
+        t0 = time.time()
+        t = 0.0
+        while t < tEnd:
+            t = time.time() - t0
+            cmd = [0, 0, 0, 0,\
+            (l+al*np.sin(wl*t))*2**16, (al*wl*np.cos(wl*t))*2000, (-al*wl*wl*np.sin(wl*t) + 9.81)*1024,\
+            -1000, -63]
+            xb_send(0, command.STANCE, pack('9h', *cmd))
+            time.sleep(0.02)
         '''
 
 
@@ -267,15 +293,24 @@ def main():
 
 
         # # Stand up and down
-        # tEnd = 10
-        # l = 0.15
-        # a = 0.0
-        # w = 0.25*2*3.14159
+        # viconTest = [0,0,0, 0,0,0, 25*256, 46*256]#55*256,70*256]
+        # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+        # time.sleep(0.5)
+
+        # tEnd = 8
+        # l = 0.14
+        # al = 0.02
+        # wl = 0.5*2*3.14159
+
+        # ap = 2*3.14159/180*938.7
+        # wp = 1*2*3.14159
         # t0 = time.time()
         # t = 0.0
         # while t < tEnd:
         #     t = time.time() - t0
-        #     cmd = [0, 0, 0, 0, (l+a*np.sin(w*t))*2**16, (a*w*np.cos(w*t))*2000, -(a*w*w*np.sin(w*t))*32, -1000, -64]
+        #     cmd = [ap/wp*np.cos(wp*t), -ap*np.sin(wp*t), -ap*wp*np.cos(wp*t), ap*wp*wp*np.sin(wp*t),\
+        #     (l+al*np.sin(wl*t))*2**16, (al*wl*np.cos(wl*t))*2000, (-al*wl*wl*np.sin(wl*t) + 9.81)*1024,\
+        #     -1000, -63]
         #     xb_send(0, command.STANCE, pack('9h', *cmd))
         #     time.sleep(0.02)
 

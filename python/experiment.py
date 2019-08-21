@@ -244,8 +244,9 @@ def main():
         #motorgains = [200,0,22,0,0, 0,0,0,0,0]
         #motorgains = [130,0,13,0,5, 0,0,0,0,0]
         #motorgains = [110,0,12,0,5, 0,0,0,0,0]
-        motorgains = [60,20,0, 60,50,0, 100,15,0,0] #[50,25,0, 180,140,0, 160,12,0,12]
+        motorgains = [70,40,0, 70,50,0, 100,15,0,0] #[50,25,0, 180,140,0, 160,12,0,12]
         #motorgains = [0,0,0, 0,0,0, 160,12,0,0]
+        #motorgains = [0,0,0, 0,0,0, 0,0,0,0]
         xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
 
         #time.sleep(15.0)
@@ -292,10 +293,23 @@ def main():
         # time.sleep(0.02)
 
 
-        # # Stand up and down
-        # viconTest = [0,0,0, 0,0,0, 25*256, 46*256]#55*256,70*256]
-        # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        # time.sleep(0.5)
+        # # # Stand force control
+        # # viconTest = [0,0,0, 0,0,0, 25*256, 50*256]#55*256,70*256]
+        # # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+        # # time.sleep(0.3)
+
+        # k1 = -4000 #2000
+        # k2 = -126 #-89
+        # tEnd = 1
+        # t0 = time.time()
+        # t = 0.0
+        # while t < tEnd:
+        #     t = time.time() - t0
+        #     cmd = [0,0,0,0,\
+        #     (t*0.05+0.09)*2**16, 0.0*2000, (0+9.81)*1024,\
+        #     k1, k2]
+        #     xb_send(0, command.STANCE, pack('9h', *cmd))
+        #     time.sleep(0.02)
 
         # tEnd = 8
         # l = 0.14
@@ -310,7 +324,7 @@ def main():
         #     t = time.time() - t0
         #     cmd = [ap/wp*np.cos(wp*t), -ap*np.sin(wp*t), -ap*wp*np.cos(wp*t), ap*wp*wp*np.sin(wp*t),\
         #     (l+al*np.sin(wl*t))*2**16, (al*wl*np.cos(wl*t))*2000, (-al*wl*wl*np.sin(wl*t) + 9.81)*1024,\
-        #     -1000, -63]
+        #     k1, k2]
         #     xb_send(0, command.STANCE, pack('9h', *cmd))
         #     time.sleep(0.02)
 
@@ -358,164 +372,170 @@ def main():
         # time.sleep(0.01)
 
 
-        # Balance controller sinusoidal tilt
-        tEnd = 10 # duration (s)
-        a = 5*3.14159/180*938.7 # amplitude (rad)
-        w = 1*2*3.14159 # angular velocity (rad/s)
-        t0 = time.time()
-        t = 0.0
-        while t < tEnd:
-            # ud is in 2^15/(2000*pi/180)~=938.7 ticks/rad
-            t = time.time() - t0
-            tiltCmd = [a/w*np.sin(w*t), a*np.cos(w*t), -a*w*np.sin(w*t), -a*w*w*np.cos(w*t)]
-            xb_send(0, command.TILT, pack('4h', *tiltCmd))
-            print tiltCmd
-            time.sleep(0.02)
-        tiltCmd = [0, 0, 0, 0]
-        xb_send(0, command.TILT, pack('4h', *tiltCmd))
-        time.sleep(0.02)
-        tiltCmd = [0, 0, 0, 0]
-        xb_send(0, command.TILT, pack('4h', *tiltCmd))
-        time.sleep(0.02)
-
-
-        # # Balance control tilt once to 9/4*a*tau^2 rad and 1/2*a*tau rad/s
-        # a = 0#-25.0# angular acceleration (rad/s^2)
-        # tau = 0.05#0.08#0.08# # time scale (s)
-        # toHop = 1 # make a small jump (1) or not (0)
-
-        # motorgains = [40,20,0, 120,80,0, 140,15,0,0]
-        # xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
-        # time.sleep(0.01)
-
+        # # Balance controller sinusoidal tilt
+        # tEnd = 10 # duration (s)
+        # a = 5*3.14159/180*938.7 # amplitude (rad)
+        # w = 1*2*3.14159 # angular velocity (rad/s)
         # t0 = time.time()
         # t = 0.0
-        # tEnd = 13.0*tau
         # while t < tEnd:
-        #     # Md is in 2^15/(2000*pi/180)~=938.7 ticks/rad
+        #     # ud is in 2^15/(2000*pi/180)~=938.7 ticks/rad
         #     t = time.time() - t0
-
-        #     if t < 0.0: # balance
-        #         Mddd = 0.0
-        #         Mdd = 0.0
-        #         Md = 0.0
-        #         M = 0.0
-        #     elif t < tau: # begin lean back
-        #         Mddd = -a
-        #         Mdd = -a*t
-        #         Md = -1.0/2.0*a*t**2.0
-        #         M = -1.0/6.0*a*t**3.0
-        #     elif t < 5.0*tau: # reverse lean toward forward
-        #         tr = t - tau
-        #         Mddd = 1.0/2.0*a
-        #         Mdd = -a*tau + 1.0/2.0*a*tr
-        #         Md = -1.0/2.0*a*tau**2.0 - a*tau*tr + 1.0/4.0*a*tr**2.0
-        #         M = -1.0/6.0*a*tau**3.0 - 1.0/2.0*a*tau**2.0*tr - 1.0/2.0*a*tau*tr**2.0 + 1.0/12.0*a*tr**3.0
-        #     elif t < 6.0*tau: # follow through forward tilt
-        #         tr = t - 5.0*tau
-        #         Mddd = 0.0
-        #         Mdd = a*tau
-        #         Md = -1.0/2.0*a*tau**2.0 + a*tau*tr
-        #         M = -29.0/6.0*a*tau**3.0 - 1.0/2.0*a*tau**2.0*tr + 1.0/2.0*a*tau*tr**2.0
-        #     elif t < 7.0*tau: # slow forward tilt
-        #         tr = t - 6.0*tau
-        #         Mddd = -1.0/2.0*a
-        #         Mdd = a*tau - 1.0/2.0*a*tr
-        #         Md = 1.0/2.0*a*tau**2.0 + a*tau*tr - 1.0/4.0*a*tr**2.0
-        #         M = -29.0/6.0*a*tau**3.0 + 1.0/2.0*a*tau**2.0*tr + 1.0/2.0*a*tau*tr**2.0 - 1.0/12.0*a*tr**3.0;
-        #     elif t < (7.0+2.217+2.0)*tau: # hold forward tilt
-        #         tr = t - 7.0*tau
-        #         Mddd = 0.0
-        #         Mdd = 1.0/2.0*a*tau
-        #         Md = 5.0/4.0*a*tau**2.0 + 1.0/2.0*a*tau*tr
-        #         M = -24/6*a*tau**3.0 + 5.0/4.0*a*tau**2.0*tr + 1.0/4.0*tau*tr**2.0
-        #     else:
-        #         Mddd = 0.0
-        #         Mdd = 0.0
-        #         Md = 0.0
-        #         M = 0.0
-
-        #     t_launchStart = 9.217*tau - (0.16-0.04)#(0.16)
-
-        #     # Send tilt command
-        #     tiltCmd = [M*938.7, Md*938.7, Mdd*938.7, Mddd*938.7]
+        #     tiltCmd = [a/w*np.sin(w*t), a*np.cos(w*t), -a*w*np.sin(w*t), -a*w*w*np.cos(w*t)]
         #     xb_send(0, command.TILT, pack('4h', *tiltCmd))
         #     print tiltCmd
-        #     time.sleep(0.01)
+        #     time.sleep(0.02)
+        # tiltCmd = [0, 0, 0, 0]
+        # xb_send(0, command.TILT, pack('4h', *tiltCmd))
+        # time.sleep(0.02)
+        # tiltCmd = [0, 0, 0, 0]
+        # xb_send(0, command.TILT, pack('4h', *tiltCmd))
+        # time.sleep(0.02)
 
-        #     if t > t_launchStart and toHop == 1: # begin launch
-        #         # Normal
-        #         viconTest = [0,0,0,0,0,0,70*256,70*256]
-        #         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        #         time.sleep(0.01)
-        #         toHop = 2
 
-        #         # # Higher gains
-        #         # modeSignal = [1]#[7]
-        #         # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
-        #         # time.sleep(0.01)
+        # Balance control tilt once to 9/4*a*tau^2 rad and 1/2*a*tau rad/s
+        a = 0#-25.0# angular acceleration (rad/s^2)
+        tau = 0.05#0.08#0.08# # time scale (s)
+        toHop = 1 # make a small jump (1) or not (0)
+
+        motorgains = [40,20,0, 120,80,0, 140,15,0,0]
+        xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
+        time.sleep(0.01)
+
+        t0 = time.time()
+        t = 0.0
+        tEnd = 13.0*tau
+        while t < tEnd:
+            # Md is in 2^15/(2000*pi/180)~=938.7 ticks/rad
+            t = time.time() - t0
+
+            if t < 0.0: # balance
+                Mddd = 0.0
+                Mdd = 0.0
+                Md = 0.0
+                M = 0.0
+            elif t < tau: # begin lean back
+                Mddd = -a
+                Mdd = -a*t
+                Md = -1.0/2.0*a*t**2.0
+                M = -1.0/6.0*a*t**3.0
+            elif t < 5.0*tau: # reverse lean toward forward
+                tr = t - tau
+                Mddd = 1.0/2.0*a
+                Mdd = -a*tau + 1.0/2.0*a*tr
+                Md = -1.0/2.0*a*tau**2.0 - a*tau*tr + 1.0/4.0*a*tr**2.0
+                M = -1.0/6.0*a*tau**3.0 - 1.0/2.0*a*tau**2.0*tr - 1.0/2.0*a*tau*tr**2.0 + 1.0/12.0*a*tr**3.0
+            elif t < 6.0*tau: # follow through forward tilt
+                tr = t - 5.0*tau
+                Mddd = 0.0
+                Mdd = a*tau
+                Md = -1.0/2.0*a*tau**2.0 + a*tau*tr
+                M = -29.0/6.0*a*tau**3.0 - 1.0/2.0*a*tau**2.0*tr + 1.0/2.0*a*tau*tr**2.0
+            elif t < 7.0*tau: # slow forward tilt
+                tr = t - 6.0*tau
+                Mddd = -1.0/2.0*a
+                Mdd = a*tau - 1.0/2.0*a*tr
+                Md = 1.0/2.0*a*tau**2.0 + a*tau*tr - 1.0/4.0*a*tr**2.0
+                M = -29.0/6.0*a*tau**3.0 + 1.0/2.0*a*tau**2.0*tr + 1.0/2.0*a*tau*tr**2.0 - 1.0/12.0*a*tr**3.0;
+            elif t < (7.0+2.217+2.0)*tau: # hold forward tilt
+                tr = t - 7.0*tau
+                Mddd = 0.0
+                Mdd = 1.0/2.0*a*tau
+                Md = 5.0/4.0*a*tau**2.0 + 1.0/2.0*a*tau*tr
+                M = -24/6*a*tau**3.0 + 5.0/4.0*a*tau**2.0*tr + 1.0/4.0*tau*tr**2.0
+            else:
+                Mddd = 0.0
+                Mdd = 0.0
+                Md = 0.0
+                M = 0.0
+
+            t_launchStart = 9.217*tau - (0.16-0.04)#(0.16)
+
+            # Send tilt command
+            tiltCmd = [M*938.7, Md*938.7, Mdd*938.7, Mddd*938.7]
+            xb_send(0, command.TILT, pack('4h', *tiltCmd))
+            print tiltCmd
+            time.sleep(0.01)
+
+            if t > t_launchStart and toHop == 1: # begin launch
+                # Normal
+                viconTest = [0,0,0,0,0,0,40*256,65*256]
+                xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+                time.sleep(0.01)
+                toHop = 2
+
+                # # Higher gains
+                # modeSignal = [1]#[7]
+                # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+                # time.sleep(0.01)
                 
-        #     if t > 11.0*tau and toHop == 2: # prepare for landing
-        #         # # Make a few bounces, then stop
-        #         # modeSignal = [6]
-        #         # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
-        #         # time.sleep(0.01)
-        #         # toSend = [-2000, 0, 6000, 0]
-        #         # xb_send(0, command.SET_VELOCITY, pack('4h',*toSend))
-        #         # time.sleep(0.01)
+            if t > 11.0*tau and toHop == 2: # prepare for landing
+                # # Make a few bounces, then stop
+                # modeSignal = [6]
+                # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+                # time.sleep(0.01)
+                # toSend = [-2000, 0, 6000, 0]
+                # xb_send(0, command.SET_VELOCITY, pack('4h',*toSend))
+                # time.sleep(0.01)
 
-        #         # # Set angle bounce
-        #         # viconTest = [0,0,0, 0,0,3667*-3.0*3.14159/180, 60*256,90*256]#55*256,70*256]
-        #         # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        #         # time.sleep(0.01)
-        #         # modeSignal = [0]
-        #         # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
-        #         # time.sleep(0.01)
+                # # Set angle bounce
+                # viconTest = [0,0,0, 0,0,3667*-3.0*3.14159/180, 60*256,90*256]#55*256,70*256]
+                # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+                # time.sleep(0.01)
+                # modeSignal = [0]
+                # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+                # time.sleep(0.01)
 
-        #         # Hop once and stop
-        #         viconTest = [0,0,0, 0,0,0, 40*256,20*256]
-        #         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        #         time.sleep(0.01)
+                # Hop once and stop
+                viconTest = [0,0,0, 0,0,0, 50*256,25*256]
+                xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+                time.sleep(0.01)
 
-        # # time.sleep(0.2)
-        # # modeSignal = [0]
-        # # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
-        # # time.sleep(0.01)
-        # # viconTest = [0,0,0, 0,0,-1.5*3667, 40*256,20*256]
-        # # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        # # time.sleep(0.01)
+        # time.sleep(0.2)
+        # modeSignal = [0]
+        # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+        # time.sleep(0.01)
+        # viconTest = [0,0,0, 0,0,-1.5*3667, 40*256,20*256]
+        # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+        # time.sleep(0.01)
 
-        # # tiltCmd = [0, 0, 0, 0]
-        # # xb_send(0, command.TILT, pack('4h', *tiltCmd))
-        # # time.sleep(0.02)
+        # tiltCmd = [0, 0, 0, 0]
+        # xb_send(0, command.TILT, pack('4h', *tiltCmd))
+        # time.sleep(0.02)
         
-        # if toHop:
-        #     # Make a few bounces, then stop
-        #     time.sleep(0.7)
-        #     # modeSignal = [23]
-        #     # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
-        #     # time.sleep(0.01)
-        #     # viconTest = [0,0,0, 0,0,0, 45*256,25*256]
-        #     # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        #     # time.sleep(0.01)
+        if toHop:
+            # # Make a few bounces, then stop
+            # modeSignal = [23]
+            # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+            # time.sleep(0.01)
+            # viconTest = [0,0,0, 0,0,0, 45*256,25*256]
+            # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+            # time.sleep(0.01)
 
-        #     # # Enable if using higher gains
-        #     # time.sleep(0.1)
-        #     # modeSignal = [23]
-        #     # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
-        #     # time.sleep(0.01)
+            # # Enable if using higher gains
+            # time.sleep(0.1)
+            # modeSignal = [23]
+            # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+            # time.sleep(0.01)
+
+            # # New leg control
+            cmd = [0,0,0,0,\
+            (0.12)*2**16, 0.0*2000, (0+9.81)*1024,\
+            -2000, -89]
+            xb_send(0, command.STANCE, pack('9h', *cmd))
+            time.sleep(0.01)
             
-        #     # # Sit down
-        #     # time.sleep(1.5)
-        #     # viconTest = [0,0,0, 0,0,3667*-1*3.14159/180, 20*256,20*256]
-        #     # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        #     # time.sleep(1.0)
-        #     # viconTest = [0,0,0, 0,0,3667*-0*3.14159/180, 15*256,15*256]
-        #     # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        #     # time.sleep(1.0)
-        #     # viconTest = [0,0,0, 0,0,3667*-0*3.14159/180, 0*256,0*256]
-        #     # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        #     # time.sleep(2.0)
+            # # Sit down
+            # time.sleep(1.5)
+            # viconTest = [0,0,0, 0,0,3667*-1*3.14159/180, 20*256,20*256]
+            # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+            # time.sleep(1.0)
+            # viconTest = [0,0,0, 0,0,3667*-0*3.14159/180, 15*256,15*256]
+            # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+            # time.sleep(1.0)
+            # viconTest = [0,0,0, 0,0,3667*-0*3.14159/180, 0*256,0*256]
+            # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+            # time.sleep(2.0)
 
 
         # # Slow extension

@@ -63,6 +63,8 @@ extern int32_t command;
 extern int32_t qCmd[3];
 extern int32_t TOw[3];
 
+extern uint16_t t5_count;
+
 //void vrTelemGetData(unsigned char* ptr) {
 void vrTelemGetData(vrTelemStruct_t* ptr) {
 
@@ -109,7 +111,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     */
 
 
-    //*
+    /*
     // leg dynamics
     ptr->otherMode = 4;
     ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
@@ -118,17 +120,17 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->force = force;
     ptr->foot = leg;
     ptr->footVel = legVel;
-    //*/
-    /*
+    */
+    //*
     // body velocity
     ptr->otherMode = 5;
     ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
-    ptr->voltage = sensor_data->voltage;
+    ptr->voltage = t5_count;//sensor_data->voltage;
     ptr->crank = crank;
     ptr->force = v[0];
     ptr->foot = v[1];
     ptr->footVel = v[2];
-    */
+    //*/
     /*
     // onboard velocity control
     ptr->otherMode = 7;

@@ -449,7 +449,6 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
             kinematicUpdate();
             modeEstimation();
             jumpModes();
-            legCtrl();
             if (modeFlags & 0b1 && 
                 (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND)
                 && !gainsPD[9]){ // gainsPD[9] is used to select new or old balance
@@ -562,6 +561,7 @@ void salto1p_functions(void) {
     vB[1] = (-(int32_t)v[0]*sin_psi + (int32_t)v[1]*cos_psi)>>COS_PREC;//vi[1];
     vB[2] = v[2];
 
+    legCtrl();
     
     // Onboard trajectory
     if (modeFlags & 0b1000) {
@@ -612,13 +612,6 @@ void salto1p_functions(void) {
 // Other functions ============================================================
 void salto1pSetup(void) {
 
-    // Timer setup
-    SetupTimer1(); // TODO: fix t1_ticks hack!! 
-    // Timer 1 interrupt must be run alongisde timer 5 in order for t1_ticks to
-    // increment; Timer 5 cannot run before motor setup, but motor setup
-    // requires t1_ticks!
-    EnableIntT1;
-
     // BLDC driver setup
     delay_ms(10);
     send_command_packet(&uart_tx_packet_global, 0, BLDC_CALIB, 16); // set BLDC angle offset
@@ -635,6 +628,9 @@ void salto1pSetup(void) {
     send_command_packet(&uart_tx_packet_global, 0, (3*65536/4), 17);
 #endif
     
+    // Timer setup
+    SetupTimer1();
+    EnableIntT1;
     SetupTimer5(); // turn on main interrupt
     EnableIntT5;
 
@@ -2109,7 +2105,7 @@ void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint3
 
     // TODO: remove reliance on t1_ticks to measure passage of time.  Perhaps system clock?
 
-    if (((t1_ticks - t_cmd_last) < UART_PERIOD) ||
+    if (((sclockGetTime() - t_cmd_last) < UART_PERIOD) ||
         (position == position_last && current == current_last && flags == 2)) {
         return; // skip sending if last command was too recent or was identical
     }
@@ -2130,7 +2126,7 @@ void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint3
     position_last = position;
     current_last = current;
     flags_last = flags;   
-    t_cmd_last = t1_ticks;
+    t_cmd_last = sclockGetTime();
 }
 
 // Utility functions ==========================================================

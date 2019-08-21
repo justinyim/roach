@@ -14,7 +14,7 @@
 #define MJ_LAUNCH       6
 #define MJ_STAND        7
 
-#define UART_PERIOD     8 // minimum UART period in ms (must be positive integer)
+#define UART_PERIOD     8000 // minimum UART period in us (must be positive integer)
 
 // Parameters for cosApprox
 #define PI          2949120 // 180(deg) * 2^15(ticks)/2000(deg/s) * 1000(Hz)

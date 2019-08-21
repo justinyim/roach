@@ -66,7 +66,7 @@ def main():
 
         '''
         # basic leg extension test
-        
+        exp = [2]
         arbitrary = [0]
         xb_send(0, command.RESET_BODY_ANG, pack('h', *arbitrary))
         time.sleep(0.02)

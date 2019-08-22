@@ -192,12 +192,12 @@ def main():
             # Send tilt command
             cmd = [M*938.7, Md*938.7, Mdd*938.7, Mddd*938.7,\
             (r+0.09)*2**16, rd*2000, (rdd+9.81)*1024,\
-            -4000, -126]
+            -1000, -100]
             xb_send(0, command.STANCE, pack('9h', *cmd))
             print cmd
             time.sleep(0.01)
                 
-            if t > 11.0*tau and toHop == 2: # prepare for landing
+            if t > 11.0*tau and toHop == 1: # prepare for landing
                 # # Make a few bounces, then stop
                 # modeSignal = [6]
                 # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
@@ -216,6 +216,8 @@ def main():
 
                 # Hop once and stop
                 viconTest = [0,0,0, 0,0,0, 50*256,25*256]
+                xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+                time.sleep(0.01)
                 xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
                 time.sleep(0.01)
 
@@ -249,10 +251,14 @@ def main():
             # # New leg control
             cmd = [0,0,0,0,\
             (0.12)*2**16, 0.0*2000, (0+9.81)*1024,\
-            -1000, -63]
+            -4000, -126]
             xb_send(0, command.STANCE, pack('9h', *cmd))
             time.sleep(0.01)
-            
+            xb_send(0, command.STANCE, pack('9h', *cmd))
+            time.sleep(0.01)
+            xb_send(0, command.STANCE, pack('9h', *cmd))
+            time.sleep(0.01)
+
             # # Sit down
             # time.sleep(1.5)
             # viconTest = [0,0,0, 0,0,3667*-1*3.14159/180, 20*256,20*256]

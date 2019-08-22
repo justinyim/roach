@@ -42,7 +42,7 @@ int32_t gainsPD[10];      // PD controller gains (yaw, rol, pit) (P, D, other)
 
 #define TAIL_ALPHA 25 // Low pass tail velocity out of 128
 #define W_ALPHA 1  // Low pass body angular velocity out of 256 (RC = 0.003 s)
-#define TAIL_CMD_ALPHA 4  // Low pass tail PWM out of 8
+#define TAIL_CMD_ALPHA 2  // Low pass tail PWM out of 8
 
 #define P_AIR ((3*65536)/100) // leg proportional gain in the air (duty cycle/rad * 65536)
 #define D_AIR ((0*65536)/1000) // leg derivative gain in the air (duty cycle/[rad/s] * 65536)
@@ -376,20 +376,21 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
 
         w[1] += (ml * 
             (GRAV_ACC*sin_theta/17453 // in 1000*2^10 ticks/(m/s) to 2^11/(2000*pi/180) conversion ~= 17453
-            - 2*(int32_t)legVel*(int32_t)w[1]/32000000) // in 1000*2000*2^15/(2000*pi/180) to 2^11/(2000*pi/180) conversion = 32000
-            - (tailCmd - 6*tail_vel)*15 // in 1000*4000/0.06 to 2^35/(2000*pi/180) conversion ~= 1/14.765
-            ) / Iy; // in 2^20 ticks/(kg m^2)
-        w[1] += ((int32_t)gdataBody[1]-w[1]) >> 2;
+            )//- 2*(int32_t)legVel*(int32_t)w[1]/32000000) // in 1000*2000*2^15/(2000*pi/180) to 2^11/(2000*pi/180) conversion = 32000
+            - (tailCmd - 6*tail_vel)*TAIL_STALL // in 1000*4000*256 to 2^35/(2000*pi/180) conversion ~= 1
+            // MANUAL TUNING 8 instead of 15
+            ) / Iy // in 2^20 ticks/(kg m^2)
+            + (gdataBody[1]-w[1] >> 3);
 
         // w[0] = ((4-W_ALPHA)*w[0] + W_ALPHA*gdataBody[0])>>2; // Low pass the gyro signal
         // w[2] = ((4-W_ALPHA)*w[2] + W_ALPHA*gdataBody[2])>>2; // Low pass the gyro signal
 
         w[0] += (ml*GRAV_ACC*sin_phi/17453
-            - ((int32_t)foreLP+(int32_t)aftLP) // 1000*4000/0.0039 to 2^35/(2000*pi/180) conversion ~= 0.9597
-            ) / Ix;
-        w[0] += (gdataBody[0]-w[0]) >> 2;
-        w[2] += ((foreLP-aftLP)>>1) / IZ_CG; // 1000*4000/0.0020 to 2^35/(2000*pi/180) ~= 0.4922 ~= >>1
-        w[2] += (gdataBody[2]-w[2]) >> 2;
+            - (int32_t)(foreLP+aftLP)*((int32_t)leg + 5243)/5424 // 1000*4000*2^16/0.0491 to 2^35/(2000*pi/180) conversion ~= 1/5424.0
+            ) / Ix                                    // Thruster arm 0.08m ~= 5242.9 in 2^16 ticks/m
+            + (gdataBody[0]-w[0] >> 2);
+        w[2] += ((foreLP-aftLP)>>1) / IZ_CG // 1000*4000/0.0020 to 2^35/(2000*pi/180) ~= 0.4922 ~= >>1
+            + (gdataBody[2]-w[2] >> 2);
 
         for (i=0; i<3; i++) {
             // 2-step moving sum for attitude integration at half frequency
@@ -573,15 +574,15 @@ void salto1p_functions(void) {
         if (mj_state == MJ_AIR) {
             vCmd[0] = 0;
             vCmd[1] = 0;
-            if (vB[0] > 500 || vB[0] < -500 ||
-                vB[1] > 500 || vB[1] < -500) {
+            if (0 && (vB[0] > 500 || vB[0] < -500 || // DSIABLED
+                vB[1] > 500 || vB[1] < -500)) {
                 vCmd[2] = 5000;
                 pushoffCmd = deadbeatVelCtrl(vB, vCmd, ctrl_vect);
                 legSetpoint = ctrl_vect[2];
             } else {
                 vCmd[2] = 4000;
                 tempPushoffCmd = deadbeatVelCtrl(vB, vCmd, ctrl_vect);
-                if (v[2] < -6000) {
+                if (0 && (v[2] < -6000)) { // DISABLED
                     legSetpoint = ctrl_vect[2];
                     pushoffCmd = tempPushoffCmd;
                 } else {
@@ -737,11 +738,12 @@ void kinematicUpdate(void) {
                tail_err < -2000 ? -2000 :
                tail_err;
     tail_pos += tail_vel * STEP_MS + 3*(tail_err >> 2);
-    tail_vel += ((10*(tailCmd - 6*tail_vel)*STEP_MS)>>12) + (tail_err >> 5);
+    tail_vel += ((22*TAIL_STALL/IY_TAIL*(tailCmd - 6*tail_vel)*STEP_MS)>>12) + (tail_err >> 5);
     // tail_pos is in [25/48*2^16 ticks/(2*pi rad)] ~= 5432.5 ticks/rad
     // tail_vel is in [25/48*2^16 ticks/(2000*pi rad/s)] ~= 5.43 ticks/(rad/s)
-    // tau_stall/I_tail = 0.06/3.3E-5 * (5.4325/1000 ticks/(rad/s^2)) ~= 9.873 ticks
-    // free running speed ~= 110 rad/s ~= 600 ticks; 4000/600 ~= 6; 1/4000 ~= 1>>12
+    // tau_stall/I_tail 2^8/2^20*1000 to 5.4325ticks/(rad/s)) ~= 22
+    // free running speed ~= 110 rad/s ~= 600 ticks; 4000/600 ~= 6
+    // 1/4000 ~= 1>>12
 
     // Old tail low-pass velocity estimation
     //tail_pos = calibPos(0);
@@ -786,9 +788,8 @@ void jumpModes(void) {
             break;
 
         case MJ_STOP:
-            // TODO: how to stop?
-            send_command_packet(&uart_tx_packet_global, 0, 0, 0);
             mj_state = MJ_STOPPED;
+            send_command_packet(&uart_tx_packet_global, 0, 0, 0);
             break;
 
         case MJ_AIR:
@@ -850,6 +851,14 @@ void jumpModes(void) {
                     transition_time = t1_ticks;
                 }
             }
+            if (t1_ticks - transition_time > 30
+                    && (spring < 500 || femur > FULL_EXTENSION)
+                    && crank > 8192
+                    && legVel > 3000) {
+                mj_state = MJ_AIR;
+                transition_time = t1_ticks;
+            }
+            break;
 
         case MJ_STOPPED:
             break;
@@ -1022,6 +1031,7 @@ void takeoffEstimation(void) {
     int32_t TOsin_psi = cosApprox(TOq[2]-PI/2);
 
     // Hack for smoothing TOw
+    /*
 #if ROBOT_NAME == SALTO_1P_DASHER
     TOw[0] = (TOq[0] - TDq[0])/(TOt-TDt); // 16384 per degree
     TOw[1] = (TOq[1] - TDq[1])/(TOt-TDt);
@@ -1029,15 +1039,16 @@ void takeoffEstimation(void) {
     TOw[0] = (TOq[0] - TDq[0])/(TOt-TDt);
     TOw[1] = (TOq[1] - TDq[1])/(TOt-TDt);
 #endif
+    */
 
     // Compensate for CG offset
     // MANUAL TUNING
 #if ROBOT_NAME == SALTO_1P_DASHER
-    TOw[1] -= 10*TOlegVel/213; // in (centi rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694: 100/0.4694 = 213
-    TOw[0] += 10*TOlegVel/213;
+    TOw[1] += 20*TOlegVel/213; // in (centi rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694: 100/0.4694 = 213
+    TOw[0] += 30*TOlegVel/213;
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-    TOw[1] += 0.0*0.469*TOlegVel; // in (rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694
-    TOw[0] += 0.0*0.469*TOlegVel;
+    TOw[1] += 00*TOlegVel/213;
+    TOw[0] += 00*TOlegVel/213;
 #else
     TOw[1] += 0.2*0.469*TOlegVel/; // in (rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694
     TOw[0] += 0.2*0.469*TOlegVel/;
@@ -1136,7 +1147,7 @@ void legCtrl(void) {
             }
         } else {
             //send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_STAND, 2);
-            send_command_packet(&uart_tx_packet_global, forceSetpoint(rdes, rddes, rdddes, k1des, k2des)+BLDC_CMD_OFFSET, GAINS_ENERGY, 2);
+            send_command_packet(&uart_tx_packet_global, forceSetpoint(rdes, rddes, rdddes, k1des, k2des), GAINS_ENERGY, 2);
         }
     } else if (mj_state == MJ_LAUNCH) {
         if (modeFlags & 0b10000) {
@@ -1152,6 +1163,11 @@ void legCtrl(void) {
         }
     } else if (mj_state == MJ_AIR) {
         send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_AIR, 2);
+    } else if (mj_state == MJ_STOPPED) {
+        sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
+        if (sensor_data->current != 0) {
+            send_command_packet(&uart_tx_packet_global, 0, 0, 0);
+        }
     }
 }
 
@@ -1256,14 +1272,7 @@ void balanceCtrl(void) {
 
     int32_t tailTorque;
     if (gainsPD[6] || gainsPD[7]) {
-        // tailCmd is in ~4000/0.07~= ticks/(N m): conversion ~= 568
-        #if ROBOT_NAME == SALTO_1P_DASHER
-        tailTorque = tau2/461; // for 0.060 N m, it is 461.4
-        #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-        tailTorque = tau2/461;
-        #else
-        tailTorque = tau2/269;
-        #endif
+        tailTorque = tau2*TAIL_STALL/4000; // conversion from N m to PWM 4000 ticks
         tailTorque = tailTorque > MAX_TAIL ? MAX_TAIL :
                      tailTorque < -MAX_TAIL ? -MAX_TAIL :
                      tailTorque;

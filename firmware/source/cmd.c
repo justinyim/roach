@@ -60,6 +60,7 @@ static unsigned char cmdSetVelocity(unsigned char type, unsigned char status, un
 static unsigned char cmdAdjustBodyAngle(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdTilt(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdStance(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
+static unsigned char cmdSetMocapVel(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 
 //Motor and PID functions
 static unsigned char cmdSetThrustOpenLoop(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
@@ -116,6 +117,7 @@ void cmdSetup(void) {
     cmd_func[CMD_ADJUST_BODY_ANG] = &cmdAdjustBodyAngle;
     cmd_func[CMD_TILT] = &cmdTilt;
     cmd_func[CMD_STANCE] = &cmdStance;
+    cmd_func[CMD_SET_MOCAP_VEL] = &cmdSetMocapVel;
 }
 
 void cmdPushFunc(MacPacket rx_packet) {
@@ -371,6 +373,20 @@ unsigned char cmdStance(unsigned char type, unsigned char status, unsigned char 
 
     setTilt(u,ud,udd,uddd);
     setLeg(r,rd,rdd,k1,k2);
+    return 1;
+}
+
+unsigned char cmdSetMocapVel(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
+    // Set desired velocity to be tracked by onboard hopping control
+    int16_t new_vel[3];
+    long new_yaw;
+    int i;
+    for (i=0; i<3; i++){
+        new_vel[i] = (int16_t)frame[2*i] + ((int16_t)frame[2*i+1] << 8);
+    }
+    new_yaw = ((long)frame[6] + ((long)frame[7] << 8)) << 8;
+    setMocapVel(new_vel, new_yaw);
+
     return 1;
 }
 

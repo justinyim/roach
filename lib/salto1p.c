@@ -41,8 +41,8 @@
 int32_t gainsPD[10];      // PD controller gains (yaw, rol, pit) (P, D, other)
 
 #define TAIL_ALPHA 25 // Low pass tail velocity out of 128
-#define W_ALPHA 1  // Low pass body angular velocity out of 256 (RC = 0.003 s)
-#define TAIL_CMD_ALPHA 2  // Low pass tail PWM out of 8
+#define W_ALPHA 1  // Low pass body angular velocity out of 4 (RC = 0.006 s)
+#define TAIL_CMD_ALPHA 1  // Low pass tail PWM out of 8
 
 #define P_AIR ((3*65536)/100) // leg proportional gain in the air (duty cycle/rad * 65536)
 #define D_AIR ((0*65536)/1000) // leg derivative gain in the air (duty cycle/[rad/s] * 65536)
@@ -85,7 +85,7 @@ uint8_t interrupt_count = 0;// How many processing cycles have passed
 int32_t q[3];               // ZXY Body Euler angles (x, y, z) [2*PI ticks/rev]
 int32_t w[3];               // Body ang vel (x, y, z) [2^15 ticks/(2000 deg/s)]
 int32_t p[3];               // Robot position (x, y, z) [100,000 ticks/m]
-int16_t v[3];               // Robot body vel (x, y, z) [1000 ticks/(m/s)]
+int16_t v[3];               // Robot body vel (x, y, z) [2000 ticks/(m/s)]
 
 int32_t tail_pos = 0;       // Tail angle [25/48*2^16 ticks/(2*pi rad)]
 int32_t tail_prev = 0;      // Previous tail angle for velocity estimation
@@ -156,10 +156,10 @@ int32_t returnable; // TODO delete only for testing purposes
 //int16_t rolO[3];
 //int16_t yawI[3];
 //int16_t yawO[3];
-int16_t pitI[3];
-int16_t pitO[3];
-int16_t wyI[3];  // Angular velocity notch filter           
-int16_t wyO[3];
+int32_t pitI[3];
+int32_t pitO[3];
+int32_t wyI[3];  // Angular velocity notch filter
+int32_t wyO[3];
 
 int16_t foreVel = 0;        // Thruster velocity from -4096 to 4088
 int16_t aftVel = 0;         // Thruster velocity from -4096 to 4088
@@ -380,7 +380,7 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
             - (tailCmd - 6*tail_vel)*TAIL_STALL // in 1000*4000*256 to 2^35/(2000*pi/180) conversion ~= 1
             // MANUAL TUNING 8 instead of 15
             ) / Iy // in 2^20 ticks/(kg m^2)
-            + (gdataBody[1]-w[1] >> 3);
+            + ((gdataBody[1]-w[1]) >> 3);
 
         // w[0] = ((4-W_ALPHA)*w[0] + W_ALPHA*gdataBody[0])>>2; // Low pass the gyro signal
         // w[2] = ((4-W_ALPHA)*w[2] + W_ALPHA*gdataBody[2])>>2; // Low pass the gyro signal
@@ -388,9 +388,9 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         w[0] += (ml*GRAV_ACC*sin_phi/17453
             - (int32_t)(foreLP+aftLP)*((int32_t)leg + 5243)/5424 // 1000*4000*2^16/0.0491 to 2^35/(2000*pi/180) conversion ~= 1/5424.0
             ) / Ix                                    // Thruster arm 0.08m ~= 5242.9 in 2^16 ticks/m
-            + (gdataBody[0]-w[0] >> 2);
+            + ((gdataBody[0]-w[0]) >> 3);
         w[2] += ((foreLP-aftLP)>>1) / IZ_CG // 1000*4000/0.0020 to 2^35/(2000*pi/180) ~= 0.4922 ~= >>1
-            + (gdataBody[2]-w[2] >> 2);
+            + ((gdataBody[2]-w[2]) >> 3);
 
         for (i=0; i<3; i++) {
             // 2-step moving sum for attitude integration at half frequency
@@ -422,10 +422,6 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         wyO[2] = wyO[1];
         wyO[1] = wyO[0];
         #if ROBOT_NAME == SALTO_1P_DASHER
-        // Period of 8.5 cycles, 0.125 bandwidth
-        //w[1] = (79*(int32_t)wyO[1] - 43*(int32_t)wyO[2]
-        //    + 53*(int32_t)wyI[0] - 79*(int32_t)wyI[1] + 53*(int32_t)wyI[2])>>6;
-        //wyO[0] = w[1];
         // Period of 16 cycles, 0.1 bandwidth
         wyO[0] = (102*(int32_t)wyO[1] - 46*(int32_t)wyO[2]
             + 55*(int32_t)wyI[0] - 102*(int32_t)wyI[1] + 55*(int32_t)wyI[2])>>6;
@@ -572,6 +568,7 @@ void salto1p_functions(void) {
     // Onboard velocity control using flight phase attitude
     if (modeFlags & 0b10000) { // orient leg for landing (approximate hack)
         if (mj_state == MJ_AIR) {
+            /*
             vCmd[0] = 0;
             vCmd[1] = 0;
             if (0 && (vB[0] > 500 || vB[0] < -500 || // DSIABLED
@@ -593,6 +590,21 @@ void salto1p_functions(void) {
             // MANUAL TUNING
             qCmd[1] = ctrl_vect[0]; // offset back by 0 deg (1<<13 ticks/deg), no scale fudge
             qCmd[0] = ctrl_vect[1]-8192; // offset by 1/2 deg, no scale fudge factor
+            */
+            int32_t vzLand = -TOvz; // hack for flat ground
+            //int32_t vzLand = v[2];
+            //if (vzLand > -3000) {
+            //    vzLand = -3000;
+            //}
+            int32_t Tt = sqrtApprox(leg/GRAV_ACC << 4); // output in 2^10 ticks/s
+            // vz*Tt 2000*2^10 to 2^16 ~= >> 5
+            // vx*Tt 2000*2^10 to 2^25/(2*pi/180) ~= 469.
+            // 1311 = 2cm in 2^16 ticks/m: use (int32_t)leg - 1311
+            // 5898 = 9cm in 2^16 ticks/m
+            qCmd[1] = -((int32_t)vB[0]*Tt*469)/(((int32_t)5898 - (vzLand>>5)*Tt) >> 6)
+                -(int32_t)1*(int32_t)16384; // MANUAL TUNING degree offset
+            qCmd[0] = ((int32_t)vB[1]*Tt*469)/(((int32_t)5.898 - (vzLand>>5)*Tt) >> 6)
+                -(int32_t)1*(int32_t)16384; // MANUAL TUNING 1 degree offset
         } else if (mj_state == MJ_GND || mj_state == MJ_STAND) {
             qCmd[1] = 0;
             qCmd[0] = 0;
@@ -922,7 +934,7 @@ void stanceUpdate(void) {
     // conversion from legVel*STEP_MS to leg is 1000000*2/2^16 or about 31
     legVel += (((force/FULL_MASS
         - (GRAV_ACC*cos_theta*cos_phi>>(2*COS_PREC)) // gravity
-        //+ ((((int32_t)w[1]*(int32_t)w[1]>>10) + ((int32_t)w[0]*(int32_t)w[0]>>10))*(int32_t)leg >> 24) // Cengrifugal
+        //+ ((((int32_t)w[1]*(int32_t)w[1]>>10) + ((int32_t)w[0]*(int32_t)w[0]>>10))*(int32_t)leg >> 24) // Centrifugal
         ) * STEP_MS) >> 1) + (legErr << 1);
     // legVel is in 1 m/s / (1000*2 ticks)
     // acceleration is in m/s^2 / (2^2 ticks)
@@ -966,9 +978,12 @@ void flightStanceTrans(void) {
     legVel = v[2]; // simplification for vertical hopping
 
     // Impact
-    // 2000/2^16 ticks/(m/s) to 938.7 ticks/(rad/s) ~= << 15
-    //w[0] += -((int32_t)v[2]<<(COS_PREC+7))/((int32_t)leg*sin_phi) + ((int32_t)vB[1]<<7)/leg << 8;
-    //w[1] += -((int32_t)v[2]<<(COS_PREC+7))/((int32_t)leg*sin_theta) + ((int32_t)vB[0]<<7)/leg << 8;
+    // 2000*2^24/2^20 ticks/(m/s) to 938.7 ticks/(rad/s) ~= >> 5
+    // ignoring cos(phi) coefficient in z direction; it should be small
+    w[0] += (-((int32_t)v[2]*(int32_t)leg*sin_phi >> (COS_PREC+5))
+        -((int32_t)vB[1]*(int32_t)leg*cos_theta >> (COS_PREC+5)))*FULL_MASS/Ix;
+    w[1] += (-((int32_t)v[2]*(int32_t)leg*sin_theta >> (COS_PREC+5))
+        +((int32_t)vB[0]*(int32_t)leg*cos_theta >> (COS_PREC+5)))*FULL_MASS/Iy;
     for (j=0; j<3; j++) {
         TDvCmd[j] = vCmd[j]; // Save the desired velocities
         TDq[j] = q[j]; // Save the touchdown body angles
@@ -1045,7 +1060,7 @@ void takeoffEstimation(void) {
     // MANUAL TUNING
 #if ROBOT_NAME == SALTO_1P_DASHER
     TOw[1] += 20*TOlegVel/213; // in (centi rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694: 100/0.4694 = 213
-    TOw[0] += 30*TOlegVel/213;
+    TOw[0] += 20*TOlegVel/213;
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
     TOw[1] += 00*TOlegVel/213;
     TOw[0] += 00*TOlegVel/213;
@@ -1064,10 +1079,10 @@ void takeoffEstimation(void) {
     // unit conversion: 1/30760.437 tick/tick
 
     // MANUAL TUNING
-    vyw = 3*vyw/4;
+    //vyw = 3*vyw/4;
     // Lateral oscillations complete 1.5 periods during stance and cause a gyro
     // measurement overshoot of somewhere around 50% at takeoff time.
-    vxw = 7*vxw/8;
+    //vxw = 7*vxw/8;
     
     int32_t velX = (((((TOcos_psi*TOcos_theta) >> COS_PREC)
             - ((((TOsin_psi*TOsin_phi) >> COS_PREC)*TOsin_theta) >> COS_PREC))*vxw) >> COS_PREC)
@@ -1257,7 +1272,7 @@ void balanceCtrl(void) {
     // term3 ~= 1000*2^10 ~= 2^20
 
     // qdd1H22 is in 2^30/(2000*PI/180)~=30760000 ticks/(N m)
-    int32_t qdd1H22 = ((IY_TAIL*Mddd)>>5);
+    //int32_t qdd1H22 = ((IY_TAIL*Mddd)>>5);
     // For w[1]=2^15, q[1]=pi: qdd1H22 ~= 50*2^21/2^5 = 2^22
 
     // qdd2H22 is in 2^30/(2000*pi/180)~=30760000 ticks/(N m)
@@ -1409,8 +1424,8 @@ int32_t deadbeatVelCtrl(int16_t* vi, int16_t* vo, int32_t* ctrl) {
     //long iy = (-(long)vi[0]*sin_psi + (long)vi[1]*cos_psi)>>COS_PREC;//vi[1];
     long ix = vi[0];
     long iy = vi[1];
-    //long iz = (vi[2] > -4000 ? -4000 : vi[2]) + 6600;
-    long iz = -TOvz + 6600; // TODO: this is a hack that works for flat ground
+    long iz = (vi[2] > -4000 ? -4000 : vi[2]) + 6600;
+    //long iz = -TOvz + 6600; // TODO: this is a hack that works for flat ground
 
     long ixix = (ix*ix)>>11; // >> 11 is approximately divide by 2000
     long iyiy = (iy*iy)>>11;
@@ -1728,12 +1743,12 @@ void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw){
         // Period of 8 cycles, 0.125 bandwidth
         pitO[0] = (75*(int32_t)pitO[1] - 43*(int32_t)pitO[2]
             + 53*(int32_t)pitI[0] - 75*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
-        pitch = (8-TAIL_CMD_ALPHA)*pitch + TAIL_CMD_ALPHA*pitO[0] >> 3; // low pass filter
+        pitch = ((8-TAIL_CMD_ALPHA)*pitch + TAIL_CMD_ALPHA*pitO[0]) >> 3; // low pass filter
         #elif ROBOT_NAME == SALTO_1P_RUDOLPH
         // Period of 10 cycles, 0.125 bandwidth
         pitO[0] = (86*(int32_t)pitO[1] - 43*(int32_t)pitO[2]
             + 53*(int32_t)pitI[0] - 86*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
-        pitch = (8-TAIL_CMD_ALPHA)*pitch + TAIL_CMD_ALPHA*pitO[0] >> 3; // low pass filter
+        pitch = ((8-TAIL_CMD_ALPHA)*pitch + TAIL_CMD_ALPHA*pitO[0]) >> 3; // low pass filter
         #else
         #endif
         //*/
@@ -1760,10 +1775,10 @@ void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw){
     // Set motor PWM commands
     if (mj_state != MJ_STOP && mj_state != MJ_STOPPED && mj_state != MJ_IDLE) {
         if (mj_state == MJ_AIR &&
-            (tail_vel < -150 &&
-            tailCmd > -5*tail_vel ||
-            tail_vel > 150 &&
-            tailCmd < -5*tail_vel)) {
+            ((tail_vel < -150 &&
+            tailCmd > -5*tail_vel) ||
+            (tail_vel > 150 &&
+            tailCmd < -5*tail_vel))) {
             tiHChangeMode(1, TIH_MODE_BRAKE);
             tiHSetDC(1, tailCmd > 0 ? 4000 : -4000);
         } else {
@@ -2031,8 +2046,8 @@ void setVelocitySetpoint(int16_t* newCmd, int32_t newYaw) {
 
         // Command positions
         /*
-        pCmd[0] += newCmd[0]*1;//*50/25; // only integrate at 1/2 speed
-        pCmd[1] += newCmd[1]*1;//*50/25;
+        pCmd[0] += newCmd[0]*1; // *50/25; // only integrate at 1/2 speed
+        pCmd[1] += newCmd[1]*1; // *50/25;
         vCmd[2] = newCmd[2];
         qCmd[2] = 0;
 
@@ -2098,6 +2113,17 @@ void setLeg(int16_t rdes_in, int16_t rddes_in, int16_t rdddes_in, int16_t k1des_
 
     if (mj_state == MJ_GND || mj_state == MJ_LAUNCH) {
         mj_state = MJ_STAND;
+    }
+}
+
+void setMocapVel(int16_t* new_vel, int32_t yaw) {
+    int i;
+    //q[2] = (15*q[2]>>4) + (yaw>>4);
+    if (mj_state != MJ_AIR) {
+        return;
+    }
+    for (i=0; i<3; i++) {
+        v[i] = (3*v[i]>>2) + (new_vel[i]>>2);
     }
 }
 
@@ -2201,7 +2227,7 @@ int32_t forceControl(int16_t length, int16_t p, int16_t d, int16_t f, int16_t ad
     // f in 2^8 tick per N
     int16_t k = 5; // k in 2^4 ticks per N/m
     int16_t femurInd = femur/64 < 0 ? 0: femur/64 > 255 ? 255: femur/64;
-    int16_t legError = length - leg >> 6;
+    int16_t legError = (length - leg) >> 6;
     legError = legError > 64 ? 64: legError < -64 ? -64: legError;
     int16_t divider = (((int16_t)(MA_femur_256lut[femurInd]>>9))*k>>2);
     divider = divider == 0 ? 1 : divider;
@@ -2226,13 +2252,13 @@ int32_t forceSetpoint(int16_t r_des, int16_t rd_des, int16_t rdd_des, int16_t k1
     #define k 5 // 2^4 ticks/(Nm/rad) ~= 0.3
     int16_t femurInd = femur/64 < 0 ? 0: femur/64 > 255 ? 255: femur/64;
     
-    int32_t legError = leg - r_des >> 6;
-    int32_t velError = legVel - rd_des >> 1; // ~= 2^10 ticks/(m/s)
+    int32_t legError = (leg - r_des) >> 6;
+    int32_t velError = (legVel - rd_des) >> 1; // ~= 2^10 ticks/(m/s)
     int32_t accel = ((int32_t)k1)*legError + ((int32_t)k2)*velError;
 
     int32_t divider = ((int32_t)MA_femur_256lut[femurInd]>>9)*k >> 2; // in 2^2 ticks/(Nm/rad)
     divider = divider == 0 ? 1 : divider;
-    int32_t F_des = FULL_MASS*((int32_t)rdd_des + accel >>2); //2^16 ticks per N
+    int32_t F_des = FULL_MASS*(((int32_t)rdd_des + accel) >>2); //2^16 ticks per N
     if (F_des < 0) {
         F_des = 0; // Try to keep the force positive so the foot doesn't come up
     }
@@ -2341,6 +2367,7 @@ int32_t sqrtApprox(int32_t n) {
 // Approximation to square root from (June 2019):
 // https://en.wikipedia.org/wiki/Integer_square_root
 // https://en.wikipedia.org/wiki/Methods_of_computing_square_roots
+// accepts values up to 2^16 only
     if (n > (65536)) {
         return 256;
     } else if(n < 0) {

@@ -39,6 +39,7 @@
 #define CMD_ADJUST_BODY_ANG         0xA7
 #define CMD_TILT                    0xA8
 #define CMD_STANCE                  0xA9
+#define CMD_SET_MOCAP_VEL           0xAA
 // Redefine
 
 void cmdSetup(void);

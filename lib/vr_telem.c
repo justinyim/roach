@@ -121,7 +121,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->foot = leg;
     ptr->footVel = legVel;
     */
-    //*
+    /*
     // body velocity
     ptr->otherMode = 5;
     ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
@@ -130,7 +130,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->force = v[0];
     ptr->foot = v[1];
     ptr->footVel = v[2];
-    //*/
+    */
     /*
     // onboard velocity control
     ptr->otherMode = 7;
@@ -141,7 +141,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->foot = y_ctrl/90;
     ptr->footVel = velocity[2];
     */
-    /*
+    //*
     // onboard velocity control
     ptr->otherMode = 8;
     ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
@@ -156,7 +156,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     //ptr->accelX = vCmd[0];
     //ptr->accelY = vCmd[1];
     //ptr->accelZ = vCmd[2];
-    */
+    //*/
     /*
     // onboard velocity control
     ptr->otherMode = 9;

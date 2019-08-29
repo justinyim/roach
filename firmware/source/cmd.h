@@ -40,6 +40,7 @@
 #define CMD_TILT                    0xA8
 #define CMD_STANCE                  0xA9
 #define CMD_SET_MOCAP_VEL           0xAA
+#define CMD_LAUNCH                  0xAB
 // Redefine
 
 void cmdSetup(void);

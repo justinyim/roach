@@ -90,5 +90,6 @@ ADJUST_BODY_ANG         =   0xA7
 TILT                    =   0xA8
 STANCE                  =   0xA9
 SET_MOCAP_VEL           =   0xAA
+LAUNCH                  =   0xAB
 
 # CMD values of 0xF0(240) - 0xFF(255) are reserved for future use

@@ -52,6 +52,7 @@ int32_t deadbeatVelCtrl(int16_t* vi, int16_t* vo, int32_t* ctrl);
 void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw);
 int32_t tailLinearization(int32_t* tail);
 int32_t thrusterLinearization(int32_t* thruster, int16_t velocity);
+int32_t launchVelocity(void);
 
 // Radio commands
 void setGains(int16_t* gains);
@@ -71,6 +72,7 @@ void setVelocitySetpoint(int16_t* newCmd, int32_t newYaw);
 void setTilt(int16_t u_in, int16_t ud_in, int16_t udd_in, int16_t uddd_in);
 void setLeg(int16_t rdes_in, int16_t rddes_in, int16_t rdddes_in, int16_t k1des_in, int16_t k2des_in);
 void setMocapVel(int16_t* new_vel, int32_t yaw);
+void setLaunch(int32_t rol_in, int16_t rddes_in);
 
 // Other
 void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint32_t current, uint8_t flags);
@@ -78,7 +80,6 @@ void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint3
 // Utility functions
 void orientImageproc(int32_t* v_b, int16_t* v_ip);
 int32_t calibPos(uint8_t idx);
-int32_t forceControl(int16_t length, int16_t p, int16_t d, int16_t f, int16_t addon);
 int32_t forceSetpoint(int16_t r_des, int16_t rd_des, int16_t rdd_des, int16_t k1, int16_t k2);
 int32_t cmdLegLen(int16_t leg);
 int32_t cosApprox(int32_t x);

@@ -185,27 +185,17 @@ int32_t tauYBuff[N_MBUFF];  // y torque circular buffer
 int32_t tauXSum = 0;        // sum of x torque buffer
 int32_t tauYSum = 0;        // sum of y torque buffer
 uint8_t Mind = 0;           // index circular buffers
-int16_t u;                  // Tilt control
-int16_t ud;                 // Tilt control
-int16_t udd;                // Tilt control
-int16_t uddd;               // Tilt control
+int32_t u;                  // Tilt control
+int32_t ud;                 // Tilt control
+int32_t udd;                // Tilt control
+int32_t uddd;               // Tilt control
 int16_t rdes;               // Force control
 int16_t rddes;              // Force control
 int16_t rdddes;             // Force control
 int16_t k1des;              // Force control
 int16_t k2des;              // Force control
 uint32_t u_time = 0;        // Time tilt command was set
-#define IY_CG 126   // moment of inertia about CG y axis (1.2E-4 kg m^2)
-#define IX_CG 98    // moment of inertia about CG x axis (9.3E-5 kg m^2)
-#define IZ_CG 58    // moment of inertia about CG z axis (5.5E-5 kg m^2)
-#define IY_MOT 1    // moment of inertia of motor (594E-9 N m^2)
-#if ROBOT_NAME == SALTO_1P_DASHER
-#define IY_TAIL 34  // tail moment of inertia (less than 0.07^2*0.008 kg m^2)
-#elif ROBOT_NAME == SALTO_1P_RUDOLPH
-#define IY_TAIL 77  // tail moment of inertial (less than 0.064^2*0.018 kg m^2)
-#else
-#define IY_TAIL 36  // tail moment of inertia (less than 0.07^2*0.008 kg m^2)
-#endif
+
 int32_t I_cg = 734; // 2^20 ticks/(kg m^2)
 int32_t Iy = 860; // 2^20 ticks/(kg m^2)
 int32_t Ix = 832; // 2^20 ticks/(kg m^2)
@@ -390,7 +380,7 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
             ) / Ix                                    // Thruster arm 0.08m ~= 5242.9 in 2^16 ticks/m
             + ((gdataBody[0]-w[0]) >> 3);
         w[2] += ((foreLP-aftLP)>>1) / IZ_CG // 1000*4000/0.0020 to 2^35/(2000*pi/180) ~= 0.4922 ~= >>1
-            + ((gdataBody[2]-w[2]) >> 3);
+            + ((gdataBody[2]-w[2]) >> 2);
 
         for (i=0; i<3; i++) {
             // 2-step moving sum for attitude integration at half frequency
@@ -475,7 +465,7 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
             foreLP = ((31*foreLP)>>5) + (foreCmd>>5);
             aftLP = ((31*aftLP)>>5) + (aftCmd>>5);
             for (i=0; i<3; i++) {
-                wLP[i] = ((7*wLP[i])>>3) + (w[i]>>3);
+                wLP[i] = ((3*wLP[i])>>2) + (w[i]>>2);
             }
         }
         if (!(t1_ticks%BOE_DEC)) {
@@ -591,20 +581,22 @@ void salto1p_functions(void) {
             qCmd[1] = ctrl_vect[0]; // offset back by 0 deg (1<<13 ticks/deg), no scale fudge
             qCmd[0] = ctrl_vect[1]-8192; // offset by 1/2 deg, no scale fudge factor
             */
-            int32_t vzLand = -TOvz; // hack for flat ground
-            //int32_t vzLand = v[2];
-            //if (vzLand > -3000) {
-            //    vzLand = -3000;
-            //}
-            int32_t Tt = sqrtApprox(leg/GRAV_ACC << 4); // output in 2^10 ticks/s
+            //int32_t vzLand = -TOvz; // hack for flat ground
+            int32_t vzLand = v[2];
+            if (vzLand > -3000) {
+                vzLand = -3000;
+            }
+
+            int32_t landingLeg = 5898; // leg; // leg - 1311
+            int32_t Tt = sqrtApprox(landingLeg/GRAV_ACC << 4); // output in 2^10 ticks/s
             // vz*Tt 2000*2^10 to 2^16 ~= >> 5
             // vx*Tt 2000*2^10 to 2^25/(2*pi/180) ~= 469.
             // 1311 = 2cm in 2^16 ticks/m: use (int32_t)leg - 1311
             // 5898 = 9cm in 2^16 ticks/m
-            qCmd[1] = -((int32_t)vB[0]*Tt*469)/(((int32_t)5898 - (vzLand>>5)*Tt) >> 6)
-                -(int32_t)1*(int32_t)16384; // MANUAL TUNING degree offset
-            qCmd[0] = ((int32_t)vB[1]*Tt*469)/(((int32_t)5.898 - (vzLand>>5)*Tt) >> 6)
-                -(int32_t)1*(int32_t)16384; // MANUAL TUNING 1 degree offset
+            qCmd[1] = -((int32_t)vB[0]*Tt*469)/((landingLeg - (vzLand>>5)*Tt) >> 6)
+                -(int32_t)27853; // Motor effect offset: 1.7 degree offset pitch; 16384 ticks/deg
+            qCmd[0] = ((int32_t)vB[1]*Tt*469)/((landingLeg - (vzLand>>5)*Tt) >> 6)
+                ;//-(int32_t)1*(int32_t)16384; // MANUAL TUNING 1 degree offset roll
         } else if (mj_state == MJ_GND || mj_state == MJ_STAND) {
             qCmd[1] = 0;
             qCmd[0] = 0;
@@ -707,6 +699,8 @@ void eulerUpdate(int32_t* angs, int32_t* vels, int8_t time) {
 void kinematicUpdate(void) {
     // Basic update to be done in any mode (robot internal kinematics)
 
+    #define FOOT_ADJUST 262 // MANUAL TUNING 4mm
+
     // Read femur angle and lookup tables indexed by the femur angle
     femur = calibPos(1);
     uint16_t femur_index;
@@ -717,7 +711,7 @@ void kinematicUpdate(void) {
     }
     if(femur_index<255 || femur_index > 0){
         crank = crank_femur_256lut[femur_index];
-        foot = leg_femur_256lut[femur_index];
+        foot = leg_femur_256lut[femur_index]+FOOT_ADJUST;
         ma = MA_femur_256lut[femur_index];
     } // Reject bad femur readings outside of physical range
 
@@ -749,7 +743,7 @@ void kinematicUpdate(void) {
     tail_err = tail_err > 2000 ? 2000 :
                tail_err < -2000 ? -2000 :
                tail_err;
-    tail_pos += tail_vel * STEP_MS + 3*(tail_err >> 2);
+    tail_pos += (tail_vel - w[1]/173) * STEP_MS + 3*(tail_err >> 2);
     tail_vel += ((22*TAIL_STALL/IY_TAIL*(tailCmd - 6*tail_vel)*STEP_MS)>>12) + (tail_err >> 5);
     // tail_pos is in [25/48*2^16 ticks/(2*pi rad)] ~= 5432.5 ticks/rad
     // tail_vel is in [25/48*2^16 ticks/(2000*pi rad/s)] ~= 5.43 ticks/(rad/s)
@@ -1166,18 +1160,34 @@ void legCtrl(void) {
         }
     } else if (mj_state == MJ_LAUNCH) {
         if (modeFlags & 0b10000) {
+            //send_command_packet(&uart_tx_packet_global, launchVelocity(), GAINS_GND, 2);
+            //*
             if (crank > 4096) {
                 // slow down the jump
-                send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_STAND, 2);
+                send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_GND, 2);//GAINS_STAND, 2);
             } else {
                 // usual jump
                 send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
             }
+            //*/
         } else {
             send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
         }
     } else if (mj_state == MJ_AIR) {
-        send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_AIR, 2);
+        if (modeFlags & 0b10000) {
+            // MANUAL TUNING how much to retract leg for landing
+            int32_t vzLand = v[2];
+            if (vzLand > -3000) {
+                vzLand = -3000;
+            }
+            int32_t legRet = -(vzLand<<16)/200 + ((int32_t)25<<16);
+            if (legRet < 65536*(int32_t)45) {
+                legRet = 65536*(int32_t)45;
+            }
+            send_command_packet(&uart_tx_packet_global, legRet+BLDC_CMD_OFFSET, GAINS_AIR, 2);
+        } else {
+            send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_AIR, 2);
+        }
     } else if (mj_state == MJ_STOPPED) {
         sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
         if (sensor_data->current != 0) {
@@ -1191,10 +1201,6 @@ void balanceCtrl(void) {
     uint8_t i;
 
     int32_t balanceLeg = leg;
-
-    #if ROBOT_NAME == SALTO_1P_RUDOLPH
-    //balanceLeg = leg + 2*655; // add 1 cm for gripper offset
-    #endif
 
     // Constant parameters
     I_cg = (FULL_MASS*(balanceLeg*balanceLeg >> 8)) >> 12; // 2^20 ticks/(kg m^2)
@@ -1287,7 +1293,8 @@ void balanceCtrl(void) {
 
     int32_t tailTorque;
     if (gainsPD[6] || gainsPD[7]) {
-        tailTorque = tau2*TAIL_STALL/4000; // conversion from N m to PWM 4000 ticks
+        tailTorque = tau2/(30*TAIL_STALL); // conversion from N m to PWM 4000 ticks
+            // (2^30/(2000*pi/180)/2^8)/4000 ~= 30
         tailTorque = tailTorque > MAX_TAIL ? MAX_TAIL :
                      tailTorque < -MAX_TAIL ? -MAX_TAIL :
                      tailTorque;
@@ -1862,18 +1869,18 @@ int32_t tailLinearization(int32_t* tail){
 #if ROBOT_NAME == SALTO_1P_DASHER
     if (modeFlags & 0b1 &&
         (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND) ) {
-        tailOut += 4*tail_vel; // more aggressive linearization for toe balancing
+        tailOut += 5*tail_vel; // more aggressive linearization for toe balancing
     } else {
-        tailOut += 2*tail_vel;
+        tailOut += 4*tail_vel;
     }
 
     // Friction (stiction) compensation
     if (tail_vel < -20) {
-        tailOut -= 40;
+        tailOut -= 20;
     } else if (tail_vel > 20) {
-        tailOut += 40;
+        tailOut += 20;
     } else {
-        tailOut += 2*tail_vel;
+        tailOut += 1*tail_vel;
     }
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
     if (modeFlags & 0b1 &&
@@ -1900,6 +1907,29 @@ int32_t tailLinearization(int32_t* tail){
     *tail -= (*tail-tailOut);
 
     return tailOut;
+}
+
+int32_t launchVelocity(void) {
+    if (rddes == 0) {
+        return 65526*(int32_t)30; // pre-wind a little bit
+    }
+    int32_t absLegVel = legVel > 0 ? legVel : -legVel;
+    // 676 from 1/(0.65*sqrt(1/0.108*0.3759274976416161)) conversion to motor units
+    int32_t mot_cmd = 676*(int32_t)(rddes - absLegVel) + (25*(int32_t)crank<<2)
+        + (66*sqrtApprox(13107-leg) << 8);
+        // sqrt(2*0.108*9.81*l/0.3) = th
+        // 25*sqrt(2*0.108*9.81/0.3) ~= 66 rad/m^0.5 ticks/ticks
+    // conversion 25*0.8246 to 2^16/2000 (rad/(m/s))
+    if (crank < 4096 && mot_cmd < 65535*(int32_t)60) {
+        mot_cmd = 65536*(int32_t)60;
+    }
+
+    if (mot_cmd < 65536*(int32_t)30) {
+        mot_cmd = 65536*(int32_t)30;
+    } else if (mot_cmd > 65536*(int32_t)100) {
+        mot_cmd = 65536*(int32_t)100;
+    }
+    return mot_cmd;
 }
 
 
@@ -2100,7 +2130,7 @@ void setTilt(int16_t u_in, int16_t ud_in, int16_t udd_in, int16_t uddd_in) {
     u = u_in;
     ud = ud_in;
     udd = udd_in;
-    uddd = uddd_in;
+    uddd = (int32_t)uddd_in << 1;
     u_time = t1_ticks;
 }
 
@@ -2125,6 +2155,15 @@ void setMocapVel(int16_t* new_vel, int32_t yaw) {
     for (i=0; i<3; i++) {
         v[i] = (3*v[i]>>2) + (new_vel[i]>>2);
     }
+}
+
+void setLaunch(int32_t rol_in, int16_t rddes_in) {
+    if (mj_state == MJ_AIR || mj_state == MJ_STOPPED) {
+        return;
+    }
+    mj_state = MJ_LAUNCH;
+    rddes = rddes_in;
+    qCmd[0] = rol_in;
 }
 
 void send_command_packet(packet_union_t *uart_tx_packet, int32_t position, uint32_t current, uint8_t flags){
@@ -2221,28 +2260,6 @@ int32_t calibPos(uint8_t idx){
     }
 }
 
-int32_t forceControl(int16_t length, int16_t p, int16_t d, int16_t f, int16_t addon){
-    // p in 2^0 tick per N/m maximum 2^9 ticks (2^9 N/m)
-    // d in 2^2 tick per Ns/m maximum 2^8 ticks (2^6 Ns/m)
-    // f in 2^8 tick per N
-    int16_t k = 5; // k in 2^4 ticks per N/m
-    int16_t femurInd = femur/64 < 0 ? 0: femur/64 > 255 ? 255: femur/64;
-    int16_t legError = (length - leg) >> 6;
-    legError = legError > 64 ? 64: legError < -64 ? -64: legError;
-    int16_t divider = (((int16_t)(MA_femur_256lut[femurInd]>>9))*k>>2);
-    divider = divider == 0 ? 1 : divider;
-    int16_t motorAngle;
-    if (addon == 0) {
-        motorAngle = ((-f + (p*(legError)>>2) - (d*(legVel>>6)/2000<<12))/(divider) + (crank>>8)) * 25 ;
-    } else {
-        motorAngle = ((-f + (p*(legError)>>2) - (d*(legVel>>6)/2000*MA_femur_256lut[femurInd]<<3))/(divider)) * 25;
-        //motorAngle = ((-f + (p*(legError)>>2) - (d*(legVel>>6)/2000<<12))/(divider)) * 25;
-    }
-    returnable = ((int32_t) motorAngle) << 10;
-    returnable = returnable < 0*65536 ? 0*65536: returnable > 100*65536 ? 100*65536: returnable;
-    return returnable;
-}
-
 int32_t forceSetpoint(int16_t r_des, int16_t rd_des, int16_t rdd_des, int16_t k1, int16_t k2){
     // r_des in 2^16 ticks per m
     // rd_des in 2000 ticks per m/s
@@ -2250,13 +2267,12 @@ int32_t forceSetpoint(int16_t r_des, int16_t rd_des, int16_t rdd_des, int16_t k1
     // k1 in 2^0 ticks per unit
     // k2 in 2^0 ticks per unit
     #define k 5 // 2^4 ticks/(Nm/rad) ~= 0.3
-    int16_t femurInd = femur/64 < 0 ? 0: femur/64 > 255 ? 255: femur/64;
     
     int32_t legError = (leg - r_des) >> 6;
     int32_t velError = (legVel - rd_des) >> 1; // ~= 2^10 ticks/(m/s)
     int32_t accel = ((int32_t)k1)*legError + ((int32_t)k2)*velError;
 
-    int32_t divider = ((int32_t)MA_femur_256lut[femurInd]>>9)*k >> 2; // in 2^2 ticks/(Nm/rad)
+    int32_t divider = ((int32_t)ma>>9)*k >> 2; // in 2^2 ticks/(Nm/rad)
     divider = divider == 0 ? 1 : divider;
     int32_t F_des = FULL_MASS*(((int32_t)rdd_des + accel) >>2); //2^16 ticks per N
     if (F_des < 0) {

@@ -205,7 +205,7 @@ def main():
         exp = [2]
         arbitrary = [0]
 
-        motorgains = [40,15,0, 60,40,0, 0,0,0,0] #[50,25,0, 180,140,0, 0,0,0,0]
+        motorgains = [50,30,0, 80,50,0, 0,0,0,0] #[50,25,0, 180,140,0, 0,0,0,0]
         #motorgains = [0,0,0, 0,0,0, 0,0,0,0]
         xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
         time.sleep(0.02)
@@ -243,7 +243,7 @@ def main():
         #motorgainsGnd = [200,0,22,0,0, 0,0,0,0,0]
         #motorgainsGnd = [130,0,13,0,5, 0,0,0,0,0]
         #motorgainsGnd = [110,0,12,0,5, 0,0,0,0,0]
-        motorgainsGnd = [50,30,0, 80,50,0, 120,14,0,0] #[50,25,0, 180,140,0, 160,12,0,12]
+        motorgainsGnd = [50,30,0, 80,50,0, 100,13,0,0] #[50,25,0, 180,140,0, 160,12,0,12]
         #motorgainsGnd = [0,0,0, 0,0,0, 160,12,0,0]
         #motorgainsGnd = [0,0,0, 0,0,0, 0,0,0,0]
         xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgainsGnd))
@@ -432,7 +432,7 @@ def main():
                 Mdd = a*tau - 1.0/2.0*a*tr
                 Md = 1.0/2.0*a*tau**2.0 + a*tau*tr - 1.0/4.0*a*tr**2.0
                 M = -29.0/6.0*a*tau**3.0 + 1.0/2.0*a*tau**2.0*tr + 1.0/2.0*a*tau*tr**2.0 - 1.0/12.0*a*tr**3.0;
-            elif t < (7.0+2.217+2.0)*tau: # hold forward tilt
+            elif t < (7.0+2.1815+2.0)*tau: # hold forward tilt
                 tr = t - 7.0*tau
                 Mddd = 0.0
                 Mdd = 1.0/2.0*a*tau
@@ -444,7 +444,7 @@ def main():
                 Md = 0.0
                 M = 0.0
 
-            t_launchStart = 9.217*tau - (0.16-0.04)#(0.16)
+            t_launchStart = 9.1815*tau - (0.17)#(0.16)
 
             # Send tilt command
             tiltCmd = [M*938.7, Md*938.7, Mdd*938.7, Mddd*938.7]
@@ -457,7 +457,7 @@ def main():
                 viconTest = [0,0,0, 0,3667*-0.02,0, 60*256,60*256]
                 xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
                 time.sleep(0.01)
-                motorgains = [40,15,0, 60,30,0, 120,14,0,0]
+                motorgains = [50,30,0, 80,40,0, 100,13,0,0]
                 xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
                 time.sleep(0.02)
                 toHop = 2

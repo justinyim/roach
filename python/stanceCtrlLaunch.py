@@ -24,6 +24,10 @@ def main():
     #  [ Kp , Kd , other , Kp , Kd , other , Kp , Kd , other , other ]
     motorgains = [0,0,0, 0,0,0, 0,0,0,0]
 
+    thrusterGains = [50,30,0, 80,50,0, 0,0,0,0]
+    standGains = [50,30,0, 80,50,0, 100,13,0,0]
+    airGains = [50,30,0, 80,40,0, 100,13,0,0]
+
     duration = 4000#15000
     rightFreq = 0
     leftFreq = 0
@@ -32,10 +36,11 @@ def main():
     repeat = False
 
     # Balance control tilt once to 9/4*a*tau^2 rad and 1/2*a*tau rad/s
-    a = 0#-25.0 # angular acceleration (rad/s^2)
+    a = 25#-25.0 # angular acceleration (rad/s^2)
     tau = 0.05#0.08#0.08# # time scale (s)
     toHop = 1 # make a small jump (1) or not (0)
-    v = 2.0 # launch velocity in m/s
+    v = 3.5 # launch velocity in m/s
+    roll = -0.02 # roll in rad
 
     manParams = manueverParams(0, 0, 0, 0, 0, 0) # JY edits: added for compatibility
     params = hallParams(motorgains, duration, rightFreq, leftFreq, phase, telemetry, repeat)
@@ -46,9 +51,8 @@ def main():
     wjParams.set(wj_params)
 
 
-    t_launch = 9.217*tau
-    a_l = 0.5*v**2/0.15
-    t_energize = t_launch - v/a_l
+    t_launch = (7.0+2.1815)*tau
+    t_energize = t_launch - 0.17
 
 
     while True:
@@ -79,13 +83,10 @@ def main():
         exp = [2]
         arbitrary = [0]
 
-        motorgains = [20,15,0, 70,50,0, 0,0,0,0] #[50,25,0, 180,140,0, 0,0,0,0]
-        #motorgains = [0,0,0, 0,0,0, 0,0,0,0]
-        xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
+        xb_send(0, command.SET_PID_GAINS, pack('10h',*thrusterGains))
         time.sleep(0.02)
 
-        #viconTest = [0,0,0,0,0,0,60*256,80*256]#55*256,70*256]
-        viconTest = [0,0,0,0,0,0,3*256,0*256]#55*256,70*256]
+        viconTest = [0,0,0, 0,3667*roll,0, 45*256,25*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(0.01)
 
@@ -103,29 +104,16 @@ def main():
         time.sleep(0.01)
 
         #modeSignal = [3]
-        modeSignal = [23]#[19]
+        modeSignal = [17]#[19]
         xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
-        time.sleep(0.01)
-
-        viconTest = [0,0,0, 0,3667*-0.5*3.14159/180,0, 3*256,0*256]#55*256,70*256]
-        xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(0.01)
 
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
         time.sleep(0.01)
         time.sleep(1.5)#2.0)
-
-        motorgains = [70,40,0, 70,50,0, 100,15,0,0] #[50,25,0, 180,140,0, 160,12,0,12]
-        #motorgains = [0,0,0, 0,0,0, 0,0,0,0]
-        xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
-
+        xb_send(0, command.SET_PID_GAINS, pack('10h',*standGains))
 
         time.sleep(1.5)
-
-
-        motorgains = [70,40,0, 120,80,0, 140,15,0,0]
-        xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
-        time.sleep(0.01)
 
         t0 = time.time()
         t = 0.0
@@ -162,7 +150,7 @@ def main():
                 Mdd = a*tau - 1.0/2.0*a*tr
                 Md = 1.0/2.0*a*tau**2.0 + a*tau*tr - 1.0/4.0*a*tr**2.0
                 M = -29.0/6.0*a*tau**3.0 + 1.0/2.0*a*tau**2.0*tr + 1.0/2.0*a*tau*tr**2.0 - 1.0/12.0*a*tr**3.0;
-            elif t < (7.0+2.217+2.0)*tau: # hold forward tilt
+            elif t < (7.0+2.1815+2.0)*tau: # hold forward tilt
                 tr = t - 7.0*tau
                 Mddd = 0.0
                 Mdd = 1.0/2.0*a*tau
@@ -175,25 +163,15 @@ def main():
                 M = 0.0
 
 
-            if t > t_energize and t < t_launch and toHop == 1: # begin launch
-                t_l = t - t_energize
-                r = 0.5*a_l*t_l**2
-                rd = a_l*t_l
-                rdd = a_l
-            elif t < t_launch:
-                r = 0.15
+            if t > t_energize and toHop == 1: # begin launch
                 rd = v
-                rdd = a_l
             else:
-                r = 0.0
                 rd = 0.0
-                rdd = 0.0
 
             # Send tilt command
             cmd = [M*938.7, Md*938.7, Mdd*938.7, Mddd*938.7,\
-            (r+0.09)*2**16, rd*2000, (rdd+9.81)*1024,\
-            -1000, -100]
-            xb_send(0, command.STANCE, pack('9h', *cmd))
+            3667*roll, rd*2000]
+            xb_send(0, command.LAUNCH, pack('6h', *cmd))
             print cmd
             time.sleep(0.01)
                 
@@ -218,8 +196,9 @@ def main():
                 viconTest = [0,0,0, 0,0,0, 50*256,25*256]
                 xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
                 time.sleep(0.01)
-                xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-                time.sleep(0.01)
+                xb_send(0, command.SET_PID_GAINS, pack('10h',*airGains))
+                time.sleep(0.05)
+                toHop = 2
 
         # time.sleep(0.2)
         # modeSignal = [0]
@@ -249,13 +228,10 @@ def main():
             # time.sleep(0.01)
 
             # # New leg control
+            time.sleep(0.3)
             cmd = [0,0,0,0,\
             (0.12)*2**16, 0.0*2000, (0+9.81)*1024,\
-            -4000, -126]
-            xb_send(0, command.STANCE, pack('9h', *cmd))
-            time.sleep(0.01)
-            xb_send(0, command.STANCE, pack('9h', *cmd))
-            time.sleep(0.01)
+            -0, -20]
             xb_send(0, command.STANCE, pack('9h', *cmd))
             time.sleep(0.01)
 

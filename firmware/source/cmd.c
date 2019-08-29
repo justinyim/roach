@@ -61,6 +61,7 @@ static unsigned char cmdAdjustBodyAngle(unsigned char type, unsigned char status
 static unsigned char cmdTilt(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdStance(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 static unsigned char cmdSetMocapVel(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
+static unsigned char cmdLaunch(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
 
 //Motor and PID functions
 static unsigned char cmdSetThrustOpenLoop(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr);
@@ -118,6 +119,7 @@ void cmdSetup(void) {
     cmd_func[CMD_TILT] = &cmdTilt;
     cmd_func[CMD_STANCE] = &cmdStance;
     cmd_func[CMD_SET_MOCAP_VEL] = &cmdSetMocapVel;
+    cmd_func[CMD_LAUNCH] = &cmdLaunch;
 }
 
 void cmdPushFunc(MacPacket rx_packet) {
@@ -387,6 +389,20 @@ unsigned char cmdSetMocapVel(unsigned char type, unsigned char status, unsigned 
     new_yaw = ((long)frame[6] + ((long)frame[7] << 8)) << 8;
     setMocapVel(new_vel, new_yaw);
 
+    return 1;
+}
+
+unsigned char cmdLaunch(unsigned char type, unsigned char status, unsigned char length, unsigned char *frame, unsigned int src_addr){
+    int16_t u = (int16_t)frame[0] + ((int16_t)frame[1]<<8);
+    int16_t ud = (int16_t)frame[2] + ((int16_t)frame[3]<<8);
+    int16_t udd = (int16_t)frame[4] + ((int16_t)frame[5]<<8);
+    int16_t uddd = (int16_t)frame[6] + ((int16_t)frame[7]<<8);
+    
+    int16_t rol = ((int16_t)frame[8] + ((int16_t)frame[9]<<8)) << 8;
+    int16_t rdd = (int16_t)frame[10] + ((int16_t)frame[11]<<8);
+
+    setTilt(u,ud,udd,uddd);
+    setLaunch(rol, rdd);
     return 1;
 }
 

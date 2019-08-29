@@ -327,6 +327,9 @@ int32_t originalLegSetpoint;
 int32_t originalPushoffCmd;
 uint8_t keepLanding = 1;
 
+#define FOOT_ADJUST 0//262 // MANUAL TUNING 4mm
+
+
 
 // Communications variables ---------------------------------------------------
 int16_t gdata[3];                       // Rate gyro data array
@@ -403,7 +406,7 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         }
     }
 
-    if (modeFlags & 0b1 &&
+    if (modeFlags & 0b10001 &&
         (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND)) {
         // Notch filter for pitch
         wyI[2] = wyI[1];
@@ -436,7 +439,7 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
             kinematicUpdate();
             modeEstimation();
             jumpModes();
-            if (modeFlags & 0b1 && 
+            if (modeFlags & 0b10001 && 
                 (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND)
                 && !gainsPD[9]){ // gainsPD[9] is used to select new or old balance
                 balanceCtrl();
@@ -594,7 +597,7 @@ void salto1p_functions(void) {
             // 1311 = 2cm in 2^16 ticks/m: use (int32_t)leg - 1311
             // 5898 = 9cm in 2^16 ticks/m
             qCmd[1] = -((int32_t)vB[0]*Tt*469)/((landingLeg - (vzLand>>5)*Tt) >> 6)
-                -(int32_t)27853; // Motor effect offset: 1.7 degree offset pitch; 16384 ticks/deg
+                -(int32_t)16384; // (now 1 degree) Motor effect offset: 1.7 degree offset pitch; 16384 ticks/deg
             qCmd[0] = ((int32_t)vB[1]*Tt*469)/((landingLeg - (vzLand>>5)*Tt) >> 6)
                 ;//-(int32_t)1*(int32_t)16384; // MANUAL TUNING 1 degree offset roll
         } else if (mj_state == MJ_GND || mj_state == MJ_STAND) {
@@ -698,8 +701,6 @@ void eulerUpdate(int32_t* angs, int32_t* vels, int8_t time) {
 
 void kinematicUpdate(void) {
     // Basic update to be done in any mode (robot internal kinematics)
-
-    #define FOOT_ADJUST 262 // MANUAL TUNING 4mm
 
     // Read femur angle and lookup tables indexed by the femur angle
     femur = calibPos(1);
@@ -934,7 +935,7 @@ void stanceUpdate(void) {
     // acceleration is in m/s^2 / (2^2 ticks)
 
     #if ROBOT_NAME == SALTO_1P_DASHER
-    if (leg < 5964 && legVel < 0) { // 9cm+1mm
+    if (leg < (5964+FOOT_ADJUST) && legVel < 0) { // 9cm+1mm
         legVel = 0;
     }
     #elif ROBOT_NAME == SALTO_1P_RUDOLPH
@@ -1556,7 +1557,7 @@ void attitudeCtrl(void) {
     int32_t rolPD = ((gainsPD[3] * qErr[0])>>12) + ((gainsPD[4] * w[0])>>4);
     int32_t pitPD = ((gainsPD[6] * qErr[1])>>12) + ((gainsPD[7] * w[1])>>4);
 
-    if (modeFlags & 0b1 &&
+    if (modeFlags & 0b10001 &&
         (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND)) {
         // Add steady thrust to hold up stance balance
         rolPD += (((((int32_t)leg*FULL_MASS*GRAV_ACC) >> (5+3)) * sin_phi) >> COS_PREC);
@@ -1705,7 +1706,7 @@ void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw){
     int i;
 
     
-    if (modeFlags & 0b1 && 
+    if ((modeFlags & 0b10001 || modeFlags & 0b10) && 
         (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND)) {
         // Notch filters
         /*
@@ -1766,7 +1767,7 @@ void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw){
     aftCmd = (cos_theta*roll + cos_theta*yaw - sin_theta*roll + sin_theta*yaw)>>COS_PREC;//(aftCmd>>1) + ((roll + yaw)>>1);
     tailCmd = pitch;
 
-    if (modeFlags & 0b1 && 
+    if (modeFlags & 0b10001 && 
         (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND)) {
         // Balance on toe tail velocity feedback
         tailCmd += gainsPD[9]*tail_vel;
@@ -1867,7 +1868,7 @@ int32_t tailLinearization(int32_t* tail){
     }
 
 #if ROBOT_NAME == SALTO_1P_DASHER
-    if (modeFlags & 0b1 &&
+    if (modeFlags & 0b10001 &&
         (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND) ) {
         tailOut += 5*tail_vel; // more aggressive linearization for toe balancing
     } else {
@@ -1883,11 +1884,11 @@ int32_t tailLinearization(int32_t* tail){
         tailOut += 1*tail_vel;
     }
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-    if (modeFlags & 0b1 &&
+    if (modeFlags & 0b10001 &&
         (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND) ) {
-        tailOut += 3*tail_vel; // more aggressive linearization for toe balancing
+        tailOut += 4*tail_vel; // more aggressive linearization for toe balancing
     } else {
-        tailOut += 2*tail_vel;
+        tailOut += 3*tail_vel;
     }
 
     // Friction (stiction) compensation

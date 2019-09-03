@@ -591,7 +591,7 @@ void salto1p_functions(void) {
             }
 
             int32_t landingLeg = 5898; // leg; // leg - 1311
-            int32_t Tt = sqrtApprox(landingLeg/GRAV_ACC << 4); // output in 2^10 ticks/s
+            int32_t Tt = sqrtApprox(landingLeg/GRAV_ACC << 6); // output in 2^10 ticks/s
             // vz*Tt 2000*2^10 to 2^16 ~= >> 5
             // vx*Tt 2000*2^10 to 2^25/(2*pi/180) ~= 469.
             // 1311 = 2cm in 2^16 ticks/m: use (int32_t)leg - 1311

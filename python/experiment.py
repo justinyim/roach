@@ -250,11 +250,11 @@ def main():
 
         #time.sleep(15.0)
 
-        time.sleep(0.5)
-        viconTest = [0,0,0, 0,0,0, 20*256,20*256]
-        xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        time.sleep(1.0)
-        # load leg for stiffness
+        # time.sleep(0.5)
+        # viconTest = [0,0,0, 0,0,0, 30*256,30*256]
+        # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+        # time.sleep(1.0)
+        # # load leg for stiffness
 
         # countDown = 2
         # for x in range(countDown):
@@ -376,25 +376,25 @@ def main():
         # time.sleep(0.01)
 
 
-        # Balance controller sinusoidal tilt
-        tEnd = 10 # duration (s)
-        a = 5*3.14159/180*938.7 # amplitude (rad)
-        w = 1*2*3.14159 # angular velocity (rad/s)
-        t0 = time.time()
-        t = 0.0
-        while t < tEnd:
-            # ud is in 2^15/(2000*pi/180)~=938.7 ticks/rad
-            t = time.time() - t0
-            tiltCmd = [a/w*np.sin(w*t), a*np.cos(w*t), -a*w*np.sin(w*t), -a*w*w*np.cos(w*t)]
-            xb_send(0, command.TILT, pack('4h', *tiltCmd))
-            print tiltCmd
-            time.sleep(0.02)
-        tiltCmd = [0, 0, 0, 0]
-        xb_send(0, command.TILT, pack('4h', *tiltCmd))
-        time.sleep(0.02)
-        tiltCmd = [0, 0, 0, 0]
-        xb_send(0, command.TILT, pack('4h', *tiltCmd))
-        time.sleep(0.02)
+        # # Balance controller sinusoidal tilt
+        # tEnd = 10 # duration (s)
+        # a = 5*3.14159/180*938.7 # amplitude (rad)
+        # w = 1*2*3.14159 # angular velocity (rad/s)
+        # t0 = time.time()
+        # t = 0.0
+        # while t < tEnd:
+        #     # ud is in 2^15/(2000*pi/180)~=938.7 ticks/rad
+        #     t = time.time() - t0
+        #     tiltCmd = [a/w*np.sin(w*t), a*np.cos(w*t), -a*w*np.sin(w*t), -a*w*w*np.cos(w*t)]
+        #     xb_send(0, command.TILT, pack('4h', *tiltCmd))
+        #     print tiltCmd
+        #     time.sleep(0.02)
+        # tiltCmd = [0, 0, 0, 0]
+        # xb_send(0, command.TILT, pack('4h', *tiltCmd))
+        # time.sleep(0.02)
+        # tiltCmd = [0, 0, 0, 0]
+        # xb_send(0, command.TILT, pack('4h', *tiltCmd))
+        # time.sleep(0.02)
 
 
         # # Balance control tilt once to 9/4*a*tau^2 rad and 1/2*a*tau rad/s
@@ -877,7 +877,7 @@ if __name__ == '__main__':
     except Exception as args:
         print "\nGeneral exception:",args
         print "\n    ******    TRACEBACK    ******    "
-        traceback.print_stack()
+        traceback.print_exc()
         print "    *****************************    \n"
         print "Attempting to exit cleanly..."
         shared.xb.halt()

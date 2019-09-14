@@ -1178,6 +1178,7 @@ void legCtrl(void) {
         if (modeFlags & 0b10000) {
             // MANUAL TUNING how much to retract leg for landing
             int32_t vzLand = v[2];
+            //int32_t vzLand = -sqrtApprox((v[2]>>8)*(v[2]>>8)+(v[0]>>8)*(v[0]>>8)) << 8;
             if (vzLand > -3000) {
                 vzLand = -3000;
             }
@@ -1285,7 +1286,7 @@ void balanceCtrl(void) {
     // qdd2H22 is in 2^30/(2000*pi/180)~=30760000 ticks/(N m)
     int32_t qdd2H22 = - (Iy*((Mddd>>5)))
         + ((mgc*sin_theta*29)>>COS_PREC) // Gravitational compensation
-        + 2*((FULL_MASS*(int32_t)leg>>10)*(int32_t)legVel>>10)*(int32_t)w[1]; // Coriolis
+        - 2*((FULL_MASS*(int32_t)leg>>10)*(int32_t)legVel>>10)*(int32_t)w[1]; // Coriolis
     // mgc is in 2^20 ticks/(N m): conversion is 2^10/(2000*pi/180) ~= 29.3354
     // For q[1]=pi/2, l=0.25m: term1 = 1013*2^8*2^7 = 2^25, term2 ~= 229*2^21 = 2^29
 
@@ -2147,9 +2148,9 @@ void setLeg(int16_t rdes_in, int16_t rddes_in, int16_t rdddes_in, int16_t k1des_
     }
 }
 
-void setMocapVel(int16_t* new_vel, int32_t yaw) {
+void setMocapVel(int16_t* new_vel, int32_t new_yaw) {
     int i;
-    //q[2] = (15*q[2]>>4) + (yaw>>4);
+    q[2] += (new_yaw - q[2]) >> 3;
     if (mj_state != MJ_AIR) {
         return;
     }

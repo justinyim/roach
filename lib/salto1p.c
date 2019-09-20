@@ -327,7 +327,11 @@ int32_t originalLegSetpoint;
 int32_t originalPushoffCmd;
 uint8_t keepLanding = 1;
 
+#if ROBOT_NAME == SALTO_1P_DASHER
 #define FOOT_ADJUST 0//262 // MANUAL TUNING 4mm
+#elif ROBOT_NAME == SALTO_1P_RUDOLPH
+#define FOOT_ADJUST 1311 // MANUAL TUNING (10cm for the gripper)
+#endif
 
 
 
@@ -420,9 +424,9 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
             + 55*(int32_t)wyI[0] - 102*(int32_t)wyI[1] + 55*(int32_t)wyI[2])>>6;
         w[1] = wyO[0];
         #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-        // Period of 20 cycles, 0.1 bandwidth
-        wyO[0] = (105*(int32_t)wyO[1] - 46*(int32_t)wyO[2]
-            + 55*(int32_t)wyI[0] - 105*(int32_t)wyI[1] + 55*(int32_t)wyI[2])>>6;
+        // Period of 18 cycles, 0.1 bandwidth
+        wyO[0] = (104*(int32_t)wyO[1] - 46*(int32_t)wyO[2]
+            + 55*(int32_t)wyI[0] - 104*(int32_t)wyI[1] + 55*(int32_t)wyI[2])>>6;
         w[1] = wyO[0];
         #else
         #endif
@@ -939,7 +943,7 @@ void stanceUpdate(void) {
         legVel = 0;
     }
     #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-    if (leg < 7000 && legVel < 0) { // 10.7cm
+    if (leg < (7000+FOOT_ADJUST) && legVel < 0) { // 10.7cm
         legVel = 0;
     }
     #endif
@@ -1754,9 +1758,9 @@ void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw){
             + 53*(int32_t)pitI[0] - 75*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
         pitch = ((8-TAIL_CMD_ALPHA)*pitch + TAIL_CMD_ALPHA*pitO[0]) >> 3; // low pass filter
         #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-        // Period of 10 cycles, 0.125 bandwidth
-        pitO[0] = (86*(int32_t)pitO[1] - 43*(int32_t)pitO[2]
-            + 53*(int32_t)pitI[0] - 86*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
+        // Period of 9 cycles, 0.125 bandwidth
+        pitO[0] = (82*(int32_t)pitO[1] - 43*(int32_t)pitO[2]
+            + 53*(int32_t)pitI[0] - 82*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
         pitch = ((8-TAIL_CMD_ALPHA)*pitch + TAIL_CMD_ALPHA*pitO[0]) >> 3; // low pass filter
         #else
         #endif
@@ -1894,11 +1898,11 @@ int32_t tailLinearization(int32_t* tail){
 
     // Friction (stiction) compensation
     if (tail_vel < -20) {
-        tailOut -= 60;
+        tailOut -= 20;
     } else if (tail_vel > 20) {
-        tailOut += 60;
+        tailOut += 20;
     } else {
-        tailOut += 3*tail_vel;
+        tailOut += 1*tail_vel;
     }
 #endif
 

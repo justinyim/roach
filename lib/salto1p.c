@@ -248,9 +248,9 @@ int32_t uCmd;
 
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
 // poles -9, -9, -9
-#define K0 -729// in 1 tick/(rad/s^3)
-#define K1 -249// in 1024/1000 tick/(rad/s^2)
-#define K2 -27// in 1 tick/(rad/s)
+#define K0 -729// in 1 tick/(rad/s^3) z^3
+#define K1 -249// in 1024/1000 tick/(rad/s^2) 3*z^2
+#define K2 -27// in 1 tick/(rad/s) 3*z
 #define CK3 729 // command filter (z*z*z)
 #define CK2 27 // command filter 1/(3/(z*z))
 #define CK1 3 // command filter 1/(1/z+1/z+1/z)
@@ -330,7 +330,7 @@ uint8_t keepLanding = 1;
 #if ROBOT_NAME == SALTO_1P_DASHER
 #define FOOT_ADJUST 0//262 // MANUAL TUNING 4mm
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-#define FOOT_ADJUST 1311 // MANUAL TUNING (10cm for the gripper)
+#define FOOT_ADJUST (655+1310)//1311 // MANUAL TUNING (10cm for the gripper)
 #endif
 
 
@@ -367,7 +367,7 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
     //amsEncoderStartAsyncRead();
 
     if ((modeFlags>>6) == 1 || // swing-up
-        mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND) { // on ground
+        mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND || mj_state == MJ_SWING) { // on ground
 
         int32_t ml = FULL_MASS*(int32_t)leg; // in 2^24 ticks/(kg m)
 
@@ -411,7 +411,7 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
     }
 
     if (modeFlags & 0b10001 &&
-        (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND)) {
+        (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND || mj_state == MJ_SWING)) {
         // Notch filter for pitch
         wyI[2] = wyI[1];
         wyI[1] = wyI[0];
@@ -444,7 +444,7 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
             modeEstimation();
             jumpModes();
             if (modeFlags & 0b10001 && 
-                (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND)
+                (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND || mj_state == MJ_SWING)
                 && !gainsPD[9]){ // gainsPD[9] is used to select new or old balance
                 balanceCtrl();
             } else {
@@ -478,7 +478,7 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         if (!(t1_ticks%BOE_DEC)) {
             // Toe balance estimation update
             if (modeFlags & 0b1 && 
-                (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND)) {
+                (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND || mj_state == MJ_SWING)) {
                 balanceOffsetEstimator();
             }
         }
@@ -563,7 +563,7 @@ void salto1p_functions(void) {
     }
 
     // Onboard velocity control using flight phase attitude
-    if (modeFlags & 0b10000) { // orient leg for landing (approximate hack)
+    if ((modeFlags & 0b10000) && !(modeFlags & 0b100000)) { // orient leg for landing (approximate hack)
         if (mj_state == MJ_AIR) {
             /*
             vCmd[0] = 0;
@@ -604,7 +604,7 @@ void salto1p_functions(void) {
                 -(int32_t)16384; // (now 1 degree) Motor effect offset: 1.7 degree offset pitch; 16384 ticks/deg
             qCmd[0] = ((int32_t)vB[1]*Tt*469)/((landingLeg - (vzLand>>5)*Tt) >> 6)
                 ;//-(int32_t)1*(int32_t)16384; // MANUAL TUNING 1 degree offset roll
-        } else if (mj_state == MJ_GND || mj_state == MJ_STAND) {
+        } else if (mj_state == MJ_GND || mj_state == MJ_STAND || mj_state == MJ_SWING) {
             qCmd[1] = 0;
             qCmd[0] = 0;
         }
@@ -869,7 +869,15 @@ void jumpModes(void) {
                 mj_state = MJ_AIR;
                 transition_time = t1_ticks;
             }
+			if (((q[0] > PI/3 || q[0] < -PI/3)
+            || (q[1] > PI/3 || q[1] < -PI/3))
+			&& (modeFlags & 0b100000)) {
+				mj_state = MJ_SWING;
+			}
             break;
+			
+		case MJ_SWING:
+			break;
 
         case MJ_STOPPED:
             break;
@@ -884,13 +892,13 @@ void modeEstimation(void) {
     // Description TODO
     uint8_t j;
 
-    if (mj_state == MJ_GND || mj_state == MJ_LAUNCH || mj_state == MJ_STAND) {
+    if (mj_state == MJ_GND || mj_state == MJ_LAUNCH || mj_state == MJ_STAND || mj_state == MJ_SWING) {
         if (last_state == MJ_AIR) { // The robot just touched down
             flightStanceTrans();
         }
         stanceUpdate();
     } else if (mj_state == MJ_AIR) { // Flight phase estimation
-        if (last_state == MJ_GND || last_state == MJ_LAUNCH || mj_state == MJ_STAND) { // robot thinks it just took off
+        if (last_state == MJ_GND || last_state == MJ_LAUNCH || mj_state == MJ_STAND || mj_state == MJ_SWING) { // robot thinks it just took off
             stanceFlightTrans();
         }
         flightUpdate();
@@ -1179,7 +1187,7 @@ void legCtrl(void) {
             send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
         }
     } else if (mj_state == MJ_AIR) {
-        if (modeFlags & 0b10000) {
+        if ((modeFlags & 0b10000) && !(modeFlags & 0b100000)) {
             // MANUAL TUNING how much to retract leg for landing
             int32_t vzLand = v[2];
             //int32_t vzLand = -sqrtApprox((v[2]>>8)*(v[2]>>8)+(v[0]>>8)*(v[0]>>8)) << 8;
@@ -1194,6 +1202,8 @@ void legCtrl(void) {
         } else {
             send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_AIR, 2);
         }
+	} else if (mj_state == MJ_SWING) {
+		send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
     } else if (mj_state == MJ_STOPPED) {
         sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
         if (sensor_data->current != 0) {
@@ -1563,7 +1573,7 @@ void attitudeCtrl(void) {
     int32_t pitPD = ((gainsPD[6] * qErr[1])>>12) + ((gainsPD[7] * w[1])>>4);
 
     if (modeFlags & 0b10001 &&
-        (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND)) {
+        (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND || mj_state == MJ_SWING)) {
         // Add steady thrust to hold up stance balance
         rolPD += (((((int32_t)leg*FULL_MASS*GRAV_ACC) >> (5+3)) * sin_phi) >> COS_PREC);
         // FULL_MASS is 2^8 ticks/kg
@@ -1712,7 +1722,7 @@ void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw){
 
     
     if ((modeFlags & 0b10001 || modeFlags & 0b10) && 
-        (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND)) {
+        (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND || mj_state == MJ_SWING)) {
         // Notch filters
         /*
         // Period of 20 cycles, 0.02 bandwidth
@@ -1773,7 +1783,7 @@ void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw){
     tailCmd = pitch;
 
     if (modeFlags & 0b10001 && 
-        (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND)) {
+        (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND || mj_state == MJ_SWING)) {
         // Balance on toe tail velocity feedback
         tailCmd += gainsPD[9]*tail_vel;
     } else if (mj_state != MJ_AIR) { // Tail braking on the ground
@@ -1874,7 +1884,7 @@ int32_t tailLinearization(int32_t* tail){
 
 #if ROBOT_NAME == SALTO_1P_DASHER
     if (modeFlags & 0b10001 &&
-        (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND) ) {
+        (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND || mj_state == MJ_SWING) ) {
         tailOut += 5*tail_vel; // more aggressive linearization for toe balancing
     } else {
         tailOut += 4*tail_vel;
@@ -1890,7 +1900,7 @@ int32_t tailLinearization(int32_t* tail){
     }
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
     if (modeFlags & 0b10001 &&
-        (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND) ) {
+        (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND || mj_state == MJ_SWING) ) {
         tailOut += 4*tail_vel; // more aggressive linearization for toe balancing
     } else {
         tailOut += 3*tail_vel;

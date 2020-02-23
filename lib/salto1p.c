@@ -330,7 +330,7 @@ uint8_t keepLanding = 1;
 #if ROBOT_NAME == SALTO_1P_DASHER
 #define FOOT_ADJUST 0//262 // MANUAL TUNING 4mm
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-#define FOOT_ADJUST 1311 // MANUAL TUNING (10cm for the gripper)
+#define FOOT_ADJUST (655+1311) // MANUAL TUNING (10mm for the gripper)
 #endif
 
 
@@ -1058,10 +1058,10 @@ void takeoffEstimation(void) {
     // Compensate for CG offset
     // MANUAL TUNING
 #if ROBOT_NAME == SALTO_1P_DASHER
-    TOw[1] += 20*TOlegVel/213; // in (centi rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694: 100/0.4694 = 213
-    TOw[0] += 20*TOlegVel/213;
+    TOw[1] -= 20*TOlegVel/213; // in (centi rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694: 100/0.4694 = 213
+    TOw[0] += 40*TOlegVel/213;
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-    TOw[1] += 00*TOlegVel/213;
+    TOw[1] -= 40*TOlegVel/213;
     TOw[0] += 00*TOlegVel/213;
 #else
     TOw[1] += 0.2*0.469*TOlegVel/; // in (rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694
@@ -1121,8 +1121,20 @@ void takeoffEstimation(void) {
     int32_t velocity_x = (v[0]*TOcos_psi + v[1]*TOsin_psi)>>COS_PREC;
     int32_t velocity_y = (-v[0]*TOsin_psi + v[1]*TOcos_psi)>>COS_PREC;
 
-    att_correction[0] = -(ATT_CORRECTION_GAIN_X*(velocity_x - TDvCmd[0]) - (TDq[2]>>1));
-    att_correction[1] = ATT_CORRECTION_GAIN_Y*(velocity_y - TDvCmd[1]) + (TDq[1]>>1);
+    // Velocity error (and saturation)
+    velocity_x = velocity_x - TDvCmd[0];
+    velocity_x = velocity_x > 1000 ? 1000 :
+                 velocity_x < -1000 ? -1000 :
+                 velocity_x;
+    velocity_y = velocity_y - TDvCmd[1];
+    velocity_y = velocity_y > 1000 ? 1000 :
+                 velocity_y < -1000 ? -1000 :
+                 velocity_y;
+
+    att_correction[0] = -(ATT_CORRECTION_GAIN_X*velocity_x - (TDq[2]>>1));
+        //-(ATT_CORRECTION_GAIN_X*(velocity_x - TDvCmd[0]) - (TDq[2]>>1));
+    att_correction[1] = ATT_CORRECTION_GAIN_Y*velocity_y + (TDq[1]>>1);
+        //ATT_CORRECTION_GAIN_Y*(velocity_y - TDvCmd[1]) + (TDq[1]>>1);
 
     //att_correction[0] = -(ATT_CORRECTION_GAIN_X*(velocity_x - stance_vel_des[0]) * 188) /
     //    ((int32_t)(-velocity[2] + TDvelocity[2]) >> 6);
@@ -1437,8 +1449,12 @@ int32_t deadbeatVelCtrl(int16_t* vi, int16_t* vo, int32_t* ctrl) {
     //long iy = (-(long)vi[0]*sin_psi + (long)vi[1]*cos_psi)>>COS_PREC;//vi[1];
     long ix = vi[0];
     long iy = vi[1];
-    long iz = (vi[2] > -4000 ? -4000 : vi[2]) + 6600;
-    //long iz = -TOvz + 6600; // TODO: this is a hack that works for flat ground
+    //long iz = (vi[2] > -4000 ? -4000 : vi[2]) + 6600;
+
+    long iz = -TOvz + 6600; // TODO: this is a hack that works for flat ground
+    if (vi[2] < -TOvz) {
+        iz = vi[2] + 6600;
+    }
 
     long ixix = (ix*ix)>>11; // >> 11 is approximately divide by 2000
     long iyiy = (iy*iy)>>11;
@@ -1475,6 +1491,21 @@ int32_t deadbeatVelCtrl(int16_t* vi, int16_t* vo, int32_t* ctrl) {
 #endif
 
 #ifdef FULL_POWER
+    //*
+    // 100% gains from runGridMotor20_truncated.mat
+    long pit_ctrl = -89*ix +38*ox // supposed to be 89, 38
+        -17*ixiz +8*oxiz -3*ixoz -20*oxoz;
+        // Scaled by 469 approx = PI/(3.14159*2000)
+
+    long rol_ctrl = -(-89*iy +38*oy // supposed to be 89, 38
+        -17*iyiz +8*oyiz -3*iyoz -20*oyoz);
+
+    long leg_ctrl = (77*65536 -645*iz -851*oz
+        +89*(ixix+iyiy) -5*iziz -140*(oxox+oyoy) -103*ozoz);
+        // Scaled by 65536/2000
+    //*/
+
+    /*
     // 100% gains from runGridMotor18a
     long pit_ctrl = -91*ix +36*ox //-84*ix +32*ox // supposed to be 91, 36
         -17*ixiz +10*oxiz -2*ixoz -19*oxoz;
@@ -1486,6 +1517,7 @@ int32_t deadbeatVelCtrl(int16_t* vi, int16_t* vo, int32_t* ctrl) {
     long leg_ctrl = (77*65536 -472*iz -688*oz
         +62*(ixix+iyiy) -20*iziz -119*(oxox+oyoy) -123*ozoz);
         // Scaled by 65536/2000
+    */
 
     /*
     // 100% gains from runGridMotor18

@@ -330,7 +330,7 @@ uint8_t keepLanding = 1;
 #if ROBOT_NAME == SALTO_1P_DASHER
 #define FOOT_ADJUST 0//262 // MANUAL TUNING 4mm
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-#define FOOT_ADJUST (655+1311) // MANUAL TUNING (10mm for the gripper)
+#define FOOT_ADJUST 1311 //(655+1311) // MANUAL TUNING (+655 for 10mm for the gripper)
 #endif
 
 
@@ -602,8 +602,12 @@ void salto1p_functions(void) {
             // 5898 = 9cm in 2^16 ticks/m
             qCmd[1] = -((int32_t)vB[0]*Tt*469)/((landingLeg - (vzLand>>5)*Tt) >> 6)
                 -(int32_t)16384; // (now 1 degree) Motor effect offset: 1.7 degree offset pitch; 16384 ticks/deg
+            #if ROBOT_NAME == SALTO_1P_RUDOLPH
             qCmd[0] = ((int32_t)vB[1]*Tt*469)/((landingLeg - (vzLand>>5)*Tt) >> 6)
-                ;//-(int32_t)1*(int32_t)16384; // MANUAL TUNING 1 degree offset roll
+                +(int32_t)1*(int32_t)16384; // MANUAL TUNING 1 degree offset roll
+            #else
+                qCmd[0] = ((int32_t)vB[1]*Tt*469)/((landingLeg - (vzLand>>5)*Tt) >> 6);
+            #endif
         } else if (mj_state == MJ_GND || mj_state == MJ_STAND) {
             qCmd[1] = 0;
             qCmd[0] = 0;
@@ -1058,11 +1062,11 @@ void takeoffEstimation(void) {
     // Compensate for CG offset
     // MANUAL TUNING
 #if ROBOT_NAME == SALTO_1P_DASHER
-    TOw[1] -= 20*TOlegVel/213; // in (centi rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694: 100/0.4694 = 213
-    TOw[0] += 40*TOlegVel/213;
+    TOw[1] += 10*TOlegVel/213; // in (centi rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694: 100/0.4694 = 213
+    TOw[0] += 50*TOlegVel/213;
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-    TOw[1] -= 40*TOlegVel/213;
-    TOw[0] += 00*TOlegVel/213;
+    TOw[1] += 00*TOlegVel/213;
+    TOw[0] += 10*TOlegVel/213;
 #else
     TOw[1] += 0.2*0.469*TOlegVel/; // in (rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694
     TOw[0] += 0.2*0.469*TOlegVel/;
@@ -1198,7 +1202,13 @@ void legCtrl(void) {
             if (vzLand > -3000) {
                 vzLand = -3000;
             }
+            #if ROBOT_NAME == SALTO_1P_DASHER
             int32_t legRet = -(vzLand<<16)/200 + ((int32_t)25<<16);
+            #elif ROBOT_NAME == SALTO_1P_RUDOLPH
+            int32_t legRet = -(vzLand<<16)/200 + ((int32_t)20<<16);
+            #else
+            int32_t legRet = -(vzLand<<16)/200 + ((int32_t)25<<16);
+            #endif
             if (legRet < 65536*(int32_t)45) {
                 legRet = 65536*(int32_t)45;
             }
@@ -1467,7 +1477,7 @@ int32_t deadbeatVelCtrl(int16_t* vi, int16_t* vo, int32_t* ctrl) {
     long iyiz = (iz*iy)>>11;
     long oxiz = (iz*ox)>>11;
     long oyiz = (iz*oy)>>11;
-    long ixoz = (oz*ox)>>11;
+    long ixoz = (oz*ix)>>11;
     long iyoz = (oz*iy)>>11;
     long oxoz = (oz*ox)>>11;
     long oyoz = (oz*oy)>>11;
@@ -2099,16 +2109,21 @@ void setVelocitySetpoint(int16_t* newCmd, int32_t newYaw) {
                     newCmd[1];
         //*
         // Usual velocity command
-        for (i=0; i<3; i++){
-            vCmd[i] = newCmd[i];
-        }
         qCmd[2] = newYaw;
-
         while (qCmd[2] > PI) {
             qCmd[2] -= 2*PI;
         }
         while (qCmd[2] < -PI) {
             qCmd[2] += 2*PI;
+        }
+
+        if (v[2] < -2000) {
+            // Don't accept new velocity commands if we're about to land (falling faster)
+            return;
+        }
+
+        for (i=0; i<3; i++){
+            vCmd[i] = newCmd[i];
         }
         //*/
 
@@ -2252,21 +2267,33 @@ void orientImageproc(int32_t* v_b, int16_t* v_ip) {
     // v_ip: int16_t [3] (from MPU IMU) to be transformed from the IP frame
     // v_b: int32_t [3] output of the transformation in the body frame
 
-#if ROBOT_NAME == SALTO_1P_RUDOLPH
-    // -55 degrees about roll
     // x axis right, y axis forwards, z axis up from ImageProc
+#if ROBOT_NAME == SALTO_1P_RUDOLPH
+    // -52 degrees about x, follwed by 180 degrees about body z
+    // v_b[2] = (158*((int32_t)v_ip[2]) - 201*((int32_t)v_ip[0]))>>8; //yaw
+    // v_b[0] = -v_ip[1]; // roll
+    // v_b[1] = (158*((int32_t)v_ip[0]) + 201*((int32_t)v_ip[2]))>>8; //pitch
+    // -55 degrees about roll
     v_b[2] = (147*((int32_t)v_ip[2]) - 210*((int32_t)v_ip[0]))>>8; //yaw
     v_b[0] = -v_ip[1]; // roll
     v_b[1] = (147*((int32_t)v_ip[0]) + 210*((int32_t)v_ip[2]))>>8; //pitch
+    // -58 degrees about x, follwed by 180 degrees about body z
+    // v_b[2] = (137*((int32_t)v_ip[2]) - 217*((int32_t)v_ip[0]))>>8; //yaw
+    // v_b[0] = -v_ip[1]; // roll
+    // v_b[1] = (137*((int32_t)v_ip[0]) + 217*((int32_t)v_ip[2]))>>8; //pitch
 #elif ROBOT_NAME == SALTO_1P_DASHER
-    // -50 degrees about x, follwed by 180 degrees about body z
-    //v_b[2] = (165*((int32_t)v_ip[2]) - 196*((int32_t)v_ip[0]))>>8; //yaw
-    //v_b[0] = -v_ip[1]; // roll
-    //v_b[1] = (165*((int32_t)v_ip[0]) + 196*((int32_t)v_ip[2]))>>8; //pitch
-    // -54 degrees about x, follwed by 180 degrees about body z
-    v_b[2] = (139*((int32_t)v_ip[2]) - 215*((int32_t)v_ip[0]))>>8; //yaw
+    // -48 degrees about x, follwed by 180 degrees about body z
+    v_b[2] = (171*((int32_t)v_ip[2]) - 190*((int32_t)v_ip[0]))>>8; //yaw
     v_b[0] = -v_ip[1]; // roll
-    v_b[1] = (139*((int32_t)v_ip[0]) + 215*((int32_t)v_ip[2]))>>8; //pitch
+    v_b[1] = (171*((int32_t)v_ip[0]) + 190*((int32_t)v_ip[2]))>>8; //pitch
+    // -50 degrees about x, follwed by 180 degrees about body z
+    // v_b[2] = (165*((int32_t)v_ip[2]) - 196*((int32_t)v_ip[0]))>>8; //yaw
+    // v_b[0] = -v_ip[1]; // roll
+    // v_b[1] = (165*((int32_t)v_ip[0]) + 196*((int32_t)v_ip[2]))>>8; //pitch
+    // -52 degrees about x, follwed by 180 degrees about body z
+    // v_b[2] = (158*((int32_t)v_ip[2]) - 201*((int32_t)v_ip[0]))>>8; //yaw
+    // v_b[0] = -v_ip[1]; // roll
+    // v_b[1] = (158*((int32_t)v_ip[0]) + 201*((int32_t)v_ip[2]))>>8; //pitch
 #elif ROBOT_NAME == SALTO_1P_SANTA
     // -45 degrees about pitch
     v_b[2] = (((int32_t)(v_ip[2] + v_ip[1]))*181)>>8; //yaw
@@ -2473,5 +2500,21 @@ uint16_t med3(uint16_t* arr) {
             }
         }
     }
+}
+
+int32_t asinApprox(int16_t x) {
+// x is in COS_PREC precision
+// y is in PI ticks per pi radians
+    int32_t y = 3813*x;
+
+    return y;
+}
+
+int32_t atanApprox(int16_t x) {
+// x is in COS_PREC precision
+// y is in PI ticks per pi radians
+    int32_t y = 3410*x;
+
+    return y;
 }
 

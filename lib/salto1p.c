@@ -46,7 +46,7 @@ int32_t gainsPD[10];      // PD controller gains (yaw, rol, pit) (P, D, other)
 
 #define P_AIR ((3*65536)/100) // leg proportional gain in the air (duty cycle/rad * 65536)
 #define D_AIR ((0*65536)/1000) // leg derivative gain in the air (duty cycle/[rad/s] * 65536)
-#define P_GND ((3*65536)/10) // leg proportional gain on the ground
+#define P_GND ((5*65536)/10) // leg proportional gain on the ground
 #define D_GND ((2*65536)/1000)
 #define P_STAND ((2*65536)/100) //((1*65536)/10) // leg proportional gain for standing
 #define D_STAND ((5*65536)/10000) //((1*65536)/1000)
@@ -588,8 +588,8 @@ void salto1p_functions(void) {
             qCmd[1] = ctrl_vect[0]; // offset back by 0 deg (1<<13 ticks/deg), no scale fudge
             qCmd[0] = ctrl_vect[1]-8192; // offset by 1/2 deg, no scale fudge factor
             */
-            //int32_t vzLand = -TOvz; // hack for flat ground
-            int32_t vzLand = v[2];
+            int32_t vzLand = -TOvz; // hack for flat ground
+            //int32_t vzLand = v[2];
             if (vzLand > -3000) {
                 vzLand = -3000;
             }
@@ -1005,6 +1005,15 @@ void stanceFlightTrans(void) {
     cntr = vel_ind;
     TOlegVel = legVel;
     legVel = 0;
+
+    g_accumulator = 0;
+    TOleg = legBuf[cntr*2];
+    for(j = 0; j<3; j++){
+        TOq[j] = angBuf[cntr*6+j];
+        TOw[j] = angBuf[cntr*6+3+j];
+        TOt = t1_ticks;
+    }
+
     //*
     for (i=0; i<VEL_BUF_LEN; i++) {
         if (legBuf[cntr*2+1] > TOlegVel) {
@@ -1063,7 +1072,7 @@ void takeoffEstimation(void) {
     // MANUAL TUNING
 #if ROBOT_NAME == SALTO_1P_DASHER
     TOw[1] += 10*TOlegVel/213; // in (centi rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694: 100/0.4694 = 213
-    TOw[0] += 50*TOlegVel/213;
+    TOw[0] += 30*TOlegVel/213;
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
     TOw[1] += 00*TOlegVel/213;
     TOw[0] += 10*TOlegVel/213;
@@ -1205,7 +1214,7 @@ void legCtrl(void) {
             #if ROBOT_NAME == SALTO_1P_DASHER
             int32_t legRet = -(vzLand<<16)/200 + ((int32_t)25<<16);
             #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-            int32_t legRet = -(vzLand<<16)/200 + ((int32_t)20<<16);
+            int32_t legRet = -(vzLand<<16)/200 + ((int32_t)18<<16);
             #else
             int32_t legRet = -(vzLand<<16)/200 + ((int32_t)25<<16);
             #endif
@@ -2117,10 +2126,10 @@ void setVelocitySetpoint(int16_t* newCmd, int32_t newYaw) {
             qCmd[2] += 2*PI;
         }
 
-        if (v[2] < -2000) {
-            // Don't accept new velocity commands if we're about to land (falling faster)
-            return;
-        }
+        // if (v[2] < -2000) {
+        //     // Don't accept new velocity commands if we're about to land (falling faster)
+        //     return;
+        // }
 
         for (i=0; i<3; i++){
             vCmd[i] = newCmd[i];

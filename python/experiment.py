@@ -124,7 +124,7 @@ def main():
         '''
 
 
-        '''
+        #'''
         # Swing-up pendulum test
         exp = [2]
         arbitrary = [0]
@@ -149,7 +149,7 @@ def main():
         time.sleep(0.01)
         xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
         time.sleep(0.01)
-        adjust = [0,64,-128] # 3667 ticks per radian, yaw, roll, pitch (64 ticks per degree)
+        adjust = [0,64,0]#-128] # 3667 ticks per radian, yaw, roll, pitch (64 ticks per degree)
         xb_send(0, command.ADJUST_BODY_ANG, pack('3h', *adjust))
         time.sleep(0.01)
 
@@ -158,13 +158,29 @@ def main():
         time.sleep(0.01)
 
         #modeSignal = [7]
-        modeSignal = [33]#[32]
+        modeSignal = [65]#[32]
         xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
         time.sleep(0.01)
 
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
         time.sleep(0.1)
-        '''
+
+        time.sleep(2.0)
+
+        modeSignal = [64]#[32]
+        xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+        time.sleep(0.01)
+
+        motorgains = [0,0,0, 0,0,0, 0,0,0,0]
+        xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
+        time.sleep(0.5)
+
+        motorgains = [0,0,0, 0,0,0, 200,12,0,0]
+        xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
+        time.sleep(0.01)
+
+        
+        #'''
 
 
         '''
@@ -199,7 +215,7 @@ def main():
         '''
 
 
-        #'''
+        '''
         # Balance on toe test
         #Start robot 0: wall jump, 1: single jump, 2: vicon jumps
         exp = [2]
@@ -244,6 +260,7 @@ def main():
         #motorgainsGnd = [130,0,13,0,5, 0,0,0,0,0]
         #motorgainsGnd = [110,0,12,0,5, 0,0,0,0,0]
         motorgainsGnd = [50,30,0, 80,50,0, 100,13,0,0] #[50,25,0, 180,140,0, 160,12,0,12]
+        #motorgainsGnd = [50,25,0, 80,50,0, 90,20,0,2] # using attitudeCtrl tuned to be similar to balanceCtrl
         #motorgainsGnd = [0,0,0, 0,0,0, 160,12,0,0]
         #motorgainsGnd = [0,0,0, 0,0,0, 0,0,0,0]
         xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgainsGnd))
@@ -316,7 +333,7 @@ def main():
             time.sleep(0.02)
 
         tEnd = 8
-        l = 0.14
+        l = 0.15
         al = 0.02
         wl = 0.5*2*3.14159
 
@@ -670,7 +687,7 @@ def main():
         #     time.sleep(1.0/fCmd)
         # time.sleep(2.0)
 
-        #'''
+        '''
 
         '''
         # Foot buzzing (new balance control)

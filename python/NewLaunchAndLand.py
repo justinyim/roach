@@ -19,14 +19,15 @@ def main():
       # # Balance control tilt once to 9/8*a*T^2 rad
       a = 30#-25.0# angular acceleration (rad/s^2)
       T = 0.07#0.05# # time scale (s)
-      motorExtend = 90 # 90 # radians
+      motorExtend = 70 # 90 # radians
       t_motor = 0.14 # seconds
 
-      # Falling to angle
-      a = 0.001 # Starting displacement
-      b = 0.1 # Time constant of toppling (s)
-      T = 0.586#(0.35 rad) #0.57 #(0.3 rad) # Time of falling
-      # a = 0.001, b = 0.1, T = 0.6 leans to 0.4 rad
+      # # Falling to angle
+      # a = 0.001 # Starting displacement
+      # b = 0.1 # Time constant of toppling (s)
+      # T = 0.586#(0.35 rad) #0.57 #(0.3 rad) # Time of falling
+      # # a = 0.001, b = 0.1, T = 0.6 leans to 0.4 rad
+      # motorExtend = 90 # 90 # radians
 
       k1 = 0
       k2 = -15
@@ -34,7 +35,7 @@ def main():
       
       toHop = 1 # make a small jump (1) or not (0)
 
-      rollOff = 0.01#-0.01
+      rollOff = 0.0#-0.01
       M_off = 0.0
 
       # BEGIN -----------------------
@@ -110,7 +111,7 @@ def main():
         xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
         time.sleep(0.02)
 
-        adjust = [0,-64,-192]
+        adjust = [0,-64,-256]
         xb_send(0, command.ADJUST_BODY_ANG, pack('3h', *adjust))
         time.sleep(0.02)
 
@@ -143,79 +144,78 @@ def main():
         t0 = time.time()
         t = 0.0
         tEnd = 13.0*T
-        tEnd = T+0.1
+        #tEnd = T+0.1
         while t < tEnd:
           # Md is in 2^15/(2000*pi/180)~=938.7 ticks/rad
           t = time.time() - t0
 
-          # Falling to angle
-          if t < 0.0:
-            Mddd = 0.0
-            Mdd = 0.0
-            Md = 0.0
-            M = 0.0 + M_off
-          elif t < T+0.05:
-            tr = t - 0.0
-            Mddd = a*np.exp(tr/b)/b**2 #a*np.exp(tr/b)/b**2
-            Mdd = a*np.exp(tr/b)/b #1/(200*b) + (a*(np.exp(tr/b) - 1))/b
-            Md = a*np.exp(tr/b)  #(tr/200 - a*tr)/b - a + a*np.exp(tr/b) + 1/200
-            M = a*np.exp(tr/b)*b +M_off #tr/200 - a*tr + a*b*(np.exp(tr/b) - 1) - (tr**2*(a - 1/200))/(2*b)
-          else:
-            Mddd = 0.0
-            Mdd = 0.0
-            Md = 0.0
-            M = 0.0
-          t_launchStart = (T-t_motor)
-
-          # # New trajectory (in paper)
+          # # Falling to angle
           # if t < 0.0:
           #   Mddd = 0.0
           #   Mdd = 0.0
           #   Md = 0.0
-          #   M = 0.0
-          # elif t < T:
+          #   M = 0.0 + M_off
+          # elif t < T+0.05:
           #   tr = t - 0.0
-          #   Mddd = a*(tr/(2*T) - 1)
-          #   Mdd = -(a*tr*(4*T - tr))/(4*T)
-          #   Md = -(a*tr**2*(6*T - tr))/(12*T)
-          #   M = -(a*tr**3*(8*T - tr))/(48*T)
-          # elif t < 3*T:
-          #   tr = t - T
-          #   Mddd = -a*(tr/(2*T) - 1)
-          #   Mdd = (a*tr*(4*T - tr))/(4*T) - (3*T*a)/4
-          #   Md = - (5*T**2*a)/12 - (a*tr*(3*T - tr)**2)/(12*T)
-          #   M = - (7*T**3*a)/48 - (a*tr*(9*T*tr + 10*T**2 - 4*tr**2))/24 - (a*tr**4)/(48*T)
-          # elif t < (11*T)/2:
-          #   tr = t - 3*T
-          #   Mddd = 0
-          #   Mdd = (T*a)/4
-          #   Md = (T*a*tr)/4 - (7*T**2*a)/12
-          #   M = - (71*T**3*a)/48 - (T*a*tr*(14*T - 3*tr))/24
-          # elif t < (15*T)/2:
-          #   tr = t - (11*T)/2
-          #   Mddd = (a*tr)/(4*T)
-          #   Mdd = (T*a)/4 + (a*tr**2)/(8*T)
-          #   Md = (T**2*a)/24 + (a*tr*(6*T**2 + tr**2))/(24*T)
-          #   M = (a*tr**4)/(96*T) - (69*T**3*a)/32 + (T*a*tr*(T + 3*tr))/24
-          # elif t < (17*T)/2:
-          #   tr = t - (15*T)/2
-          #   Mddd = (3*a*(tr/T - 1))/2
-          #   Mdd = (3*T*a)/4 - (3*a*tr*(2*T - tr))/(4*T)
-          #   Md = (7*T**2*a)/8 + (a*tr**3)/(4*T) + (3*a*tr*(T - tr))/4
-          #   M = (a*tr*(3*T*tr + 7*T**2 - 2*tr**2))/8 - (45*T**3*a)/32 + (a*tr**4)/(16*T)
-          # elif t < (317/36+1)*T:
-          #   tr = t - (17*T)/2
-          #   Mddd = 0
-          #   Mdd = 0
-          #   Md = (9*T**2*a)/8
-          #   M = (9*T**2*a*tr)/8 - (11*T**3*a)/32
+          #   Mddd = a*np.exp(tr/b)/b**2 #a*np.exp(tr/b)/b**2
+          #   Mdd = a*np.exp(tr/b)/b #1/(200*b) + (a*(np.exp(tr/b) - 1))/b
+          #   Md = a*np.exp(tr/b)  #(tr/200 - a*tr)/b - a + a*np.exp(tr/b) + 1/200
+          #   M = a*np.exp(tr/b)*b +M_off #tr/200 - a*tr + a*b*(np.exp(tr/b) - 1) - (tr**2*(a - 1/200))/(2*b)
           # else:
           #   Mddd = 0.0
           #   Mdd = 0.0
           #   Md = 0.0
           #   M = 0.0
+          # t_launchStart = (T-t_motor)
 
-          # t_launchStart = (317*T/36 - t_motor)
+          # New trajectory (in paper)
+          if t < 0.0:
+            Mddd = 0.0
+            Mdd = 0.0
+            Md = 0.0
+            M = 0.0
+          elif t < T:
+            tr = t - 0.0
+            Mddd = a*(tr/(2*T) - 1)
+            Mdd = -(a*tr*(4*T - tr))/(4*T)
+            Md = -(a*tr**2*(6*T - tr))/(12*T)
+            M = -(a*tr**3*(8*T - tr))/(48*T)
+          elif t < 3*T:
+            tr = t - T
+            Mddd = -a*(tr/(2*T) - 1)
+            Mdd = (a*tr*(4*T - tr))/(4*T) - (3*T*a)/4
+            Md = - (5*T**2*a)/12 - (a*tr*(3*T - tr)**2)/(12*T)
+            M = - (7*T**3*a)/48 - (a*tr*(9*T*tr + 10*T**2 - 4*tr**2))/24 - (a*tr**4)/(48*T)
+          elif t < (11*T)/2:
+            tr = t - 3*T
+            Mddd = 0
+            Mdd = (T*a)/4
+            Md = (T*a*tr)/4 - (7*T**2*a)/12
+            M = - (71*T**3*a)/48 - (T*a*tr*(14*T - 3*tr))/24
+          elif t < (15*T)/2:
+            tr = t - (11*T)/2
+            Mddd = (a*tr)/(4*T)
+            Mdd = (T*a)/4 + (a*tr**2)/(8*T)
+            Md = (T**2*a)/24 + (a*tr*(6*T**2 + tr**2))/(24*T)
+            M = (a*tr**4)/(96*T) - (69*T**3*a)/32 + (T*a*tr*(T + 3*tr))/24
+          elif t < (17*T)/2:
+            tr = t - (15*T)/2
+            Mddd = (3*a*(tr/T - 1))/2
+            Mdd = (3*T*a)/4 - (3*a*tr*(2*T - tr))/(4*T)
+            Md = (7*T**2*a)/8 + (a*tr**3)/(4*T) + (3*a*tr*(T - tr))/4
+            M = (a*tr*(3*T*tr + 7*T**2 - 2*tr**2))/8 - (45*T**3*a)/32 + (a*tr**4)/(16*T)
+          elif t < (317/36+1)*T:
+            tr = t - (17*T)/2
+            Mddd = 0
+            Mdd = 0
+            Md = (9*T**2*a)/8
+            M = (9*T**2*a*tr)/8 - (11*T**3*a)/32
+          else:
+            Mddd = 0.0
+            Mdd = 0.0
+            Md = 0.0
+            M = 0.0
+          t_launchStart = (317*T/36 - t_motor)
 
           # # Old trajectory (unused)
           # if t < 0.0: # balance
@@ -257,7 +257,6 @@ def main():
           #   Mdd = 0.0
           #   Md = 0.0
           #   M = 0.0
-
           # t_launchStart = 9.1815*T - t_motor
 
           if toHop and t > t_launchStart and t < (t_launchStart + 0.08):
@@ -281,6 +280,7 @@ def main():
           if t > t_launchStart and toHop == 1: # begin launch
             # Normal
             viconTest = [0,0,0, 0,3667*rollOff,0, motorExtend*256,motorExtend*256]
+            print viconTest
             xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
             time.sleep(0.01)
             xb_send(0, command.SET_PID_GAINS, pack('10h',*runTailGains))
@@ -292,8 +292,8 @@ def main():
             # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
             # time.sleep(0.01)
            
-          if t > T+0.01 and toHop == 2:   
-          #if t > 10.0*T and toHop == 2: # prepare for landing
+          #if t > T+0.01 and toHop == 2:   
+          if t > 10.0*T and toHop == 2: # prepare for landing
             # # Make a few bounces, then stop
             # modeSignal = [6]
             # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
@@ -302,24 +302,24 @@ def main():
             # xb_send(0, command.SET_VELOCITY, pack('4h',*toSend))
             # time.sleep(0.01)
 
-            # Set angle bounce
-            modeSignal = [1]
-            xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
-            time.sleep(0.01)
-            #viconTest = [0,0,0, 0,3667.0*4*3.14159/180.0,3667.0*-28.0*3.14159/180.0, 50*256,90*256] # Rudo
-            viconTest = [0,0,0, 0,3667.0*4*3.14159/180.0,3667.0*-28.0*3.14159/180.0, 55*256,100*256] # Dash
-            #55*256,70*256]
-            xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-            time.sleep(0.01)
-            modeSignal = [0]
-            xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
-            time.sleep(0.01)
-            toHop = 3
-
-            # # Hop once and stop
-            # viconTest = [0,0,0, 0,0,0, airRetract*256,25*256]
+            # # Set angle bounce
+            # modeSignal = [1]
+            # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+            # time.sleep(0.01)
+            # #viconTest = [0,0,0, 0,3667.0*4*3.14159/180.0,3667.0*-28.0*3.14159/180.0, 50*256,90*256] # Rudo
+            # viconTest = [0,0,0, 0,3667.0*4*3.14159/180.0,3667.0*-28.0*3.14159/180.0, 55*256,100*256] # Dash
+            # #55*256,70*256]
             # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
             # time.sleep(0.01)
+            # modeSignal = [0]
+            # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+            # time.sleep(0.01)
+            # toHop = 3
+
+            # Hop once and stop
+            viconTest = [0,0,0, 0,0,0, airRetract*256,25*256]
+            xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+            time.sleep(0.01)
 
         # time.sleep(0.2)
         # modeSignal = [0]
@@ -334,27 +334,27 @@ def main():
         # time.sleep(0.02)
         
         if toHop:
-          # Make a few bounces, then stop
-          time.sleep(0.7)
-          modeSignal = [6]
-          xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
-          time.sleep(0.01)
-          toSend = [-2000, -2000, 4000, 0]
-          xb_send(0, command.SET_VELOCITY, pack('4h',*toSend))
-          time.sleep(0.4)
-          toSend = [-2000, -500, 6000, 0]
-          xb_send(0, command.SET_VELOCITY, pack('4h',*toSend))
-          time.sleep(1.0)
-          toSend = [-500, 0, 4000, 0]
-          xb_send(0, command.SET_VELOCITY, pack('4h',*toSend))
-          time.sleep(2.0)
+          # # Make a few bounces, then stop
+          # time.sleep(0.7)
+          # modeSignal = [6]
+          # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+          # time.sleep(0.01)
+          # toSend = [-2000, -2000, 4000, 0]
+          # xb_send(0, command.SET_VELOCITY, pack('4h',*toSend))
+          # time.sleep(0.4)
+          # toSend = [-2000, -500, 6000, 0]
+          # xb_send(0, command.SET_VELOCITY, pack('4h',*toSend))
+          # time.sleep(1.0)
+          # toSend = [-500, 0, 4000, 0]
+          # xb_send(0, command.SET_VELOCITY, pack('4h',*toSend))
+          # time.sleep(2.0)
 
-          modeSignal = [23]
-          xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
-          time.sleep(0.2)
-          viconTest = [0,0,0, 0,0,0, 55*256,15*256]
-          xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-          time.sleep(0.01)
+          # modeSignal = [23]
+          # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+          # time.sleep(0.2)
+          # viconTest = [0,0,0, 0,0,0, 55*256,15*256]
+          # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+          # time.sleep(0.01)
 
           # # Enable if using higher gains
           # time.sleep(0.1)
@@ -362,15 +362,15 @@ def main():
           # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
           # time.sleep(0.01)
 
-          # # New leg control
-          # time.sleep(0.2)
-          # cmd = [0,0,0,0,\
-          # (0.12)*2**16, 0.0*2000, (0)*1024,\
-          # k1, k2]
-          # xb_send(0, command.STANCE, pack('9h', *cmd))
-          # time.sleep(0.01)
-          # xb_send(0, command.SET_PID_GAINS, pack('10h',*standTailGains))
-          # time.sleep(0.02)
+          # New leg control
+          time.sleep(0.2)
+          cmd = [0,0,0,0,\
+          (0.12)*2**16, 0.0*2000, (0)*1024,\
+          k1, k2]
+          xb_send(0, command.STANCE, pack('9h', *cmd))
+          time.sleep(0.01)
+          xb_send(0, command.SET_PID_GAINS, pack('10h',*standTailGains))
+          time.sleep(0.02)
           
           # # Sit down
           # time.sleep(1.5)

@@ -30,15 +30,18 @@ def main():
     #standTailGains = [180,0,17,0,0, 0,0,0,0,0]
     #standThrusterGains = [250,0,180, 100,0,150]
 
-    zeroGains = [90,40,0, 230,190,0, 0,0,0,0]
-
-    runTailGains = [90,40,0, 130,110,0, 90,13,0,0]
+    zeroGains = [50,30,0, 80,50,0, 0,0,0,0]
+    runTailGains = [50,30,0, 120,60,0, 80,13,0,0]#90,13,0,0]
     runThrusterGains = [0,0,0, 0,0,0]
 
-    standTailGains = [80,40,0, 230,190,0, 150,8,0,7]
+    standTailGains = [50,30,0, 80,50,0, 80,13,0,0]
     standThrusterGains = [0,0,0, 0,0,0]
 
-    duration = 1000
+    k1 = 0
+    k2 = -15
+    airRetract = 55
+
+    duration = 5000
     rightFreq = 0
     leftFreq = 0
     phase = 0
@@ -132,7 +135,7 @@ def main():
     xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
     time.sleep(0.02)
 
-    adjust = [0,192,-64]
+    adjust = [0,0,-192]
     xb_send(0, command.ADJUST_BODY_ANG, pack('3h', *adjust))
     time.sleep(0.02)
 
@@ -152,6 +155,20 @@ def main():
     while started==1 and stopped == 0:
         pygame.event.pump() # joystick
 
+        for i in range(joyNAxes):
+            joyAxes[i] = joy.get_axis(i)
+        if joyAxes[0] > 0.1 or joyAxes[0] < -0.1:
+            joyYaw = joyYaw - joyAxes[0]/20.0
+        if joyYaw > 3.14159:
+            joyYaw = joyYaw - 2*3.14159
+        elif joyYaw < -3.14159:
+            joyYaw = joyYaw + 2*3.14159
+        Cyaw = int(joyYaw*AngleScaling)
+
+        toSend = [0,0,0, Cyaw,0,0, 0,0]
+        xb_send(0, command.INTEGRATED_VICON, pack('8h',*toSend))
+        time.sleep(0.02)
+
         if joy.get_button(4):
             started = 2
 
@@ -162,7 +179,7 @@ def main():
             time.sleep(0.02)
             xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
 
-        time.sleep(0.02)
+        time.sleep(0.03)
 
     if not stopped:
         startTelemetrySave(numSamples)
@@ -171,53 +188,124 @@ def main():
         xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
         time.sleep(0.03)
         xb_send(0, command.SET_PID_GAINS, pack('10h',*runTailGains))
-        time.sleep(0.03)
-        xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h',*runThrusterGains))
+        #time.sleep(0.03)
+        #xb_send(0, command.SET_THRUST_OPEN_LOOP, pack('6h',*runThrusterGains))
 
+    crouch = 0
+    tailGains = 1
+
+    pygame.event.pump()
 
     while not stopped:
         pygame.event.pump()
 
+        stopped = joy.get_button(5) or joy.get_hat(0) == (0,-1)
+
+        if joy.get_button(1) and crouch == 0:
+            # Land
+            crouch = 1
+        if joy.get_button(4) and crouch == 2 and tailGains == 1:
+            # Jump again
+            modeSignal = [6]
+            xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+            time.sleep(0.02)
+            crouch = 0
+
         for i in range(joyNAxes):
             joyAxes[i] = joy.get_axis(i)
-        joyYaw = joyYaw - joyAxes[0]/20.0
 
-        vz1 = int(np.sqrt(joyAxes[2]*1.4+2.4)*4000)
-        vx1 = int(-joyAxes[4]*6000*(vz1-2000)/6000)
-        vy1 = int(-joyAxes[3]*2000*(vz1-2000)/6000)
-        Cyaw = int(joyYaw*AngleScaling)
+        if crouch == 0:
+            # Normal jumping
+            if joyAxes[0] > 0.1 or joyAxes[0] < -0.1:
+                joyYaw = joyYaw - joyAxes[0]/20.0
+            if joyYaw > 3.14159:
+                joyYaw = joyYaw - 2*3.14159
+            elif joyYaw < -3.14159:
+                joyYaw = joyYaw + 2*3.14159
 
-        if joy.get_button(0):
-            screen.fill((50,200,100))
-            key = pygame.key.get_pressed()
-            if key[pygame.K_LEFT]:
-                vy1 = 1000
-            elif key[pygame.K_RIGHT]:
-                vy1 = -1000
-            if key[pygame.K_UP]:
-                vx1 = 2000
-            elif key[pygame.K_DOWN]:
-                vx1 = -2000
-        else:
-            screen.fill((0,0,0))
+            vz1 = int(np.sqrt(joyAxes[2]*1.4+2.4)*4000)
+            vx1 = int(-joyAxes[3]*4000*(vz1-2000)/6000)
+            vy1 = int(-joyAxes[4]*2000*(vz1-2000)/6000)
+            Cyaw = int(joyYaw*AngleScaling)
+            #print Cyaw
 
-        pygame.draw.line(screen, (0,0,255), (250, 250), (250-vy1/20, 250-vx1/20), vz1/500)
-        pygame.display.flip()
+            if joy.get_button(0):
+                screen.fill((50,200,100))
+                key = pygame.key.get_pressed()
+                if key[pygame.K_LEFT]:
+                    vy1 = 1000
+                elif key[pygame.K_RIGHT]:
+                    vy1 = -1000
+                if key[pygame.K_UP]:
+                    vx1 = 2000
+                elif key[pygame.K_DOWN]:
+                    vx1 = -2000
+            else:
+                vz1 = vz1 # do nothing
+                screen.fill((0,0,0))
 
-        toSend = [vx1,vy1,vz1, Cyaw]
-        for i in range(4):
-            if toSend[i] > 32767:
-                toSend[i] = 32767
-            elif toSend[i] < -32767:
-                toSend[i] = -32767
-        xb_send(0, command.SET_VELOCITY, pack('4h',*toSend))
+            pygame.draw.line(screen, (0,0,255), (250, 250), (250-vy1/20, 250-vx1/20), vz1/500)
+            pygame.display.flip()
 
+            toSend = [vx1,vy1,vz1, Cyaw]
+            for i in range(4):
+                if toSend[i] > 32767:
+                    toSend[i] = 32767
+                elif toSend[i] < -32767:
+                    toSend[i] = -32767
+            xb_send(0, command.SET_VELOCITY, pack('4h',*toSend))
+            time.sleep(0.02)
+        elif crouch == 1:
+            # Landing
+            modeSignal = [23]
+            xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+            time.sleep(0.02)
+            xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+            time.sleep(0.02)
 
-        stopped = joy.get_button(5) or joy.get_hat(0) == (0,-1)
+            viconTest = [0,0,0, 0,0,0, airRetract*256, 25*256]
+            xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+            time.sleep(0.02)
+
+            cmd = [0,0,0,0,\
+            (0.12)*2**16, 0.0*2000, (0.0)*1024,\
+            k1, k2]
+            xb_send(0, command.STANCE, pack('9h', *cmd))
+            time.sleep(0.01)
+            xb_send(0, command.SET_PID_GAINS, pack('10h', *standTailGains))
+            time.sleep(0.02)
+            crouch = 2
+        elif crouch == 2:
+            # Balancing on the ground
+            if joyAxes[0] > 0.1 or joyAxes[0] < -0.1:
+                joyYaw = joyYaw - joyAxes[0]/20.0
+            if joyYaw > 3.14159:
+                joyYaw = joyYaw - 2*3.14159
+            elif joyYaw < -3.14159:
+                joyYaw = joyYaw + 2*3.14159
+            Cyaw = int(joyYaw*AngleScaling)
+
+            toSend = [0,0,0, Cyaw,0,0, 0,0]
+            xb_send(0, command.INTEGRATED_VICON, pack('8h',*toSend))
+            time.sleep(0.02)
+
+            if joy.get_button(2):
+                # Turn off the tail and let it wind down
+                xb_send(0, command.SET_PID_GAINS, pack('10h',*zeroGains))
+                time.sleep(0.02)
+                tailGains = 0
+            if joy.get_button(3):
+                # Turn the tail back on
+                adjust = [0,0,-512]
+                xb_send(0, command.ADJUST_BODY_ANG, pack('3h', *adjust))
+                time.sleep(0.02)
+                xb_send(0, command.SET_PID_GAINS, pack('10h',*runTailGains))
+                time.sleep(0.02)
+                tailGains = 1
 
         cmdwrite.writerow([time.time()-start_time, vx1, vy1, vz1, Cyaw])
 
-        time.sleep(0.04)
+        time.sleep(0.03)
 
     stopSignal = [0]
     xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))

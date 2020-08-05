@@ -85,6 +85,8 @@ int32_t cmdLegLen(int16_t leg);
 int32_t cosApprox(int32_t x);
 int32_t sqrtApprox(int32_t n);
 uint16_t med3(uint16_t* arr);
+int32_t asinApprox(int16_t x);
+int32_t atanApprox(int16_t x);
 
 
 

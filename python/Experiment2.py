@@ -110,7 +110,7 @@ def main():
         xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
         time.sleep(0.02)
 
-        adjust = [0,-64,-192]
+        adjust = [0,-64,-256]
         xb_send(0, command.ADJUST_BODY_ANG, pack('3h', *adjust))
         time.sleep(0.02)
 

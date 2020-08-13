@@ -39,7 +39,7 @@ extension = [-x.*(-9.689463228112449e-2)+x.^2.*6.989908944388874e-2-...
     x.^3.*2.62460134201421e-2 + 0.09; ... % Dasher
     - 0.04776*x.^3 + 0.1042*x.^2 + 0.05917*x + 0.07623]; % Unused
 %}
-extemsopm = [model(2).f_fd(x);
+extension = [model(2).f_fd(x);
     model(3).f_fd(x);
     model(1).f_fd(x)];
 extensionScale = floor((2^16-1)/0.25);%floor((2^16-1)./max(extension,[],2));
@@ -112,8 +112,50 @@ fprintf(fid, '#endif\n');
 cosPrec = 8;
 lutcos = sprintf('%u,', round(2^cosPrec*cosd(linspace(0,90,256))'));
 lutcos = lutcos(1:(end-1));
-fprintf(fid, '\nstatic unsigned int lut_cos[256] = {');
+fprintf(fid, '\n//static unsigned int lut_cos[256] = {'); % commented out
 fprintf(fid, lutcos);
 fprintf(fid, '}; // cosine lookup table\n');
+
+% Leg swing-up lookup table
+%{
+Assuming a point mass on a rigid rod, swing-up length l satisfies:
+0 = 2*sin(th/2) + Tt*w
+where
+th is the angle in rad
+Tt = sqrt(l/g), Time constant of toppling in s
+w = M/l^2, Angular velocity in rad/s
+M is the mass-normalized angular momentum in N m s per kg
+g is gravity in m/s^2
+
+              1
+----------------------------
+/              / th \   \2/3
+|   sqrt(g) sin| -- | 2 |
+|              \  2 /   |
+| - ------------------- |
+\            M          /
+
+top max magnitude is sqrt(9.81)*2 = 6.2642, min magnitude is 0
+bottom max magnitude is (0.25^2*30) = 1.8750, min magnitude is 0
+
+max answer (l in m) is 0.25 -> ^-3/2 = 8
+min answer (l in m) is 0.1 -> ^-3/2 = 32
+
+if the answer is in 2^2 ticks, it will fit into a length-128 array
+%}
+
+prec_in = 2; % lookup table input precision (ticks per m^(-3/2))
+prec_out = 10; % output precision (ticks per m)
+swingLutLen = 128; % lookup table elements
+
+inds = 0:(swingLutLen-1);
+lut_swing = (inds/2^prec_in).^(-2/3);
+lut_swing(lut_swing > 0.24) = 0.24;
+lut_swing = lut_swing*2^prec_out;
+lut_swing_print = sprintf('%u,', round(lut_swing));
+lut_swing_print = lut_swing_print(1:(end-1));
+fprintf(fid, '\nstatic unsigned char pow_minus_2p3_lut[%1$u] = {', swingLutLen);
+fprintf(fid, lut_swing_print);
+fprintf(fid, '}; // x^(-2/3) table: input in 2^%1$u, output in 2^%2$u', prec_in, prec_out);
 
 fclose(fid);

@@ -228,6 +228,7 @@ int32_t uCmd;
 
 //*
 #if ROBOT_NAME == SALTO_1P_DASHER
+/*
 // poles -12, -12, -12
 #define K0 -1728// in 1 tick/(rad/s^3) prod(poles)
 #define K1 -442// in 1024/1000 tick/(rad/s^2) sum(prod(nchoosek(poles,2),2))
@@ -242,6 +243,22 @@ int32_t uCmd;
 #define CK3_UP 729 // command filter 1/(z*z)
 #define CK2_UP 27 // command filter 1/((z+z)/(z*z))
 #define CK1_UP 3 // command filter 1/(1/z+1/z+1/z)
+*/
+
+// poles -9, -9, -9
+#define K0 -729// in 1 tick/(rad/s^3)
+#define K1 -249// in 1024/1000 tick/(rad/s^2)
+#define K2 -27// in 1 tick/(rad/s)
+#define CK3 729 // command filter (z*z*z)
+#define CK2 27 // command filter 1/(3/(z*z))
+#define CK1 3 // command filter 1/(1/z+1/z+1/z)
+// poles -6, -6, -6
+#define K0_UP -216 // in 1 tick/(rad/s^3)
+#define K1_UP -111 // in 1024/1000 tick/(rad/s^2) 
+#define K2_UP -18 // in 1 tick/(rad/s)
+#define CK3_UP 216 // command filter (z*z*z)
+#define CK2_UP 12 // command filter 1/(3/(z*z))
+#define CK1_UP 2 // command filter 1/(1/z+1/z+1/z)
 
 #define THE_LIMIT 187750
 #define PHI_LIMIT 93873
@@ -287,7 +304,10 @@ int32_t uCmd;
 #endif
 //*/
 
-uint8_t swingMode = 1;      // swing-up mode
+uint8_t swingMode = 0;      // swing-up mode
+uint32_t swingTime = 0;     // time of swing transition
+int32_t swing_r = 6554;     // swing leg length command (2^16 ticks per m)
+int32_t swing_acc_off = 0;
 
 int32_t ctrl_vect[3];       // deadbeat controller commands
 int16_t g_accumulator;      // count steps to integrate v change due to gravity
@@ -943,11 +963,11 @@ void stanceUpdate(void) {
     // acceleration is in m/s^2 / (2^2 ticks)
 
     #if ROBOT_NAME == SALTO_1P_DASHER
-    if (leg < (5964+FOOT_ADJUST) && legVel < 0) { // 9cm+1mm
+    if (leg < (5964+FOOT_ADJUST*4) && legVel < 0) { // 9cm+1mm
         legVel = 0;
     }
     #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-    if (leg < (7000+FOOT_ADJUST) && legVel < 0) { // 10.7cm
+    if (leg < (7000+FOOT_ADJUST*4) && legVel < 0) { // 10.7cm
         legVel = 0;
     }
     #endif
@@ -1170,7 +1190,64 @@ void takeoffEstimation(void) {
 }
 
 void legCtrl(void) {
-    if (mj_state == MJ_GND) {
+    if (modeFlags >> 6 == 1 && mj_state != MJ_STOPPED) {
+        // Swing-up control
+
+        uint32_t energy_gains = (10*655*65536)+(20*7); // leg control gains 2 6
+        uint32_t soft_gains = (5*655*65536)+(40*7);
+
+        if (swingMode == 0) {
+            // balance
+            if (leg > 7209) {
+                send_command_packet(&uart_tx_packet_global,
+                    forceSetpoint(leg,-20,swing_acc_off, -2000, -89)+BLDC_MOTOR_OFFSET,
+                    energy_gains, 2);
+            } else {
+                send_command_packet(&uart_tx_packet_global, 10+BLDC_MOTOR_OFFSET,
+                    soft_gains, 2);
+            }
+        } else if (swingMode == 1) {
+            // extend leg
+            swing_r = 13763;
+
+            send_command_packet(&uart_tx_packet_global,
+                forceSetpoint(swing_r,0,swing_acc_off, -1000, -63)+BLDC_MOTOR_OFFSET,
+                energy_gains, 2);
+        } else if (swingMode == 2) {
+            // retract leg
+            int32_t swing_arg = (205264 * (cosApprox((q[1]>>1)-PI/2) << 1) << (8-COS_PREC)); //2^24
+            // 205264 is sqrt(9.81)*2^16
+            swing_arg = swing_arg/((int32_t)leg*(int32_t)leg >> 14); // 2^6 ticks
+            swing_arg = -58*swing_arg/wLP[1]; // 2^2 ticks per m^-(3/2)
+            // w[1] is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s) 32 converts into 2^4
+            //swing_arg = swing_arg < 0 ? -swing_arg : swing_arg; // absolute value
+            swing_arg = swing_arg < 0 ? 0 :
+                        swing_arg > 255 ? 255 :
+                        swing_arg;
+            swing_r = ((int16_t)pow_minus_2p3_lut[swing_arg] << 6);
+            /*
+            if (q[1] < PI/2 && q[1] > -PI/2) {
+                swing_r += - ((swing_acc_off > 0) - (swing_acc_off < 0))*328; // attempt to counter backlash
+            }
+            */
+            swing_r += 00; // offset (MANUAL TUNING) 400 is good if the tail is free-wheeling
+            swing_r = swing_r < 7864 ? 7864 :
+                    swing_r > 13763? 13763 :
+                    swing_r;
+            //swing_r = 12000;
+
+            int16_t v_cmd = (q[1] < PI/8 && q[1] > -PI/8)*200; // silly hack to try to slow down before the top
+
+            send_command_packet(&uart_tx_packet_global,
+                forceSetpoint(swing_r,v_cmd,swing_acc_off, -2000, -89)+BLDC_MOTOR_OFFSET,
+                energy_gains, 2);
+        } else if (swingMode == 3) {
+            // pump tail
+            send_command_packet(&uart_tx_packet_global, 30*65536+BLDC_CMD_OFFSET, energy_gains, 2);
+        }
+
+    // Normal operation
+    } else if (mj_state == MJ_GND) {
         send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
     } else if (mj_state == MJ_STAND) {
         if (!keepLanding) {
@@ -1654,10 +1731,7 @@ void swingUpCtrl(void) {
 
     if (mj_state != MJ_STOP && mj_state != MJ_STOPPED && mj_state != MJ_IDLE) {
         // Running
-        int32_t r, wSquared;
-
-        uint32_t energy_gains = (5*655*65536)+(20*7); // leg control gains 2 6
-        uint32_t balance_gains = (1*655*65536)+(5*7); // leg control gains
+        int32_t wSquared;
 
         mj_state = MJ_STAND;
 
@@ -1669,81 +1743,111 @@ void swingUpCtrl(void) {
         modeEstimation();
         leg = leg+LEG_ADJUST;
 
-        if (0 && swingMode) {
+        I_cg = (FULL_MASS*(leg*leg >> 8)) >> 12; // 2^20 ticks/(kg m^2)
+        Iy = IY_CG + I_cg; // 2^20 ticks/(kg m^2)
+
+        wSquared = ((int32_t)wLP[1]*(int32_t)wLP[1])/55076;
+        // w[1] is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s)
+        // wSquared is in 2^4 ticks/(rad/s)^2; conversion ~= 1/55076
+
+        /*
+        int32_t KE = Iy*wSquared/FULL_MASS << (8-1); // 2^24 ticks/(J/kg)
+        int32_t PE = (int32_t)leg * (int32_t)GRAV_ACC * cos_theta >> (COS_PREC - 6); // 2^24 ticks/(J/kg)
+        int32_t goal = (int32_t)leg * (int32_t)GRAV_ACC << 6; // 2^24 ticks/(J/kg)
+        int32_t acc = (wSquared*(int32_t)leg >> 6); // in 2^14 ticks/N
+        if (acc < 1638 && acc >= 0) {
+            acc = 1638; // 0.1 m/s^2
+        } else if (acc > -1638) {
+            acc = -1638; // 0.1 m/s^2
+        }
+        */
+
+        swing_acc_off = -(wSquared * (int32_t)leg >> 10)
+            + (GRAV_ACC * cos_theta >> (COS_PREC - 4)); // 2^10 ticks/N
+
+        int32_t Tt = sqrtApprox((Iy<<10)/
+            ((int32_t)FULL_MASS*(int32_t)leg*(int32_t)GRAV_ACC>>16));
+        // time constant of toppling in ~1000 ticks/s
+
+        int32_t th_eff = q[1] + Tt*wLP[1];
+
+
+        //modeFlags |= 0b1; // use balance offset estimator
+
+
+        if (!swingMode) {
             // Balance on toe
             balanceCtrl();
 
-            send_command_packet(&uart_tx_packet_global, 0, balance_gains, 2);
-
-            if (q[1] > PI/8 || q[1] < -PI/8) {
-                swingMode = 0; // Switch to use energy controller
-                modeFlags &= ~0b1; // don't use balance offset estimator
+            if (th_eff > PI/10 || th_eff < -PI/10) {
+                swingMode = 1; // Switch to use energy controller
+                //modeFlags &= ~0b1; // don't use balance offset estimator
             }
+
         } else {
             // Leg pumping to add energy
-            if ((w[1] > 0 && q[1] < 0) || (w[1] < 0 && q[1] > 0)){
+            if (swingMode == 2){
                 // Retract leg
-                wSquared = ((int32_t)w[1]*(int32_t)w[1])/55076;
-                // w[1] is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s)
-                // wSquared is in 2^4 ticks/(rad/s)^2; conversion ~= 1/55076
-                if (q[1] < (-PI/2) || q[1] > (PI/2)) {
-                    // Hanging down
-                    // r is in 
-                    r = ((sqrtApprox(
-                        2*((int32_t)leg*(int32_t)leg>>20)*(wSquared*wSquared>>20)
-                        + ((GRAV_SQUARED*cos_theta*cos_theta)>>(2*COS_PREC+8))
-                        - 2*GRAV_ACC*((int32_t)leg*wSquared>>22) ) << 20)
-                        + (GRAV_ACC*cos_theta>>(COS_PREC+2)) )
-                        / wSquared - LEG_ADJUST;
-                    // sqrt argument is in 2^0 ticks/(m^2/s^4)
-                    // leg is 2^16 ticks/m; max is 2^14
-                    // w[1] is in 2^15/(2000*pi/180)~=938.7 ticks/(rad/s); max is 2^15
-                    // wSquared is in 2^4 ticks/(rad/s)^2; max is 2^15
-                } else {
-                    // Up
-                    r = (sqrtApprox(2*(int32_t)leg*(
-                        ((int32_t)leg*wSquared>>18)
-                        - (GRAV_ACC)
-                        + (GRAV_ACC*cos_theta>>(COS_PREC))) >> 8 ) << 15)
-                        / (w[1]/59) - LEG_ADJUST;
-                    // sqrt argument is in 2^10 ticks/(m^2/s^2)
-                    // leg is 2^16 ticks/m; max is 2^14
-                    // w[1] is in 2^15/(2000*pi/180) ticks/(rad/s); max is 2^14
-                    //      conversion to 2^4 ~= 1/58.7
-                    // wSquared is in 2^4 ticks/(rad/s)^2; max is 2^15
+
+                if (((wLP[1] < 100 && q[1] < 0) || (wLP[1] > -100 && q[1] > 0))
+                    && t1_ticks - swingTime > 100) {
+                    swingMode = 1;
+                    swingTime = t1_ticks;
                 }
 
-            } else {
-                // Extend leg
-                r = 13107;
-            }
-
-            r = r < 5898 ? 5898 :
-                r > 13107? 13107 :
-                r;
-
-            //send_command_packet(&uart_tx_packet_global, cmdLegLen(r), energy_gains, 2);
-            //send_command_packet(&uart_tx_packet_global, cmdLegLen(11141), energy_gains, 2);
-            send_command_packet(&uart_tx_packet_global, forceSetpoint(leg, 600, 0, -100, -21)+BLDC_MOTOR_OFFSET, energy_gains, 2);
-
-            if ((q[1] > 7*PI/8 || q[1] < -7*PI/8) && w[1] < 2000 && w[1] > -2000) {
-                // Tail pumping
-                if (w[1] > -500 && q[1] > 0) {
-                    tailCmd = -2000;
-                } else {
-                    tailCmd = 2000;
-                }
-            } else {
                 // Tail braking
-                tailCmd = -TAIL_BRAKE*(tail_vel + TAIL_REVERSE*(w[1] > 0 ? -50 : 50));//(w[1]>>8));
-                tailMotor = tailLinearization(&tailCmd); // Linearizing the actuator response
-            }
-            //tiHSetDC(0+1, tailMotor); // send tail command to H-bridge
+                tailCmd = -TAIL_BRAKE*(tail_vel+2*(wLP[1]>>8));
+                //tailMotor = tailLinearization(&tailCmd); // Linearizing the actuator response
+                tiHSetDC(0+1, tailCmd); // send tail command to H-bridge
 
-            if ((q[1] < 49152 && q[1] > -196608 && w[1] < 3000 && w[1] > -1000) ||
-                (q[1] < 196608 && q[1] > -49152 && w[1] < 1000 && w[1] > -3000)) {
-                //swingMode = 1; // Switch to use balance controller
+                //modeFlags |= 0b10; // debugging
+
+            } else if (swingMode == 1) {
+                // Extend leg
+                //swing_r = 13107;
+
+                if (((wLP[1] > 100 && q[1] < 0) || (wLP[1] < -100 && q[1] > 0)) 
+                    && t1_ticks - swingTime > 100) {
+                    swingMode = 2;
+                    swingTime = t1_ticks;
+                }
+
+                // Tail braking
+                tailCmd = -TAIL_BRAKE*(tail_vel+2*(wLP[1]>>8));
+                //tailMotor = tailLinearization(&tailCmd); // Linearizing the actuator response
+                tiHSetDC(0+1, tailCmd); // send tail command to H-bridge
+
+                //modeFlags &= ~0b10; // debugging
+
+            } else if (swingMode == 3) {
+                // Tail pumping to get started
+                //swing_r = 7000;
+
+                if (wLP[1] > -500) {
+                    tailMotor = -2000;
+                } else {
+                    tailMotor = 2000;
+                }
+
+                if (wLP[1] > 3000 || wLP[1] < -3000) {
+                    swingMode = 1;
+                }
+                if (modeFlags & 0b10) {
+                    tiHSetDC(0+1, tailMotor);
+                } else {
+                    tiHSetDC(0+1, 0);
+                }
+
+                //modeFlags &= ~0b10; // debugging
+            }
+
+            if (th_eff > -PI/10 && th_eff < PI/10
+                && q[1] > -PI/8 && q[1] < PI/8) {
+                swingMode = 0; // Switch to use balance controller
                 //modeFlags |= 0b1; // use balance offset estimator
+            } else if ((q[1] > 15*PI/16 || q[1] < -15*PI/16) && wLP[1] < 2000 && wLP[1] > -2000) {
+                // tail pumping
+                swingMode = 3;
             }
         }
 
@@ -2036,7 +2140,7 @@ void adjustBodyAngle(long* qAdjust){
 }
 
 void updateBodyAngle(long* qUpdate){
-    if (modeFlags && 0b11) {
+    if (modeFlags & 0b11) {
         // Don't accept offboard angle updates if onboard balance offset 
         // estimation or toe balance control is active
         return;
@@ -2283,13 +2387,13 @@ void orientImageproc(int32_t* v_b, int16_t* v_ip) {
     // v_b[0] = -v_ip[1]; // roll
     // v_b[1] = (158*((int32_t)v_ip[0]) + 201*((int32_t)v_ip[2]))>>8; //pitch
     // -55 degrees about roll
-    v_b[2] = (147*((int32_t)v_ip[2]) - 210*((int32_t)v_ip[0]))>>8; //yaw
-    v_b[0] = -v_ip[1]; // roll
-    v_b[1] = (147*((int32_t)v_ip[0]) + 210*((int32_t)v_ip[2]))>>8; //pitch
-    // -58 degrees about x, follwed by 180 degrees about body z
-    // v_b[2] = (137*((int32_t)v_ip[2]) - 217*((int32_t)v_ip[0]))>>8; //yaw
+    // v_b[2] = (147*((int32_t)v_ip[2]) - 210*((int32_t)v_ip[0]))>>8; //yaw
     // v_b[0] = -v_ip[1]; // roll
-    // v_b[1] = (137*((int32_t)v_ip[0]) + 217*((int32_t)v_ip[2]))>>8; //pitch
+    // v_b[1] = (147*((int32_t)v_ip[0]) + 210*((int32_t)v_ip[2]))>>8; //pitch
+    // -58 degrees about x, follwed by 180 degrees about body z
+    v_b[2] = (137*((int32_t)v_ip[2]) - 217*((int32_t)v_ip[0]))>>8; //yaw
+    v_b[0] = -v_ip[1]; // roll
+    v_b[1] = (137*((int32_t)v_ip[0]) + 217*((int32_t)v_ip[2]))>>8; //pitch
 #elif ROBOT_NAME == SALTO_1P_DASHER
     // -48 degrees about x, follwed by 180 degrees about body z
     v_b[2] = (171*((int32_t)v_ip[2]) - 190*((int32_t)v_ip[0]))>>8; //yaw
@@ -2346,10 +2450,10 @@ int32_t forceSetpoint(int16_t r_des, int16_t rd_des, int16_t rdd_des, int16_t k1
     int32_t velError = (legVel - rd_des) >> 1; // ~= 2^10 ticks/(m/s)
     int32_t accel = ((int32_t)k1)*legError + ((int32_t)k2)*velError;
 
-    int32_t divider = ((int32_t)ma>>9)*k >> 2; // in 2^2 ticks/(Nm/rad)
+    int32_t divider = (ma>>9)*k >> 2; // in 2^2 ticks/(N/rad)
     divider = divider == 0 ? 1 : divider;
     int32_t F_des = FULL_MASS*(((int32_t)rdd_des + accel) >>2); //2^16 ticks per N
-    if (F_des < 0) {
+    if (F_des < 0 && modeFlags < 32) {
         F_des = 0; // Try to keep the force positive so the foot doesn't come up
     }
     int32_t motorAngle =  (F_des/divider + (int32_t)crank) * 25;

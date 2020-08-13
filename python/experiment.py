@@ -15,14 +15,14 @@ import shared
 
 from hall_helpers import *
 
-def main():    
+def main():  
     setupSerial()
 
     # Send robot a WHO_AM_I command, verify communications
     queryRobot()
     #Motor gains format:
     #  [ Kp , Kd , other , Kp , Kd , other , Kp , Kd , other , other ]
-    motorgains = [100,80,0, 150,120,0, 120,15,0,0]
+    motorgains = [100,80,0, 150,120,0, 120,15,0,0] #yaw roll pitch
     motorgains = [0,0,0, 0,0,0, 0,0,0,0]
 
     duration = 4000#15000
@@ -40,7 +40,7 @@ def main():
     wj_params = wjParams(-551287, -40000, 80000, 5353068, 411774)
     wjParams.set(wj_params)
 
-
+	
     while True:
 
         if not(params.repeat):
@@ -64,7 +64,7 @@ def main():
             startTelemetrySave(numSamples)
 
 
-        #'''
+        '''
         # basic leg extension test
         exp = [2]
         arbitrary = [0]
@@ -86,7 +86,7 @@ def main():
         #    xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         #    time.sleep(0.01)
 
-        #'''
+        '''
 
 
         '''
@@ -129,36 +129,32 @@ def main():
         exp = [2]
         arbitrary = [0]
 
-        angle = [3667*3.14159]
-
         #motorgains = [0,0,0, 0,0,0, 200,12,0,12]
+        #motorgains = [40,20,0, 40,20,0, 200,12,0,0]
         motorgains = [0,0,0, 0,0,0, 200,12,0,0]
         xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
+        time.sleep(0.01)
 
         viconTest = [0,0,0,0,0,0,0*256,0*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(0.01)
-
-
-        #xb_send(0, command.RESET_BODY_ANG, pack('h', *angle))
-        #time.sleep(0.01)
-
-        xb_send(0, command.RESET_BODY_ANG, pack('h', *arbitrary))
-        time.sleep(0.01)
         xb_send(0, command.GYRO_BIAS, pack('h', *arbitrary))
         time.sleep(0.01)
-        xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
-        time.sleep(0.01)
-        adjust = [0,64,0]#-128] # 3667 ticks per radian, yaw, roll, pitch (64 ticks per degree)
-        xb_send(0, command.ADJUST_BODY_ANG, pack('3h', *adjust))
+
+        angle = [3667*3.14159]
+        xb_send(0, command.RESET_BODY_ANG, pack('h', *angle))
         time.sleep(0.01)
 
-
-        xb_send(0, command.GYRO_BIAS, pack('h', *arbitrary))
-        time.sleep(0.01)
+        # xb_send(0, command.RESET_BODY_ANG, pack('h', *arbitrary))
+        # time.sleep(0.01)
+        # xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
+        # time.sleep(0.01)
+        # adjust = [0,64,0]#-128] # 3667 ticks per radian, yaw, roll, pitch (64 ticks per degree)
+        # xb_send(0, command.ADJUST_BODY_ANG, pack('3h', *adjust))
+        # time.sleep(0.01)
 
         #modeSignal = [7]
-        modeSignal = [65]#[32]
+        modeSignal = [65+2]#[32]
         xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
         time.sleep(0.01)
 
@@ -167,19 +163,21 @@ def main():
 
         time.sleep(2.0)
 
-        modeSignal = [64]#[32]
-        xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
-        time.sleep(0.01)
+        # modeSignal = [64]
+        # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+        # time.sleep(0.01)
 
-        motorgains = [0,0,0, 0,0,0, 0,0,0,0]
-        xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
-        time.sleep(0.5)
+        # motorgains = [0,0,0, 0,0,0, 0,0,0,0]
+        # xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
+        # time.sleep(1.0)
 
-        motorgains = [0,0,0, 0,0,0, 200,12,0,0]
-        xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
-        time.sleep(0.01)
+        # modeSignal = [65]
+        # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+        # time.sleep(0.01)
 
-        
+        # motorgains = [0,0,0, 0,0,0, 200,12,0,0]
+        # xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
+        # time.sleep(0.01)
         #'''
 
 
@@ -213,8 +211,15 @@ def main():
         xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
 
         '''
-
-
+		
+        '''
+        arbitrary = [0]
+        xb_send(0, command.GYRO_BIAS, pack('h', *arbitrary))
+        time.sleep(0.05)
+        xb_send(0, command.RESET_BODY_ANG, pack('h', *arbitrary))
+        time.sleep(0.01)
+        '''
+		
         '''
         # Balance on toe test
         #Start robot 0: wall jump, 1: single jump, 2: vicon jumps
@@ -817,6 +822,18 @@ def main():
             xb_send(0, command.SET_MOTOR_POS, pack('3h', *legPosition))
             time.sleep(0.02)
         '''
+		
+        '''
+        # Gripper demo
+        # leg extension test with variable motor gains
+        arbitrary = [0]
+        # motor deflection [radians * 256], P gain [65536 * duty cyle/rad], D gain [65536 * duty cyle/(rad/s)]
+        for x in np.hstack((np.linspace(0,100,46),np.linspace(88,0,45))):
+            legPosition = [x*256, 0.03*65536, 0.005*65536]
+            xb_send(0, command.SET_MOTOR_POS, pack('3h', *legPosition))
+            time.sleep(0.02)
+        '''
+
 
         '''
         # Toe pull-ups
@@ -886,9 +903,15 @@ def main():
 #TODO: provide a more informative exit here; stack trace, exception type, etc
 if __name__ == '__main__':
     try:
+        print "Before main"
         main()
     except KeyboardInterrupt:
         print "\nRecieved Ctrl+C, exiting."
+        stopSignal = [0]
+        xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
+        time.sleep(0.01)
+        xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
+        time.sleep(0.01)
         shared.xb.halt()
         shared.ser.close()
     except Exception as args:
@@ -897,6 +920,11 @@ if __name__ == '__main__':
         traceback.print_exc()
         print "    *****************************    \n"
         print "Attempting to exit cleanly..."
+        stopSignal = [0]
+        xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
+        time.sleep(0.01)
+        xb_send(0, command.STOP_EXPERIMENT, pack('h', *stopSignal))
+        time.sleep(0.01)
         shared.xb.halt()
         shared.ser.close()
         sys.exit()

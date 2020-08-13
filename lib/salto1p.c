@@ -330,7 +330,7 @@ uint8_t keepLanding = 1;
 #if ROBOT_NAME == SALTO_1P_DASHER
 #define FOOT_ADJUST 0//262 // MANUAL TUNING 4mm
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
-#define FOOT_ADJUST (655+1310)//1311 // MANUAL TUNING (10cm for the gripper)
+#define FOOT_ADJUST (655+983)//(655+1310)//1311 // MANUAL TUNING (10cm for the gripper)
 #endif
 
 
@@ -2233,9 +2233,13 @@ void orientImageproc(int32_t* v_b, int16_t* v_ip) {
 #if ROBOT_NAME == SALTO_1P_RUDOLPH
     // -55 degrees about roll
     // x axis right, y axis forwards, z axis up from ImageProc
-    v_b[2] = (147*((int32_t)v_ip[2]) - 210*((int32_t)v_ip[0]))>>8; //yaw
+    //v_b[2] = (147*((int32_t)v_ip[2]) - 210*((int32_t)v_ip[0]))>>8; //yaw
+    //v_b[0] = -v_ip[1]; // roll
+    //v_b[1] = (147*((int32_t)v_ip[0]) + 210*((int32_t)v_ip[2]))>>8; //pitch
+	// -58 degrees about x, follwed by 180 degrees about body z
+    v_b[2] = (137*((int32_t)v_ip[2]) - 217*((int32_t)v_ip[0]))>>8; //yaw
     v_b[0] = -v_ip[1]; // roll
-    v_b[1] = (147*((int32_t)v_ip[0]) + 210*((int32_t)v_ip[2]))>>8; //pitch
+    v_b[1] = (137*((int32_t)v_ip[0]) + 217*((int32_t)v_ip[2]))>>8; //pitch
 #elif ROBOT_NAME == SALTO_1P_DASHER
     // -50 degrees about x, follwed by 180 degrees about body z
     //v_b[2] = (165*((int32_t)v_ip[2]) - 196*((int32_t)v_ip[0]))>>8; //yaw

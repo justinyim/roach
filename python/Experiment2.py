@@ -19,9 +19,10 @@ def main():
       # # Balance control tilt once to 9/4*a*T^2 rad and 1/2*a*T rad/s
       a = 0.001#20#-25.0# angular acceleration (rad/s^2) 4 for vertical jump on branch
       b = 0.1 # for falling forward
-      T = 0.55#0.65#0.07#0.05# # time scale (s)
-      motorExtend = 50#76 # radians
-      t_motor = 0.17 # seconds
+      T = 0.63#0.55#0.65#0.07#0.05# # time scale (s)
+      motorExtend = 48#50 #76 # radians
+      extraPushOff = 5
+      t_motor = 0.17# seconds
 
       k1 = 0
       k2 = -15
@@ -37,7 +38,7 @@ def main():
       setupSerial()
       queryRobot()
 
-      duration = 2000
+      duration = 2500
       telemetry = True
       repeat = False
 
@@ -118,11 +119,11 @@ def main():
         #time.sleep(1.5)
         
         xb_send(0, command.SET_PID_GAINS, pack('10h',*standTailGains))
-        time.sleep(1.0)
+        time.sleep(0.2) # CCC Added 8/10/2020 was originally 1.0
 
         viconTest = [0,0,0, 0,0,0, 30*256,30*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
-        time.sleep(1.0)
+        time.sleep(1.0 + 1.5) #CCC Added 8/11/2020 + few seconds before offset estimator disabled
 
         modeSignal = [16]
         xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
@@ -130,7 +131,8 @@ def main():
 
         t0 = time.time()
         t = 0.0
-        tEnd = 6.0*T#13.0*T
+        tEnd = 2.5*T #13.0*T CCC for testing, should be 6.0*T 8/3 or 3.0*T 8/10
+        t_hasLaunched = tEnd
         while t < tEnd:
           # Md is in 2^15/(2000*pi/180)~=938.7 ticks/rad
           t = time.time() - t0
@@ -263,19 +265,20 @@ def main():
 
           if t > t_launchStart and toHop == 1: # begin launch
             # Normal
-            viconTest = [0,0,0, 0,3667*rollOff,0, motorExtend*256,motorExtend*256]
+            viconTest = [0,0,0, 0,3667*rollOff,0, motorExtend*256,(motorExtend+extraPushOff)*256]
             xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
             time.sleep(0.01)
             xb_send(0, command.SET_PID_GAINS, pack('10h',*runTailGains))
             time.sleep(0.02)
             toHop = 2
+            t_hasLaunched = t
 
             # # Higher gains
             # modeSignal = [1]#[7]
             # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
             # time.sleep(0.01)
               
-          if t > (1.0*T + 0.05 + 0.14) and toHop == 2: # prepare for landing
+          if t > (t_hasLaunched + t_motor + 0.12) and toHop == 2: # prepare for landing # CCC 8/11/2020 removed 1.0*T + 0.05 + 0.14
             # # Make a few bounces, then stop
             # modeSignal = [6]
             # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
@@ -304,7 +307,7 @@ def main():
             modeSignal = [16 + 32]
             xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
             time.sleep(0.02)
-            viconTest = [0,0,0, 0,0,-0.44*3667, 35*256,0*256] #airRetract*256,25*256]
+            viconTest = [0,0,0, 0,0,-0.5*3667, 35*256,0*256] #airRetract*256,25*256] #CCC was -0.44*3667
             xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
             time.sleep(0.01)
             cmd = [0,0,0,0,\

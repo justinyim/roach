@@ -13,6 +13,7 @@
 #define MJ_STOPPED      5
 #define MJ_LAUNCH       6
 #define MJ_STAND        7
+#define	MJ_SWING		8
 
 #define UART_PERIOD     8000 // minimum UART period in us (must be positive integer)
 

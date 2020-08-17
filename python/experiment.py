@@ -141,17 +141,19 @@ def main():
         xb_send(0, command.GYRO_BIAS, pack('h', *arbitrary))
         time.sleep(0.01)
 
-        angle = [3667*3.14159]
-        xb_send(0, command.RESET_BODY_ANG, pack('h', *angle))
-        time.sleep(0.01)
+        # #Initialize pitch to start inverted
+        # angle = [3667*3.14159]
+        # xb_send(0, command.RESET_BODY_ANG, pack('h', *angle))
+        # time.sleep(0.01)
 
-        # xb_send(0, command.RESET_BODY_ANG, pack('h', *arbitrary))
-        # time.sleep(0.01)
-        # xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
-        # time.sleep(0.01)
-        # adjust = [0,64,0]#-128] # 3667 ticks per radian, yaw, roll, pitch (64 ticks per degree)
-        # xb_send(0, command.ADJUST_BODY_ANG, pack('3h', *adjust))
-        # time.sleep(0.01)
+        #Usual angle initialization (upright)
+        xb_send(0, command.RESET_BODY_ANG, pack('h', *arbitrary))
+        time.sleep(0.01)
+        xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
+        time.sleep(0.01)
+        adjust = [0,64,0]#-128] # 3667 ticks per radian, yaw, roll, pitch (64 ticks per degree)
+        xb_send(0, command.ADJUST_BODY_ANG, pack('3h', *adjust))
+        time.sleep(0.01)
 
         #modeSignal = [7]
         modeSignal = [65+2]#[32]
@@ -163,21 +165,24 @@ def main():
 
         time.sleep(2.0)
 
-        # modeSignal = [64]
-        # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
-        # time.sleep(0.01)
+        modeSignal = [64]
+        xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+        time.sleep(0.01)
 
-        # motorgains = [0,0,0, 0,0,0, 0,0,0,0]
-        # xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
-        # time.sleep(1.0)
+        #motorgains = [0,0,0, 0,0,0, 0,0,0,0]
+        motorgains = [50,30,0, 80,50,0, 0,0,0,0]
+        xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
+        time.sleep(1.0)
 
-        # modeSignal = [65]
-        # xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
-        # time.sleep(0.01)
+        modeSignal = [65]
+        xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+        time.sleep(0.01)
 
-        # motorgains = [0,0,0, 0,0,0, 200,12,0,0]
-        # xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
-        # time.sleep(0.01)
+        #motorgains = [0,0,0, 0,0,0, 200,12,0,0]
+        motorgains = [50,30,0, 80,50,0, 200,12,0,0]
+        xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
+        time.sleep(0.01)
+
         #'''
 
 

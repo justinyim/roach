@@ -19,8 +19,8 @@ def main():
       # # Balance control tilt once to 9/4*a*T^2 rad and 1/2*a*T rad/s
       a = 0.001#20#-25.0# angular acceleration (rad/s^2) 4 for vertical jump on branch
       b = 0.1 # for falling forward
-      T = 0.63#0.55#0.65#0.07#0.05# # time scale (s)
-      motorExtend = 48#50 #76 # radians
+      T = 0.62 #0.62#0.55#0.65#0.07#0.05# # time scale (s)
+      motorExtend = 50 #76 # radians CCC from 48 to 55
       extraPushOff = 5
       t_motor = 0.17# seconds
 
@@ -44,7 +44,7 @@ def main():
 
       zeroGains = [50,30,0, 80,70,0, 0,0,0,0]
 
-      runTailGains = [50,30,0, 80,40,0, 100,15,0,0]
+      runTailGains = [50,30,0, 80,40,0, 100,25,0,0]
 
       standTailGains = [50,30,0, 80,50,0, 100,13,0,0]
 
@@ -121,18 +121,19 @@ def main():
         xb_send(0, command.SET_PID_GAINS, pack('10h',*standTailGains))
         time.sleep(0.2) # CCC Added 8/10/2020 was originally 1.0
 
-        viconTest = [0,0,0, 0,0,0, 30*256,30*256]
+        viconTest = [0,0,0, 0,0,0, 30*256,30*256] # CCC changed from 30 to 25
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(1.0 + 1.5) #CCC Added 8/11/2020 + few seconds before offset estimator disabled
 
-        modeSignal = [16]
+        modeSignal = [2 + 16]
         xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
         time.sleep(0.02)
 
         t0 = time.time()
         t = 0.0
-        tEnd = 2.5*T #13.0*T CCC for testing, should be 6.0*T 8/3 or 3.0*T 8/10
+        tEnd = 6.0*T #2.15*T #13.0*T CCC for testing, should be 6.0*T (8/3)
         t_hasLaunched = tEnd
+        swingModeStart = 0
         while t < tEnd:
           # Md is in 2^15/(2000*pi/180)~=938.7 ticks/rad
           t = time.time() - t0
@@ -304,10 +305,12 @@ def main():
             #time.sleep(0.01)
 
             # Grab branch with closed loop leg control
-            modeSignal = [16 + 32]
-            xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
-            time.sleep(0.02)
-            viconTest = [0,0,0, 0,0,-0.5*3667, 35*256,0*256] #airRetract*256,25*256] #CCC was -0.44*3667
+            if (swingModeStart < 2):
+                modeSignal = [1 + 2 + 32 + 64]
+                xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+                swingModeStart = swingModeStart + 1
+                time.sleep(0.02)
+            viconTest = [0,0,0, 0,0,-0.42*3667, 32*256,32*256] #airRetract*256,25*256] #CCC was -0.44*3667 and 35*256, 0*256
             xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
             time.sleep(0.01)
             cmd = [0,0,0,0,\
@@ -364,6 +367,12 @@ def main():
           # viconTest = [0,0,0, 0,0,3667*-0*3.14159/180, 0*256,0*256]
           # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
           # time.sleep(2.0)
+
+        #used for testing swing up disable
+        #modeSignal = [1 + 2 + 32 + 64]
+        #xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+        #time.sleep(0.02)
+        #time.sleep(3)
 
         time.sleep(0.2) #3.0
         stopSignal = [0]

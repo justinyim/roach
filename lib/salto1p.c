@@ -39,6 +39,7 @@
 // Constants ------------------------------------------------------------------
 // Control and estimation gains
 int32_t gainsPD[10];      // PD controller gains (yaw, rol, pit) (P, D, other)
+int16_t* zeroDebugGains = {0,0,0,0,0,0,0,0,0,0}; // zero gains used for debugging
 
 #define TAIL_ALPHA 25 // Low pass tail velocity out of 128
 #define W_ALPHA 1  // Low pass body angular velocity out of 4 (RC = 0.006 s)
@@ -903,6 +904,9 @@ void jumpModes(void) {
             break;
 
         case MJ_SWING:
+            if ((modeFlags>>6) != 1) {
+                mj_state = MJ_GND;
+            }
             break;
 
         case MJ_STOPPED:
@@ -1274,10 +1278,11 @@ void legCtrl(void) {
         } else if (swingMode == 1) {
             // extend leg
             swing_r = 13763;
-
-            send_command_packet(&uart_tx_packet_global,
-                forceSetpoint(swing_r,0,swing_acc_off, -1000, -63)+BLDC_MOTOR_OFFSET,
-                energy_gains, 2);
+			
+			// CCC preventing leg extension
+            //send_command_packet(&uart_tx_packet_global,
+            //    forceSetpoint(swing_r,0,swing_acc_off, -1000, -63)+BLDC_MOTOR_OFFSET,
+            //    energy_gains, 2);
         } else if (swingMode == 2) {
             // retract leg
             int32_t swing_arg = (205264 * (cosApprox((q[1]>>1)-PI/2) << 1) << (8-COS_PREC)); //2^24
@@ -1759,6 +1764,11 @@ void swingUpCtrl(void) {
     int32_t th_eff = q[1] + Tt*wLP[1];
 
     //modeFlags |= 0b1; // use balance offset estimator
+	
+	if (q[1] > PI/2 || q[1] < -PI/2) { // added CCC to disable swing up mode if |pitch angle| > PI/2
+		modeFlags = modeFlags & 0b0111110;//0b0011110;
+		setGains(zeroDebugGains);
+	}
 
 
     if (!swingMode) {
@@ -1791,6 +1801,8 @@ void swingUpCtrl(void) {
         } else if (swingMode == 1) {
             // Extend leg
             //swing_r = 13107;
+            //modeFlags = modeFlags & 0b0111110; // debugging turning off swing mode and offset estimator due to leg extension for branch experiments CCC
+            //setGains(zeroDebugGains); // debugging turning off thrusters and tail when upside down CCC
 
             if (((wLP[1] > 100 && q[1] < 0) || (wLP[1] < -100 && q[1] > 0)) 
                 && t1_ticks - swingTime > 100) {

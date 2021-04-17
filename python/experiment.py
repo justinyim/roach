@@ -23,7 +23,7 @@ def main():
     #Motor gains format:
     #  [ Kp , Kd , other , Kp , Kd , other , Kp , Kd , other , other ]
     motorgains = [100,80,0, 150,120,0, 120,15,0,0] #yaw roll pitch
-    motorgains = [0,0,0, 0,0,0, 0,0,0,0]
+    #motorgains = [0,0,0, 0,0,0, 0,0,0,0]
 
     duration = 4000#15000
     rightFreq = 0
@@ -64,7 +64,7 @@ def main():
             startTelemetrySave(numSamples)
 
 
-        '''
+        #'''
         # basic leg extension test
         exp = [2]
         arbitrary = [0]
@@ -86,7 +86,7 @@ def main():
         #    xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         #    time.sleep(0.01)
 
-        '''
+        #'''
 
 
         '''
@@ -124,7 +124,7 @@ def main():
         '''
 
 
-        #'''
+        '''
         # Swing-up pendulum test
         exp = [2]
         arbitrary = [0]
@@ -183,7 +183,7 @@ def main():
         xb_send(0, command.SET_PID_GAINS, pack('10h',*motorgains))
         time.sleep(0.01)
 
-        #'''
+        '''
 
 
         '''

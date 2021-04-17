@@ -282,6 +282,26 @@ int32_t uCmd;
 #define THE_LIMIT 187750
 #define PHI_LIMIT 93873
 
+#elif ROBOT_NAME == SALTO_1P_DANCER
+
+// poles -9, -9, -9
+#define K0 -729// in 1 tick/(rad/s^3)
+#define K1 -249// in 1024/1000 tick/(rad/s^2)
+#define K2 -27// in 1 tick/(rad/s)
+#define CK3 729 // command filter (z*z*z)
+#define CK2 27 // command filter 1/(3/(z*z))
+#define CK1 3 // command filter 1/(1/z+1/z+1/z)
+// poles -6, -6, -6
+#define K0_UP -216 // in 1 tick/(rad/s^3)
+#define K1_UP -111 // in 1024/1000 tick/(rad/s^2) 
+#define K2_UP -18 // in 1 tick/(rad/s)
+#define CK3_UP 216 // command filter (z*z*z)
+#define CK2_UP 12 // command filter 1/(3/(z*z))
+#define CK1_UP 2 // command filter 1/(1/z+1/z+1/z)
+
+#define THE_LIMIT 187750
+#define PHI_LIMIT 93873
+
 #else
 // poles -9, -9, -9
 #define K0 -729// in 1 tick/(rad/s^3)
@@ -351,6 +371,10 @@ uint8_t keepLanding = 1;
 #define FOOT_ADJUST 0//262 // MANUAL TUNING 4mm
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
 #define FOOT_ADJUST (655+983) //(655+1311) // MANUAL TUNING (+655 for 10mm for the gripper)
+#elif ROBOT_NAME == SALTO_1P_DANCER
+#define FOOT_ADJUST 0
+#else
+#define FOOT_ADJUST 0
 #endif
 
 
@@ -448,6 +472,11 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
         // Period of 18 cycles, 0.1 bandwidth
         wyO[0] = (104*(int32_t)wyO[1] - 46*(int32_t)wyO[2]
             + 55*(int32_t)wyI[0] - 104*(int32_t)wyI[1] + 55*(int32_t)wyI[2])>>6;
+        w[1] = wyO[0];
+        #elif ROBOT_NAME == SALTO_1P_DANCER
+        // Period of 16 cycles, 0.1 bandwidth
+        wyO[0] = (102*(int32_t)wyO[1] - 46*(int32_t)wyO[2]
+            + 55*(int32_t)wyI[0] - 102*(int32_t)wyI[1] + 55*(int32_t)wyI[2])>>6;
         w[1] = wyO[0];
         #else
         #endif
@@ -823,7 +852,7 @@ void jumpModes(void) {
     switch(mj_state) {
         case MJ_START:
             mj_state = MJ_LAUNCH;
-            tiHChangeMode(1, TIH_MODE_COAST);
+            tiHChangeMode(TAIL_PORT, TIH_MODE_COAST);
             break;
 
         case MJ_STOP:
@@ -981,6 +1010,14 @@ void stanceUpdate(void) {
     if (leg < (7000+FOOT_ADJUST*4) && legVel < 0) { // 10.7cm
         legVel = 0;
     }
+    #elif ROBOT_NAME == SALTO_1P_DANCER
+    if (leg < (5964+FOOT_ADJUST*4) && legVel < 0) { // 9cm+1mm
+        legVel = 0;
+    }
+    #else
+    if (leg < (5964+FOOT_ADJUST*4) && legVel < 0) { // 9cm+1mm
+        legVel = 0;
+    }
     #endif
 
     v[0] = 0; // zero velocities; not really necessary
@@ -1107,6 +1144,9 @@ void takeoffEstimation(void) {
 #elif ROBOT_NAME == SALTO_1P_RUDOLPH
     TOw[1] += 00*TOlegVel/213;
     TOw[0] += 10*TOlegVel/213;
+#elif ROBOT_NAME == SALTO_1P_DANCER
+    TOw[1] += 10*TOlegVel/213; // in (centi rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694: 100/0.4694 = 213
+    TOw[0] += 30*TOlegVel/213;
 #else
     TOw[1] += 0.2*0.469*TOlegVel/; // in (rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694
     TOw[0] += 0.2*0.469*TOlegVel/;
@@ -1784,7 +1824,7 @@ void swingUpCtrl(void) {
             // Tail braking
             tailCmd = -TAIL_BRAKE*(tail_vel+2*(wLP[1]>>8));
             //tailMotor = tailLinearization(&tailCmd); // Linearizing the actuator response
-            tiHSetDC(0+1, tailCmd); // send tail command to H-bridge
+            tiHSetDC(TAIL_PORT, tailCmd); // send tail command to H-bridge
 
             //modeFlags |= 0b10; // debugging
 
@@ -1801,7 +1841,7 @@ void swingUpCtrl(void) {
             // Tail braking
             tailCmd = -TAIL_BRAKE*(tail_vel+2*(wLP[1]>>8));
             //tailMotor = tailLinearization(&tailCmd); // Linearizing the actuator response
-            tiHSetDC(0+1, tailCmd); // send tail command to H-bridge
+            tiHSetDC(TAIL_PORT, tailCmd); // send tail command to H-bridge
 
             //modeFlags &= ~0b10; // debugging
 
@@ -1819,9 +1859,9 @@ void swingUpCtrl(void) {
                 swingMode = 1;
             }
             if (modeFlags & 0b10) {
-                tiHSetDC(0+1, tailMotor);
+                tiHSetDC(TAIL_PORT, tailMotor);
             } else {
-                tiHSetDC(0+1, 0);
+                tiHSetDC(TAIL_PORT, 0);
             }
 
             //modeFlags &= ~0b10; // debugging
@@ -1928,6 +1968,11 @@ void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw){
         pitO[0] = (82*(int32_t)pitO[1] - 43*(int32_t)pitO[2]
             + 53*(int32_t)pitI[0] - 82*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
         pitch = ((8-TAIL_CMD_ALPHA)*pitch + TAIL_CMD_ALPHA*pitO[0]) >> 3; // low pass filter
+        #elif ROBOT_NAME == SALTO_1P_DANCER
+        // Period of 8 cycles, 0.125 bandwidth
+        pitO[0] = (75*(int32_t)pitO[1] - 43*(int32_t)pitO[2]
+            + 53*(int32_t)pitI[0] - 75*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
+        pitch = ((8-TAIL_CMD_ALPHA)*pitch + TAIL_CMD_ALPHA*pitO[0]) >> 3; // low pass filter
         #else
         #endif
         //*/
@@ -1959,18 +2004,18 @@ void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw){
             tailCmd > -5*tail_vel) ||
             (tail_vel > 150 &&
             tailCmd < -5*tail_vel))) {
-            tiHChangeMode(1, TIH_MODE_BRAKE);
-            tiHSetDC(1, tailCmd > 0 ? 4000 : -4000);
+            tiHChangeMode(TAIL_PORT, TIH_MODE_BRAKE);
+            tiHSetDC(TAIL_PORT, tailCmd > 0 ? 4000 : -4000);
         } else {
-            tiHChangeMode(1, TIH_MODE_COAST);
-            tiHSetDC(0+1, tailMotor);
+            tiHChangeMode(TAIL_PORT, TIH_MODE_COAST);
+            tiHSetDC(TAIL_PORT, tailMotor);
         }
         tiHSetDC(2+1, foreThruster);
         tiHSetDC(3+1, aftThruster);
     } else {
         for (i=0; i<4; i++) {
             tiHSetDC(i+1, 0);
-            //tiHChangeMode(1, TIH_MODE_BRAKE); // brake the tail
+            //tiHChangeMode(TAIL_PORT, TIH_MODE_BRAKE); // brake the tail
         }
     }
 }
@@ -2078,6 +2123,24 @@ int32_t tailLinearization(int32_t* tail){
     } else {
         tailOut += 1*tail_vel;
     }
+#elif ROBOT_NAME == SALTO_1P_DANCER
+    if (modeFlags & 0b10001 &&
+        (mj_state == MJ_LAUNCH || mj_state == MJ_GND || mj_state == MJ_STAND
+            || mj_state == MJ_SWING) ) {
+        tailOut += 5*tail_vel; // more aggressive linearization for toe balancing
+    } else {
+        tailOut += 4*tail_vel;
+    }
+
+    // Friction (stiction) compensation
+    if (tail_vel < -20) {
+        tailOut -= 20;
+    } else if (tail_vel > 20) {
+        tailOut += 20;
+    } else {
+        tailOut += 1*tail_vel;
+    }
+#else
 #endif
 
     tailOut = tailOut > MAX_TAIL ? MAX_TAIL :
@@ -2426,6 +2489,11 @@ void orientImageproc(int32_t* v_b, int16_t* v_ip) {
     // v_b[2] = (158*((int32_t)v_ip[2]) - 201*((int32_t)v_ip[0]))>>8; //yaw
     // v_b[0] = -v_ip[1]; // roll
     // v_b[1] = (158*((int32_t)v_ip[0]) + 201*((int32_t)v_ip[2]))>>8; //pitch
+#elif ROBOT_NAME == SALTO_1P_DANCER
+    // 90 degrees about x, follwed by 180 degrees about body z
+    v_b[2] = -v_ip[0]; // yaw
+    v_b[0] = -v_ip[1]; // roll
+    v_b[1] = -v_ip[2]; // pitch
 #elif ROBOT_NAME == SALTO_1P_SANTA
     // -45 degrees about pitch
     v_b[2] = (((int32_t)(v_ip[2] + v_ip[1]))*181)>>8; //yaw

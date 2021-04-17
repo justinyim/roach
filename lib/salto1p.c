@@ -305,7 +305,7 @@ int32_t uCmd;
 #endif
 //*/
 
-uint8_t swingMode = 0;      // swing-up mode
+uint8_t swingMode = 2;      // swing-up mode
 uint32_t swingTime = 0;     // time of swing transition
 int32_t swing_r = 6554;     // swing leg length command (2^16 ticks per m)
 int32_t swing_acc_off = 0;
@@ -904,9 +904,9 @@ void jumpModes(void) {
             break;
 
         case MJ_SWING:
-            if ((modeFlags>>6) != 1) {
-                mj_state = MJ_GND;
-            }
+            //if ((modeFlags>>6) != 1) {
+            //    mj_state = MJ_GND;
+            //}
             break;
 
         case MJ_STOPPED:
@@ -1277,12 +1277,12 @@ void legCtrl(void) {
             }
         } else if (swingMode == 1) {
             // extend leg
-            swing_r = 13763;
-			
-			// CCC preventing leg extension
-            //send_command_packet(&uart_tx_packet_global,
-            //    forceSetpoint(swing_r,0,swing_acc_off, -1000, -63)+BLDC_MOTOR_OFFSET,
-            //    energy_gains, 2);
+            swing_r = 11796;//13763;
+
+            // CCC preventing leg extension
+            send_command_packet(&uart_tx_packet_global,
+                forceSetpoint(swing_r,0,swing_acc_off, -1000, -63)+BLDC_MOTOR_OFFSET,
+                energy_gains, 2);
         } else if (swingMode == 2) {
             // retract leg
             int32_t swing_arg = (205264 * (cosApprox((q[1]>>1)-PI/2) << 1) << (8-COS_PREC)); //2^24
@@ -1301,12 +1301,13 @@ void legCtrl(void) {
             }
             */
             swing_r += 00; // offset (MANUAL TUNING) 400 is good if the tail is free-wheeling
+            //swing_r += 1*tail_vel*(w[1]>0?1:-1);
             swing_r = swing_r < 7864 ? 7864 :
-                    swing_r > 13763? 13763 :
+                    swing_r > 11796? 11796 ://13763? 13763 :
                     swing_r;
             //swing_r = 12000;
 
-            int16_t v_cmd = (q[1] < PI/8 && q[1] > -PI/8)*200; // silly hack to try to slow down before the top
+            int16_t v_cmd = 0;//(q[1] < PI/8 && q[1] > -PI/8)*200; // silly hack to try to slow down before the top
 
             send_command_packet(&uart_tx_packet_global,
                 forceSetpoint(swing_r,v_cmd,swing_acc_off, -2000, -89)+BLDC_MOTOR_OFFSET,
@@ -1766,8 +1767,8 @@ void swingUpCtrl(void) {
     //modeFlags |= 0b1; // use balance offset estimator
 	
 	if (q[1] > PI/2 || q[1] < -PI/2) { // added CCC to disable swing up mode if |pitch angle| > PI/2
-		modeFlags = modeFlags & 0b0111110;//0b0011110;
-		setGains(zeroDebugGains);
+		//modeFlags = modeFlags & 0b0111110;//0b0011110;
+		//setGains(zeroDebugGains);
 	}
 
 
@@ -1792,9 +1793,21 @@ void swingUpCtrl(void) {
             }
 
             // Tail braking
-            tailCmd = -TAIL_BRAKE*(tail_vel+2*(wLP[1]>>8));
-            //tailMotor = tailLinearization(&tailCmd); // Linearizing the actuator response
-            tiHSetDC(0+1, tailCmd); // send tail command to H-bridge
+            int32_t wSquared = ((int32_t)w[1]*(int32_t)w[1])/55076; // 2^4
+            int32_t KE = (((FULL_MASS*((leg*leg)>>16))>>4)*wSquared)>>(8+2); // 2^16
+            int32_t PE = FULL_MASS*cos_theta*leg >> (8+COS_PREC); // 2^16
+            int32_t PE_final = FULL_MASS*leg >> 8; // 2^16
+            int32_t E_offset = 300; // manual tuning for energy offset
+            int32_t E_diff = KE + PE - PE_final + E_offset;
+
+            if (q[1] > PI/3 || q[1] < -PI/3) {
+                tailCmd = -TAIL_BRAKE*(tail_vel+2*(wLP[1]>>8));
+                tiHSetDC(0+1, tailCmd); // send tail command to H-bridge
+            } else {
+                tailCmd = -4*E_diff*(w[1]>0?1:-1) - 0*tail_vel; // tailCmd 4000 ticks is about 0.045 N m
+                tailMotor = tailLinearization(&tailCmd); // Linearizing the actuator response
+                tiHSetDC(0+1, tailMotor);
+            }
 
             //modeFlags |= 0b10; // debugging
 
@@ -1805,7 +1818,9 @@ void swingUpCtrl(void) {
             //setGains(zeroDebugGains); // debugging turning off thrusters and tail when upside down CCC
 
             if (((wLP[1] > 100 && q[1] < 0) || (wLP[1] < -100 && q[1] > 0)) 
-                && t1_ticks - swingTime > 100) {
+                && t1_ticks - swingTime > 100
+                ){
+                //&& (q[1] > -PI/3 && q[1] < PI/3)) {
                 swingMode = 2;
                 swingTime = t1_ticks;
             }
@@ -1839,8 +1854,8 @@ void swingUpCtrl(void) {
             //modeFlags &= ~0b10; // debugging
         }
 
-        if (th_eff > -PI/10 && th_eff < PI/10
-            && q[1] > -PI/8 && q[1] < PI/8) {
+        if (th_eff > -PI/8 && th_eff < PI/8
+            && q[1] > -PI/6 && q[1] < PI/6) {
             swingMode = 0; // Switch to use balance controller
             //modeFlags |= 0b1; // use balance offset estimator
         } else if ((q[1] > 15*PI/16 || q[1] < -15*PI/16) && wLP[1] < 2000 && wLP[1] > -2000) {

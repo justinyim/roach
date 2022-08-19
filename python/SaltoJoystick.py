@@ -135,11 +135,11 @@ def main():
     xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
     time.sleep(0.02)
 
-    adjust = [0,0,-192]
+    adjust = [0,64,-192]
     xb_send(0, command.ADJUST_BODY_ANG, pack('3h', *adjust))
     time.sleep(0.02)
 
-    modeSignal = [1]
+    modeSignal = [17]
     xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
     time.sleep(0.02)
 

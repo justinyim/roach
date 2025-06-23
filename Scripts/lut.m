@@ -3,7 +3,7 @@
 % NOTE: there must be as many "crank", "MA, and "extension" entries as 
 % there  are entries for "names".
 
-names = {'SALTO_1P_RUDOLPH','SALTO_1P_DASHER','UNUSED'};
+names = {'SALTO_1P_RUDOLPH','SALTO_1P_DASHER','DANCER','UNUSED'};
 
 legFunctionFits
 

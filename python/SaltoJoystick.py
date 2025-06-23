@@ -105,6 +105,10 @@ def main():
             started = 1
         time.sleep(0.02)
 
+        # for i in range(joyNAxes):
+        #     print "%0.2f" % joy.get_axis(i),
+        # print " "
+
     print "START"
 
     exp = [2]
@@ -135,11 +139,11 @@ def main():
     xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
     time.sleep(0.02)
 
-    adjust = [0,0,-192]
+    adjust = [0,0,-220] #-192
     xb_send(0, command.ADJUST_BODY_ANG, pack('3h', *adjust))
     time.sleep(0.02)
 
-    modeSignal = [1]
+    modeSignal = [17]
     xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
     time.sleep(0.02)
 
@@ -223,9 +227,9 @@ def main():
             elif joyYaw < -3.14159:
                 joyYaw = joyYaw + 2*3.14159
 
-            vz1 = int(np.sqrt(joyAxes[2]*1.4+2.4)*4000)
+            vz1 = int(np.sqrt(joyAxes[4]*1.4+2.4)*4000)
             vx1 = int(-joyAxes[3]*4000*(vz1-2000)/6000)
-            vy1 = int(-joyAxes[4]*2000*(vz1-2000)/6000)
+            vy1 = int(-joyAxes[2]*2500*(vz1-2000)/6000)
             Cyaw = int(joyYaw*AngleScaling)
             #print Cyaw
 

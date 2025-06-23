@@ -22,8 +22,8 @@ def main():
     queryRobot()
     #Motor gains format:
     #  [ Kp , Kd , other , Kp , Kd , other , Kp , Kd , other , other ]
-    motorgains = [100,80,0, 150,120,0, 120,15,0,0] #yaw roll pitch
-    #motorgains = [0,0,0, 0,0,0, 0,0,0,0]
+    #motorgains = [100,80,0, 150,120,0, 120,15,0,0] #yaw roll pitch
+    motorgains = [0,0,0, 0,0,0, 0,0,0,0]
 
     duration = 4000#15000
     rightFreq = 0
@@ -64,7 +64,7 @@ def main():
             startTelemetrySave(numSamples)
 
 
-        #'''
+        '''
         # basic leg extension test
         exp = [2]
         arbitrary = [0]
@@ -76,7 +76,7 @@ def main():
         xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
         time.sleep(0.02)
 
-        viconTest = [0,0,0,0,0,0,70*256,80*256]#55*256,70*256]
+        viconTest = [0,0,0,0,0,0,60*256,70*256]#55*256,70*256]
         xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         time.sleep(0.02)
         xb_send(0, command.START_EXPERIMENT, pack('h', *exp))
@@ -86,7 +86,7 @@ def main():
         #    xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         #    time.sleep(0.01)
 
-        #'''
+        '''
 
 
         '''
@@ -225,7 +225,7 @@ def main():
         time.sleep(0.01)
         '''
 		
-        '''
+        #'''
         # Balance on toe test
         #Start robot 0: wall jump, 1: single jump, 2: vicon jumps
         exp = [2]
@@ -250,7 +250,7 @@ def main():
         xb_send(0, command.G_VECT_ATT, pack('h', *arbitrary))
         time.sleep(0.01)
 
-        adjust = [0,-64,-192]#[0,192,-256]# 3667 ticks per radian, yaw, roll, pitch (64 ticks per degree)
+        adjust = [0,192,-300]#[0,192,-256]# 3667 ticks per radian, yaw, roll, pitch (64 ticks per degree)
         xb_send(0, command.ADJUST_BODY_ANG, pack('3h', *adjust))
         time.sleep(0.01)
 
@@ -329,35 +329,35 @@ def main():
         # xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
         # time.sleep(0.3)
 
-        k1 = -2000
-        k2 = -89
-        tEnd = 1
-        t0 = time.time()
-        t = 0.0
-        while t < tEnd:
-            t = time.time() - t0
-            cmd = [0,0,0,0,\
-            (t*0.05+0.09)*2**16, 0.0*2000, (0+9.81)*1024,\
-            k1, k2]
-            xb_send(0, command.STANCE, pack('9h', *cmd))
-            time.sleep(0.02)
+        # k1 = -2000
+        # k2 = -89
+        # tEnd = 1
+        # t0 = time.time()
+        # t = 0.0
+        # while t < tEnd:
+        #     t = time.time() - t0
+        #     cmd = [0,0,0,0,\
+        #     (t*0.05+0.09)*2**16, 0.0*2000, (0+9.81)*1024,\
+        #     k1, k2]
+        #     xb_send(0, command.STANCE, pack('9h', *cmd))
+        #     time.sleep(0.02)
 
-        tEnd = 8
-        l = 0.14
-        al = 0.02
-        wl = 0.5*2*3.14159
+        # tEnd = 8
+        # l = 0.14
+        # al = 0.02
+        # wl = 0.5*2*3.14159
 
-        ap = 2.5*3.14159/180*938.7
-        wp = 1*2*3.14159
-        t0 = time.time()
-        t = 0.0
-        while t < tEnd:
-            t = time.time() - t0
-            cmd = [ap/wp*np.cos(wp*t), -ap*np.sin(wp*t), -ap*wp*np.cos(wp*t), ap*wp*wp*np.sin(wp*t),\
-            (l+al*np.sin(wl*t))*2**16, (al*wl*np.cos(wl*t))*2000, (-al*wl*wl*np.sin(wl*t) + 9.81)*1024,\
-            k1, k2]
-            xb_send(0, command.STANCE, pack('9h', *cmd))
-            time.sleep(0.02)
+        # ap = 2.5*3.14159/180*938.7
+        # wp = 1*2*3.14159
+        # t0 = time.time()
+        # t = 0.0
+        # while t < tEnd:
+        #     t = time.time() - t0
+        #     cmd = [ap/wp*np.cos(wp*t), -ap*np.sin(wp*t), -ap*wp*np.cos(wp*t), ap*wp*wp*np.sin(wp*t),\
+        #     (l+al*np.sin(wl*t))*2**16, (al*wl*np.cos(wl*t))*2000, (-al*wl*wl*np.sin(wl*t) + 9.81)*1024,\
+        #     k1, k2]
+        #     xb_send(0, command.STANCE, pack('9h', *cmd))
+        #     time.sleep(0.02)
 
 
         # # Flip
@@ -697,7 +697,7 @@ def main():
         #     time.sleep(1.0/fCmd)
         # time.sleep(2.0)
 
-        '''
+        #'''
 
         '''
         # Foot buzzing (new balance control)

@@ -25,7 +25,7 @@ def main():
       # Falling to angle
       a = 0.001 # Starting displacement
       b = 0.1 # Time constant of toppling (s)
-      T = 0.586#(0.35 rad) #0.57 #(0.3 rad) # Time of falling
+      T = 0.52#(0.35 rad) #0.57 #(0.3 rad) # Time of falling
       # a = 0.001, b = 0.1, T = 0.6 leans to 0.4 rad
 
       k1 = 0

@@ -22,6 +22,7 @@ crank = [x.*(-5.545933486743863e-1)+x.^2.*4.861385182590551-x.^3.*3.076529866354
 %}
 crank = [-model(2).f_crank(-x);
     -model(3).f_crank(-x);
+    -model(4).f_crank(-x);
     -model(1).f_crank(-x)];
 crankMax = 4; % Saturate, since furthest extension is nonphysical
 crank(crank>crankMax) = crankMax;
@@ -41,6 +42,7 @@ extension = [-x.*(-9.689463228112449e-2)+x.^2.*6.989908944388874e-2-...
 %}
 extension = [model(2).f_fd(x);
     model(3).f_fd(x);
+    model(4).f_fd(x);
     model(1).f_fd(x)];
 extensionScale = floor((2^16-1)/0.25);%floor((2^16-1)./max(extension,[],2));
 extension_scaled = floor(max(0,extension.*extensionScale));
@@ -59,6 +61,7 @@ MA = [((-x).*9.722770365181102+(-x).^2.*9.229589599064714+(-x).^3.*4.44362250885
 %}
 MA = [model(2).f_MA(-x);
     model(3).f_MA(-x);
+    model(4).f_MA(-x);
     model(1).f_MA(-x)];
 MA(MA>128) = 128; % Saturate, since furthest extension is nonphysical
 MA(MA<1) = 1;

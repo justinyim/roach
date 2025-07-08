@@ -44,10 +44,17 @@ int32_t gainsPD[10];      // PD controller gains (yaw, rol, pit) (P, D, other)
 #define W_ALPHA 1  // Low pass body angular velocity out of 4 (RC = 0.006 s)
 #define TAIL_CMD_ALPHA 1  // Low pass tail PWM out of 8
 
+#if ROBOT_NAME == SALTO_1P_DANCER
+#define P_AIR ((3*65536)/100) // leg proportional gain in the air (duty cycle/rad * 65536)
+#define D_AIR ((1*65536)/10000) // leg derivative gain in the air (duty cycle/[rad/s] * 65536)
+#define P_GND ((2*65536)/8) // leg proportional gain on the ground
+#define D_GND ((2*65536)/1000)
+#else
 #define P_AIR ((3*65536)/100) // leg proportional gain in the air (duty cycle/rad * 65536)
 #define D_AIR ((0*65536)/1000) // leg derivative gain in the air (duty cycle/[rad/s] * 65536)
 #define P_GND ((5*65536)/10) // leg proportional gain on the ground
 #define D_GND ((2*65536)/1000)
+#endif
 #define P_STAND ((2*65536)/100) //((1*65536)/10) // leg proportional gain for standing
 #define D_STAND ((5*65536)/10000) //((1*65536)/1000)
 
@@ -140,6 +147,14 @@ int32_t sTorque;            // Spring torque [2^14 ticks/(Nm)]
 int32_t force;              // Foot force [2^10 ticks/N]
 int16_t leg = 6000;         // Stance leg length [2^16 ticks/m]
 int16_t legVel;             // Stance leg velocity [2000 ticks/(m/s)]
+
+#if ROBOT_NAME == SALTO_1P_DANCER
+// encoder slip
+int32_t springLP;           // Low-pass of spring
+int32_t slip_count;         // Encoder slip offset
+#endif
+// encoder slip
+int32_t bldc_cmd_offset = BLDC_CMD_OFFSET;
 
 int32_t sin_theta = 0;      // pitch angle in COS_PREC bits
 int32_t cos_theta = 1<<COS_PREC;
@@ -474,9 +489,9 @@ void __attribute__((interrupt, no_auto_psv)) _T5Interrupt(void) {
             + 55*(int32_t)wyI[0] - 104*(int32_t)wyI[1] + 55*(int32_t)wyI[2])>>6;
         w[1] = wyO[0];
         #elif ROBOT_NAME == SALTO_1P_DANCER
-        // Period of 16 cycles, 0.1 bandwidth
-        wyO[0] = (102*(int32_t)wyO[1] - 46*(int32_t)wyO[2]
-            + 55*(int32_t)wyI[0] - 102*(int32_t)wyI[1] + 55*(int32_t)wyI[2])>>6;
+        // Period of 13 cycles, 0.1 bandwidth
+        wyO[0] = (97*(int32_t)wyO[1] - 46*(int32_t)wyO[2]
+            + 55*(int32_t)wyI[0] - 97*(int32_t)wyI[1] + 55*(int32_t)wyI[2])>>6;
         w[1] = wyO[0];
         #else
         #endif
@@ -692,6 +707,12 @@ void salto1pSetup(void) {
     delay_ms(10);
     send_command_packet(&uart_tx_packet_global, 0, (3*65536/4), 17);
 #endif
+#if ROBOT_NAME == SALTO_1P_DANCER
+    delay_ms(10);
+    send_command_packet(&uart_tx_packet_global, 0, (7*65536/8), 17); // set BLDC max PWM (65536=100%)
+    delay_ms(10);
+    send_command_packet(&uart_tx_packet_global, 0, (7*65536/8), 17);
+#endif
     
     // Timer setup
     SetupTimer1();
@@ -782,8 +803,19 @@ void kinematicUpdate(void) {
     last_mot = mot;
     motw = sensor_data->velocity/70; // velocity in 2^16 and motw in 938.7 ticks/(rad/s)
 
+
+    #if ROBOT_NAME == SALTO_1P_DANCER
+    // encoder slip
+    if (t1_ticks - transition_time > 100) {
+        springLP = (15*(springLP>>4)) + ((mot - crank) >> 4);
+        slip_count = springLP/4117;
+        spring = mot - crank - 4117*slip_count;
+        bldc_cmd_offset = 411775*slip_count + BLDC_CMD_OFFSET;
+    }
+    #else
     spring = mot - crank;
     if(spring < 0){spring=0;}
+    #endif
 
     sTorque = SPRING_LINEAR*spring -
         (SPRING_QUADRATIC*((spring*spring) >> 14));
@@ -797,7 +829,7 @@ void kinematicUpdate(void) {
     // force is 1 N / (2^10 ticks)
 
     // Tail estimation
-    int16_t tail_err = calibPos(0) - tail_pos;
+    int16_t tail_err = TAIL_DIR*calibPos(0) - tail_pos;
     tail_err = tail_err > 2000 ? 2000 :
                tail_err < -2000 ? -2000 :
                tail_err;
@@ -863,7 +895,13 @@ void jumpModes(void) {
         case MJ_AIR:
             // Ground contact transition out of air to ground
             if (t1_ticks - transition_time > 300
-                    && (spring > 1500)) {
+                    && (spring > 
+                        #if ROBOT_NAME == SALTO_1P_DANCER
+                            3000
+                        #else
+                            1500
+                        #endif
+                    )) {
                 if (modeFlags>>6 == 1) {
                     mj_state = MJ_SWING;
                 } else if (modeFlags & 0b10000
@@ -881,7 +919,13 @@ void jumpModes(void) {
         case MJ_GND:
             // Liftoff transition from ground to air
             if (t1_ticks - transition_time > 30
-                    && (spring < 500 || femur > FULL_EXTENSION)
+                    && (spring < 
+                        #if ROBOT_NAME == SALTO_1P_DANCER
+                            2000
+                        #else
+                            500
+                        #endif
+                        || femur > FULL_EXTENSION)
                     && crank > 8192) {
                 mj_state = MJ_AIR;
                 transition_time = t1_ticks;
@@ -1146,7 +1190,7 @@ void takeoffEstimation(void) {
     TOw[0] += 10*TOlegVel/213;
 #elif ROBOT_NAME == SALTO_1P_DANCER
     TOw[1] += 10*TOlegVel/213; // in (centi rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694: 100/0.4694 = 213
-    TOw[0] += 30*TOlegVel/213;
+    TOw[0] += 00*TOlegVel/213;
 #else
     TOw[1] += 0.2*0.469*TOlegVel/; // in (rad/s)/(m/s). (2^15/2000*180/pi)/2000 = 0.4694
     TOw[0] += 0.2*0.469*TOlegVel/;
@@ -1242,22 +1286,22 @@ void takeoffEstimation(void) {
 
 void legCtrl(void) {
     if (mj_state == MJ_GND) {
-        send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
+        send_command_packet(&uart_tx_packet_global, pushoffCmd+bldc_cmd_offset, GAINS_GND, 2);
     } else if (mj_state == MJ_STAND) {
         if (!keepLanding) {
             // Unrecoverable
             if (v[2] < 6000) {
                 #ifdef FULL_POWER
-                send_command_packet(&uart_tx_packet_global, 90*65536+BLDC_CMD_OFFSET, GAINS_GND, 2);
+                send_command_packet(&uart_tx_packet_global, 90*65536+bldc_cmd_offset, GAINS_GND, 2);
                 #else
-                send_command_packet(&uart_tx_packet_global, 80*65536+BLDC_CMD_OFFSET, GAINS_GND, 2);
+                send_command_packet(&uart_tx_packet_global, 80*65536+bldc_cmd_offset, GAINS_GND, 2);
                 #endif
             } else {
-                send_command_packet(&uart_tx_packet_global, 50*65536+BLDC_CMD_OFFSET, GAINS_GND, 2);
+                send_command_packet(&uart_tx_packet_global, 50*65536+bldc_cmd_offset, GAINS_GND, 2);
             }
         } else {
-            //send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_STAND, 2);
-            send_command_packet(&uart_tx_packet_global, forceSetpoint(rdes, rddes, rdddes, k1des, k2des), GAINS_ENERGY, 2);
+            send_command_packet(&uart_tx_packet_global, pushoffCmd+bldc_cmd_offset, GAINS_STAND, 2);
+            //send_command_packet(&uart_tx_packet_global, forceSetpoint(rdes, rddes, rdddes, k1des, k2des), GAINS_ENERGY, 2);
         }
     } else if (mj_state == MJ_LAUNCH) {
         if (modeFlags & 0b10000) {
@@ -1265,14 +1309,14 @@ void legCtrl(void) {
             //*
             if (crank > 4096) {
                 // slow down the jump
-                send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_GND, 2);//GAINS_STAND, 2);
+                send_command_packet(&uart_tx_packet_global, legSetpoint+bldc_cmd_offset, GAINS_GND, 2);//GAINS_STAND, 2);
             } else {
                 // usual jump
-                send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
+                send_command_packet(&uart_tx_packet_global, pushoffCmd+bldc_cmd_offset, GAINS_GND, 2);
             }
             //*/
         } else {
-            send_command_packet(&uart_tx_packet_global, pushoffCmd+BLDC_CMD_OFFSET, GAINS_GND, 2);
+            send_command_packet(&uart_tx_packet_global, pushoffCmd+bldc_cmd_offset, GAINS_GND, 2);
         }
     } else if (mj_state == MJ_AIR) {
         if (modeFlags & 0b10000) {
@@ -1292,9 +1336,9 @@ void legCtrl(void) {
             if (legRet < 65536*(int32_t)45) {
                 legRet = 65536*(int32_t)45;
             }
-            send_command_packet(&uart_tx_packet_global, legRet+BLDC_CMD_OFFSET, GAINS_AIR, 2);
+            send_command_packet(&uart_tx_packet_global, legRet+bldc_cmd_offset, GAINS_AIR, 2);
         } else {
-            send_command_packet(&uart_tx_packet_global, legSetpoint+BLDC_CMD_OFFSET, GAINS_AIR, 2);
+            send_command_packet(&uart_tx_packet_global, legSetpoint+bldc_cmd_offset, GAINS_AIR, 2);
         }
     } else if (mj_state == MJ_SWING) {
         // Swing-up control
@@ -1348,7 +1392,7 @@ void legCtrl(void) {
                 energy_gains, 2);
         } else if (swingMode == 3) {
             // pump tail
-            send_command_packet(&uart_tx_packet_global, 30*65536+BLDC_CMD_OFFSET, energy_gains, 2);
+            send_command_packet(&uart_tx_packet_global, 30*65536+bldc_cmd_offset, energy_gains, 2);
         }
     } else if (mj_state == MJ_STOPPED) {
         sensor_data_t* sensor_data = (sensor_data_t*)&(last_bldc_packet->packet.data_crc);
@@ -1636,6 +1680,19 @@ int32_t deadbeatVelCtrl(int16_t* vi, int16_t* vo, int32_t* ctrl) {
 
 #ifdef FULL_POWER
     //*
+    
+    #if ROBOT_NAME == SALTO_1P_DANCER
+    long pit_ctrl = -89*ix +38*ox // supposed to be 89, 38
+        -17*ixiz +8*oxiz -3*ixoz -20*oxoz;
+        // Scaled by 469 approx = PI/(3.14159*2000)
+
+    long rol_ctrl = -(-70*iy +38*oy // supposed to be 89, 38
+        -17*iyiz +8*oyiz -3*iyoz -20*oyoz);
+
+    long leg_ctrl = (77*65536 -645*iz -851*oz
+        +89*(ixix+iyiy) -5*iziz -140*(oxox+oyoy) -103*ozoz);
+        // Scaled by 65536/2000
+    #else
     // 100% gains from runGridMotor20_truncated.mat
     long pit_ctrl = -89*ix +38*ox // supposed to be 89, 38
         -17*ixiz +8*oxiz -3*ixoz -20*oxoz;
@@ -1648,6 +1705,8 @@ int32_t deadbeatVelCtrl(int16_t* vi, int16_t* vo, int32_t* ctrl) {
         +89*(ixix+iyiy) -5*iziz -140*(oxox+oyoy) -103*ozoz);
         // Scaled by 65536/2000
     //*/
+    #endif
+
 
     /*
     // 100% gains from runGridMotor18a
@@ -1969,9 +2028,9 @@ void attitudeActuators(int32_t roll, int32_t pitch, int32_t yaw){
             + 53*(int32_t)pitI[0] - 82*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
         pitch = ((8-TAIL_CMD_ALPHA)*pitch + TAIL_CMD_ALPHA*pitO[0]) >> 3; // low pass filter
         #elif ROBOT_NAME == SALTO_1P_DANCER
-        // Period of 8 cycles, 0.125 bandwidth
-        pitO[0] = (75*(int32_t)pitO[1] - 43*(int32_t)pitO[2]
-            + 53*(int32_t)pitI[0] - 75*(int32_t)pitI[1] + 53*(int32_t)pitI[2])>>6;
+        // Period of 13 cycles, 0.1 bandwidth
+        pitO[0] = (97*(int32_t)pitO[1] - 46*(int32_t)pitO[2]
+            + 55*(int32_t)pitI[0] - 97*(int32_t)pitI[1] + 55*(int32_t)pitI[2])>>6;
         pitch = ((8-TAIL_CMD_ALPHA)*pitch + TAIL_CMD_ALPHA*pitO[0]) >> 3; // low pass filter
         #else
         #endif
@@ -2491,7 +2550,7 @@ void orientImageproc(int32_t* v_b, int16_t* v_ip) {
     // v_b[1] = (158*((int32_t)v_ip[0]) + 201*((int32_t)v_ip[2]))>>8; //pitch
 #elif ROBOT_NAME == SALTO_1P_DANCER
     // 90 degrees about x, follwed by 180 degrees about body z
-    v_b[2] = -v_ip[0]; // yaw
+    v_b[2] = v_ip[0]; // yaw
     v_b[0] = -v_ip[1]; // roll
     v_b[1] = -v_ip[2]; // pitch
 #elif ROBOT_NAME == SALTO_1P_SANTA

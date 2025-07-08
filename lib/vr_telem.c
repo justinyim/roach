@@ -39,6 +39,7 @@ extern int32_t q[3];
 extern int16_t v[3];
 extern int32_t w[3];
 extern int32_t p[3];
+extern int32_t spring;
 
 extern int16_t foreThruster;
 extern int16_t aftThruster;
@@ -141,7 +142,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->foot = y_ctrl/90;
     ptr->footVel = velocity[2];
     */
-    //*
+    /*
     // onboard velocity control
     ptr->otherMode = 8;
     ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
@@ -156,7 +157,7 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     //ptr->accelX = vCmd[0];
     //ptr->accelY = vCmd[1];
     //ptr->accelZ = vCmd[2];
-    //*/
+    */
     /*
     // onboard velocity control
     ptr->otherMode = 9;
@@ -249,6 +250,19 @@ void vrTelemGetData(vrTelemStruct_t* ptr) {
     ptr->foot = v[1];//leg;//
     ptr->footVel = v[2];//command;//returnable >> 8;//
 	*/
+    //*/
+    // onboard velocity control
+    ptr->otherMode = 16;
+    ptr->onboardMode = mj_state + (running <<7) + (modeFlags << 8);
+    ptr->voltage = sensor_data->voltage;
+    ptr->crank = crank;
+    ptr->force = qCmd[1]/90;
+    ptr->foot = qCmd[0]/90;
+    ptr->footVel = spring;
+    ptr->accelX = v[0];
+    ptr->accelY = v[1];
+    ptr->accelZ = v[2];
+    //*/
 }
 
 //This may be unneccesary, since the telemtry type isn't totally anonymous

@@ -61,15 +61,21 @@ def main():
 
         stopSignal = [0]
 
+        arbitrary = [0]
+        xb_send(0, command.RESET_BODY_ANG, pack('h', *arbitrary))
+        time.sleep(0.02)
+        xb_send(0, command.GYRO_BIAS, pack('h', *arbitrary))
+        time.sleep(0.02)
+
         # Calibrate --------------------------------------
         # This should be between 0 and 2^14/6 = 2730.7
         # The calibration is good if the leg moves quickly outwards.
         calibPoint = 1012
-        toSend = [calibPoint,int((2**12))] # reterminated motor 1
+        toSend = [calibPoint,int((2**11))] # reterminated motor 1
         xb_send(0, command.CALIBRATE_MOTOR, pack('2h', *toSend))
         time.sleep(params.duration / 1000.0)
 
-        toSend = [calibPoint+2730.7/2,int((2**12))] # reterminated motor 1
+        toSend = [calibPoint+2730.7/2,int((2**11))] # reterminated motor 1
         xb_send(0, command.CALIBRATE_MOTOR, pack('2h', *toSend))
         time.sleep(params.duration / 1000.0)
 

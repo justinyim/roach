@@ -188,6 +188,70 @@ def main():
     if not stopped:
         startTelemetrySave(numSamples)
 
+    if not stopped:
+        # Single leap
+        rollOff = 0.01#-0.01
+        M_off = 0.0
+
+        # Falling to angle
+        a = 0.001 # Starting displacement
+        b = 0.1 # Time constant of toppling (s)
+        T = 0.5#(0.35 rad) #0.57 #(0.3 rad) # Time of falling
+        # a = 0.001, b = 0.1, T = 0.6 leans to 0.4 rad
+
+        motorExtend = 90 # 90 # radians
+        t_motor = 0.14 # seconds
+
+        modeSignal = [16]
+        xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
+        time.sleep(0.02)
+        
+        t0 = time.time()
+        t = 0.0
+        tEnd = 1.2*T
+        tEnd = T+0.1
+        while t < tEnd:
+            # Md is in 2^15/(2000*pi/180)~=938.7 ticks/rad
+            t = time.time() - t0
+
+            # Falling to angle
+            if t < 0.0:
+                Mddd = 0.0
+                Mdd = 0.0
+                Md = 0.0
+                M = 0.0 + M_off
+            elif t < T+0.05:
+                tr = t - 0.0
+                Mddd = a*np.exp(tr/b)/b**2 #a*np.exp(tr/b)/b**2
+                Mdd = a*np.exp(tr/b)/b #1/(200*b) + (a*(np.exp(tr/b) - 1))/b
+                Md = a*np.exp(tr/b)  #(tr/200 - a*tr)/b - a + a*np.exp(tr/b) + 1/200
+                M = a*np.exp(tr/b)*b +M_off #tr/200 - a*tr + a*b*(np.exp(tr/b) - 1) - (tr**2*(a - 1/200))/(2*b)
+            else:
+                Mddd = 0.0
+                Mdd = 0.0
+                Md = 0.0
+                M = 0.0
+            t_launchStart = (T-t_motor)
+
+            # Send tilt command
+            tiltCmd = [M*938.7, Md*938.7, Mdd*938.7, Mddd*938.7/2.0]
+            for ind in range(4):
+                if tiltCmd[ind] > 32767:
+                    tiltCmd[ind] = 32767
+                elif tiltCmd[ind] < -32768:
+                    tiltCmd[ind] = -32768
+            xb_send(0, command.TILT, pack('4h', *tiltCmd))
+            print t
+            time.sleep(0.01)
+
+            if t > t_launchStart: # begin launch
+                # Normal
+                viconTest = [0,0,0, 0,3667*rollOff,0, motorExtend*256,motorExtend*256]
+                xb_send(0, command.INTEGRATED_VICON, pack('8h', *viconTest))
+                time.sleep(0.01)
+                xb_send(0, command.SET_PID_GAINS, pack('10h',*runTailGains))
+                time.sleep(0.02)
+
         modeSignal = [6]
         xb_send(0, command.ONBOARD_MODE, pack('h', *modeSignal))
         time.sleep(0.03)
